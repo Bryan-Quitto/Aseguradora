@@ -10,7 +10,7 @@ const Error = () => {
           <img src={ErrorImg} alt="error" className="mb-4" />
           <h1 className="text-ld text-4xl mb-6">Opps!!!</h1>
           <h6 className="text-xl text-ld">
-            This page you are looking for could not be found.
+            La página que está buscando no se encuentra disponible.
           </h6>
           <Button
             color={"primary"}
@@ -18,7 +18,7 @@ const Error = () => {
             to="/"
             className="w-fit mt-6 mx-auto"
           >
-            Go Back to Home
+            Regresar
           </Button>
         </div>
       </div>

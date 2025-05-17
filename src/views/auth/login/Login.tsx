@@ -63,18 +63,18 @@ const Login = () => {
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
               <button type="submit" className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-md">
-                Sign in
+                Ingresar
               </button>
             </form>
 
             <div className="text-sm text-left mt-3 ">
-              <a href="#" className="text-link">Has olvidado tu contraseña?</a>
+              <a href="#" className="text-link">¿Ha olvidado su contraseña?</a>
             </div>
 
             <div className="flex gap-2 text-sm text-black text-ld font-medium mt-3 items-center justify-left">
-              <p><b>No tienes una cuenta?</b></p>
+              <p><b>¿No tiene una cuenta?</b></p>
               <Link to="/auth/register" className="text-link font-medium">
-                Crea una cuenta
+                Crear una cuenta
               </Link>
             </div>
           </div>
