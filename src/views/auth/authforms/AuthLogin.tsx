@@ -44,15 +44,15 @@ const AuthLogin = () => {
               htmlFor="accept"
               className="opacity-90 font-normal cursor-pointer"
             >
-              Remeber this Device
+              Recordar este dispositivo
             </Label>
           </div>
           <Link to={"/"} className="text-primary text-sm font-medium">
-            Forgot Password ?
+            ¿Olvido su contraseña?
           </Link>
         </div>
         <Button type="submit" color={"primary"}  className="w-full bg-primary text-white rounded-xl">
-          Sign in
+          Ingresar
         </Button>
       </form>
     </>
