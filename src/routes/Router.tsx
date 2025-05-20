@@ -34,7 +34,9 @@ const Router = [
     path: '/',
     element: <FullLayout />,
     children: [
-      { path: '/', exact: true, element: <Dashboard/> },
+      // Eliminamos la redirección incondicional.
+      // La lógica de protección de rutas debe estar en FullLayout o un componente superior.
+      { path: '/', exact: true, element: <Dashboard/> }, // Ahora la ruta raíz carga el Dashboard
       { path: '/ui/typography', exact: true, element: <Typography/> },
       { path: '/ui/table', exact: true, element: <Table/> },
       { path: '/ui/form', exact: true, element: <Form/> },

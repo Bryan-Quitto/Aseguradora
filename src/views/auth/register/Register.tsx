@@ -7,13 +7,15 @@ const gradientStyle = {
   background: "linear-gradient(45deg, rgb(238, 119, 82,0.2), rgb(231, 60, 126,0.2), rgb(35, 166, 213,0.2), rgb(35, 213, 171,0.2))",
   backgroundSize: "400% 400%",
   animation: "gradient 15s ease infinite",
-  height: "100vh",
-  overflow: "hidden",
+  // Eliminamos height: "100vh" y overflow: "hidden" para permitir el scroll de la página
+  // height: "100vh",
+  // overflow: "hidden",
 };
 
 const Register = () => {
   return (
-    <div style={gradientStyle} className="relative overflow-hidden h-screen">
+    // Eliminamos las clases h-screen y overflow-hidden
+    <div style={gradientStyle} className="relative">
       <div className="flex h-full justify-center items-center px-4">
         <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-6 relative break-words md:w-96 w-full border-none">
           <div className="flex h-full flex-col justify-center gap-2 p-0 w-full">

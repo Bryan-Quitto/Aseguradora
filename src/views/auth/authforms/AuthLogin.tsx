@@ -1,15 +1,34 @@
 import { Button, Checkbox, Label, TextInput } from "flowbite-react";
 import { Link, useNavigate } from "react-router";
-
-
+import { supabase } from "../../../supabase/client.ts"; // Ruta de importación corregida
 
 const AuthLogin = () => {
   const navigate = useNavigate();
-  const handleSubmit = (event:React.FormEvent<HTMLFormElement>) => {
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log(event);
-     navigate("/");
-  }
+
+    const form = event.currentTarget;
+    const emailInput = form.elements.namedItem('Username') as HTMLInputElement;
+    const passwordInput = form.elements.namedItem('userpwd') as HTMLInputElement;
+
+    const email = emailInput.value;
+    const password = passwordInput.value;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) {
+      console.error("Error al iniciar sesión:", error.message);
+      // Aquí podrías mostrar un mensaje de error al usuario
+    } else {
+      console.log("Inicio de sesión exitoso:", data);
+      navigate("/"); // Redirigir al usuario a la página principal
+    }
+  };
+
   return (
     <>
       <form onSubmit={handleSubmit} >
