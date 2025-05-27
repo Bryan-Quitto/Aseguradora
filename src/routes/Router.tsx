@@ -4,15 +4,13 @@ import  { lazy } from 'react';
 import { Navigate, createBrowserRouter } from "react-router";
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 
-
-
-
 /* ***Layouts**** */
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
 // Dashboard
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
+const AuthDashboard = Loadable(lazy(() => import('../views/auth/Dashboard')));
 
 // utilities
 const Typography = Loadable(lazy(() => import("../views/typography/Typography")));
@@ -34,9 +32,7 @@ const Router = [
     path: '/',
     element: <FullLayout />,
     children: [
-      // Eliminamos la redirección incondicional.
-      // La lógica de protección de rutas debe estar en FullLayout o un componente superior.
-      { path: '/', exact: true, element: <Dashboard/> }, // Ahora la ruta raíz carga el Dashboard
+      { path: '/', exact: true, element: <Dashboard /> },
       { path: '/ui/typography', exact: true, element: <Typography/> },
       { path: '/ui/table', exact: true, element: <Table/> },
       { path: '/ui/form', exact: true, element: <Form/> },
@@ -47,17 +43,16 @@ const Router = [
     ],
   },
   {
-    path: '/',
+    path: '/auth',
     element: <BlankLayout />,
     children: [
-      { path: '/auth/login', element: <Login /> },
-      { path: '/auth/register', element: <Register /> },
+      { path: 'dashboard', element: <AuthDashboard /> },
+      { path: 'login', element: <Login /> },
+      { path: 'register', element: <Register /> },
       { path: '404', element: <Error /> },
-      { path: '/auth/404', element: <Error /> },
       { path: '*', element: <Navigate to="/auth/404" /> },
     ],
   }
-  ,
 ];
 
 const router = createBrowserRouter(Router)
