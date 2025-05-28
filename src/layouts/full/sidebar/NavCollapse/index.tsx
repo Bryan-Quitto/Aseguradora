@@ -2,7 +2,7 @@
 import  {useState } from "react";
 import { ChildItem } from "../Sidebaritems";
 import NavItems from "../NavItems";
-import { useLocation } from "react-router";
+import { useLocation } from "react-router-dom";
 import React from "react";
 import { CustomCollapse } from "../CustomCollapse";
 

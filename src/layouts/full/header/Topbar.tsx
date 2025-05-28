@@ -1,5 +1,5 @@
 
-import { Link, useLocation } from "react-router";
+import { Link, useLocation } from "react-router-dom";
 import wrappixel_logo from "/src/assets/images/logos/logo-wrappixel.svg";
 import { Button } from "flowbite-react"; // Importa Button
 import { Icon } from "@iconify/react";
@@ -19,8 +19,9 @@ const Topbar = () => {
                 color="outlineprimary"
                 size="sm"
                 className="py-2"
-                as={Link}
-                to="/login" // Asumiendo que /login es la ruta para iniciar sesión
+                as={Link} 
+
+                to="/auth/login" // Ruta corregida para iniciar sesión
             >
                 <div className="flex items-center gap-1">
                     <Icon icon="tabler:device-laptop" className="text-lg" />
@@ -33,7 +34,7 @@ const Topbar = () => {
                   size="sm"
                   className="py-2"
                   as={Link}
-                  to="/planes" // Asumiendo que /planes es la ruta para planes
+                  to="/planes" // Esta ruta no está definida en Router.tsx
               >
                   <div className="flex items-center gap-1">
                       <Icon icon="tabler:shopping-cart" className="text-lg" />

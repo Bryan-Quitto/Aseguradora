@@ -2,7 +2,7 @@
 import { Icon } from "@iconify/react";
 import { Badge, Dropdown } from "flowbite-react";
 import { HiOutlineDotsVertical  } from "react-icons/hi";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 const EarningReports = () => {
   const dropdownItems = ["Action", "Another action", "Something else"];

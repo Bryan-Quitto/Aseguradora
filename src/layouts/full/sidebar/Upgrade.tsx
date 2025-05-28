@@ -1,6 +1,6 @@
 import { Button } from "flowbite-react";
 import UpgradePlan from "/src/assets/images/backgrounds/upgrade.svg";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 const Upgrade = () => {
   return (
     <>

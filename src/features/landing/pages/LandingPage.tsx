@@ -1,12 +1,14 @@
-
-
-import React from 'react';
 import CardBox from 'src/components/shared/CardBox'; // Importa CardBox
 
 const LandingPage = () => {
   return (
     <div className="p-4">
       <h1 className="text-4xl font-bold text-center mb-8">[Nombre de la aseguradora]</h1>
+
+      {/* Primer rectángulo grande */}
+      <CardBox className="mb-8 p-8 h-64 flex items-center justify-center">
+        <p className="text-xl">Contenido del primer rectángulo grande</p>
+      </CardBox>
 
       {/* Primer rectángulo grande */}
       <CardBox className="mb-8 p-8 h-64 flex items-center justify-center">

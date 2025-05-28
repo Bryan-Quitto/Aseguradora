@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import { Outlet, useLocation } from "react-router"; // Importa useLocation
+import { Outlet, useLocation } from "react-router-dom"; // Importa useLocation
 import ScrollToTop from 'src/components/shared/ScrollToTop';
 import Sidebar from './sidebar/Sidebar';
 import Header from './header/Header';

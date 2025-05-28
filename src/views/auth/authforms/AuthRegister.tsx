@@ -1,5 +1,5 @@
 import { Button, Label, TextInput } from "flowbite-react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase/client.ts"; // Importar el cliente de Supabase
 import { useState } from "react"; // Importar useState
 

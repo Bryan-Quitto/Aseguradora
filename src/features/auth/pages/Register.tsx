@@ -1,9 +1,16 @@
 
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
-// import AuthRegister from "../authforms/AuthRegister"; // Ya no es necesario si integramos aquí
-import { Link, useNavigate } from "react-router"; // Asegúrate de usar react-router-dom si es lo que usas
+import { Link, useNavigate } from "react-router-dom"; // Keep this import from react-router-dom
 import React, { useState } from "react";
-import { supabase } from "../../../supabase/client"; // Importar el cliente de Supabase
+import { supabase } from "../../../supabase/client";
+import { Label, TextInput} from "flowbite-react";
+
+const gradientStyle = {
+  background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
+  backgroundSize: "400% 400%",
+  animation: "gradient 15s ease infinite",
+  height: "100vh"
+};
 
 const Register = () => {
   const navigate = useNavigate();
@@ -173,94 +180,101 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-black flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl border border-black p-6 rounded">
-        <div className="flex justify-center max-w-xs mx-auto mb-6"> {/* Contenedor para el logo MODIFICADO */}
+    <div style={gradientStyle} className="bg-white relative overflow-hidden h-screen py-40">
+      <div className="flex flex-col gap-2 p-0 w-full">
+        <div className="mx-auto">
           <FullLogo />
+          <p className="text-black block text-sm font-medium text-center my-3">Nombre Aseguradora</p>
         </div>
-        <h2 className="text-xl font-bold border-b border-black mb-4">
-          1. Información Personal del Titular
-        </h2>
+      </div>
+      <div className="flex h-full justify-center items-center px-4">
+        <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 w-full max-w-4xl border-none">
+          <h2 className="text-xl font-bold border-b border-black mb-4">1. Información Personal del Titular</h2>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="mb-2 block">
+                  <Label htmlFor="primerApellido" value="Primer Apellido" />
+                </div>
+                <TextInput
+                  id="primerApellido"
+                  name="primerApellido"
+                  value={formData.primerApellido}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+              <div>
+                <div className="mb-2 block">
+                  <Label htmlFor="segundoApellido" value="Segundo Apellido" />
+                </div>
+                <TextInput
+                  id="segundoApellido"
+                  name="segundoApellido"
+                  value={formData.segundoApellido}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="col-span-2">
+                <div className="mb-2 block">
+                  <Label htmlFor="nombres" value="Nombre(s)" />
+                </div>
+                <TextInput
+                  id="nombres"
+                  name="nombres"
+                  value={formData.nombres}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+            
+            {/* Correo */}
+            <div>
+              <div className="mb-2 block">
+                <Label htmlFor="correo" value="Correo Electrónico" />
+              </div>
+              <TextInput
+                id="correo"
+                name="correo"
+                type="email"
+                value={formData.correo}
+                onChange={handleChange}
+                required
+              />
+            </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* Apellidos y Nombres */}
-          {/* ... (campos existentes: primerApellido, segundoApellido, nombres) ... */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium">Primer Apellido</label>
-              <input
-                name="primerApellido"
-                value={formData.primerApellido}
-                onChange={handleChange}
-                type="text"
-                className="w-full border border-black px-2 py-1"
-                required
-              />
+            {/* Contraseñas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="mb-2 block">
+                  <Label htmlFor="password" value="Contraseña" />
+                </div>
+                <TextInput
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <div className="mb-2 block">
+                  <Label htmlFor="confirmPassword" value="Confirmar Contraseña" />
+                </div>
+                <TextInput
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium">Segundo Apellido</label>
-              <input
-                name="segundoApellido"
-                value={formData.segundoApellido}
-                onChange={handleChange}
-                type="text"
-                className="w-full border border-black px-2 py-1"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium">Nombre(s)</label>
-              <input
-                name="nombres"
-                value={formData.nombres}
-                onChange={handleChange}
-                type="text"
-                className="w-full border border-black px-2 py-1"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Correo */}
-          <div>
-            <label className="block text-sm font-medium">Correo Electrónico</label>
-            <input
-              name="correo"
-              value={formData.correo}
-              onChange={handleChange}
-              type="email"
-              className="w-full border border-black px-2 py-1"
-              required
-            />
-          </div>
-
-          {/* --- INICIO: NUEVOS CAMPOS DE CONTRASEÑA --- */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium">Contraseña</label>
-              <input
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                type="password"
-                className="w-full border border-black px-2 py-1"
-                required
-                minLength={6}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Confirmar Contraseña</label>
-              <input
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                type="password"
-                className="w-full border border-black px-2 py-1"
-                required
-                minLength={6}
-              />
-            </div>
-          </div>
-          {/* --- FIN: NUEVOS CAMPOS DE CONTRASEÑA --- */}
 
 
           {/* Nacionalidad y Tipo ID */}
@@ -494,7 +508,8 @@ const Register = () => {
         </form>
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 export default Register;

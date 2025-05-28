@@ -2,7 +2,7 @@
 import { Button, Dropdown } from "flowbite-react";
 import { Icon } from "@iconify/react";
 import user1 from "/src/assets/images/profile/user-1.jpg";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 const Profile = () => {
   return (

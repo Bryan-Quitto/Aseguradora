@@ -1,6 +1,6 @@
 import { Badge, Dropdown } from "flowbite-react";
 import { Icon } from "@iconify/react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 
 const Notifications = [

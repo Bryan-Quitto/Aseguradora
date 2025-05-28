@@ -1,10 +1,13 @@
 import React, { useState } from "react";
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
-import { Link, useNavigate } from "react-router"; // Usar react-router-dom y useNavigate
+import { Link, useNavigate } from "react-router-dom"; // Usar react-router-dom-dom y useNavigate
 import { supabase } from "../../../supabase/client.ts"; // Importar el cliente de Supabase
+import { Label, TextInput, Button } from "flowbite-react"; // Importar componentes de flowbite-react
 
 const gradientStyle = {
-  background: "linear-gradient(to right,rgba(255, 255, 255, 0.87),rgba(255, 255, 255, 0.19))",
+  background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
+  backgroundSize: "400% 400%",
+  animation: "gradient 15s ease infinite",
   height: "100vh",
 };
 
@@ -47,38 +50,43 @@ const Login = () => {
         </div>
       </div>
       <div className="flex h-full justify-center items-center px-4">
-        <div className="rounded-xl shadow-lg bg-white dark:bg-darkgray p-10 md:w-96 border-none">
+        {/* Aplicando estilos de BasicForm.tsx */}
+        <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 md:w-96 border-none">
           <div className="flex flex-col gap-2 p-0 w-full">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
-                <label htmlFor="email" className="text-black block text-sm font-medium"><b>Correo</b></label>
-                <input
+                <div className="mb-2 block"> {/* Añadido div para mb-2 block */}
+                  <Label htmlFor="email" value="Correo" className="text-black block text-sm font-medium" /> {/* Usar componente Label */}
+                </div>
+                <TextInput
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full px-3 py-2 border rounded-md"
+                  className="form-control form-rounded-xl" // Aplicar clases de estilo
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="text-black block text-sm font-medium"><b>Contraseña</b></label>
-                <input
+                <div className="mb-2 block"> {/* Añadido div para mb-2 block */}
+                  <Label htmlFor="password" value="Contraseña" className="text-black block text-sm font-medium" /> {/* Usar componente Label */}
+                </div>
+                <TextInput
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-3 py-2 border rounded-md"
+                  className="form-control form-rounded-xl" // Aplicar clases de estilo
                 />
               </div>
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
-              <button type="submit" className="bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-md" disabled={loading}> {/* Deshabilitar botón mientras carga */}
+              <Button type="submit" color="primary" className="w-full" disabled={loading}> {/* Usar componente Button y aplicar estilo */}
                 {loading ? 'Cargando...' : 'Ingresar'} {/* Cambiar texto del botón */}
-              </button>
+              </Button>
             </form>
 
             <div className="text-sm text-left mt-3 ">
@@ -93,7 +101,7 @@ const Login = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div>  
     </div>
   );
 };
