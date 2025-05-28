@@ -6,7 +6,7 @@ import { supabase } from "../../../supabase/client";
 import { Label, TextInput} from "flowbite-react";
 
 const gradientStyle = {
-  background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
+  background: "linear-gradient(-45deg,rgb(57, 42, 87),rgb(92, 107, 245), #23a6d5,rgb(169, 224, 211),rgb(72, 83, 87),rgb(30, 28, 39))",
   backgroundSize: "400% 400%",
   animation: "gradient 15s ease infinite",
   height: "100vh"
