@@ -8,6 +8,9 @@ import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
+// Landing Page
+const LandingPage = Loadable(lazy(() => import('../features/landing/pages/LandingPage'))); // Importa tu LandingPage
+
 // Dashboard
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
 const AuthDashboard = Loadable(lazy(() => import('../views/auth/Dashboard')));
@@ -32,7 +35,8 @@ const Router = [
     path: '/',
     element: <FullLayout />,
     children: [
-      { path: '/', exact: true, element: <Dashboard /> },
+      { path: '/', exact: true, element: <LandingPage /> }, // Cambia Dashboard por LandingPage
+      { path: '/dashboard', exact: true, element: <Dashboard /> }, // Opcional: si quieres mantener el Dashboard en otra ruta
       { path: '/ui/typography', exact: true, element: <Typography/> },
       { path: '/ui/table', exact: true, element: <Table/> },
       { path: '/ui/form', exact: true, element: <Form/> },

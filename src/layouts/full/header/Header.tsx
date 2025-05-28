@@ -53,11 +53,11 @@ const Header = () => {
               >
                 <Icon icon="solar:hamburger-menu-line-duotone" height={21} />
               </span>
-              <Notification />
+              {/* <Notification /> */}
             </div>
 
             <div className="flex gap-4 items-center">
-              <Profile />
+              {/* <Profile /> */}
             </div>
           </div>
         </Navbar>

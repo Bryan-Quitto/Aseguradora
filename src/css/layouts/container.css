@@ -25,10 +25,8 @@
     }
   }
 
-@media screen and (max-width:1280px) {
-    .page-wrapper{
-        margin-left: 0px;
-    }
+.no-sidebar-layout .page-wrapper {
+    margin-left: 0px;
 }
 
 [data-sidebar-type="mini-sidebar"] .page-wrapper-sub {
