@@ -7,8 +7,11 @@ import React from "react";
 import FullLogo from "../shared/logo/FullLogo";
 // Remove Upgrade import since we won't use it
 import NavCollapse from "./NavCollapse";
+import { useAuth } from 'src/contexts/AuthContext'; // Import useAuth
 
 const SidebarLayout = () => {
+  const { userRole } = useAuth(); // Get the user's role
+
   return (
     <>
       <div className="xl:block hidden">
@@ -29,17 +32,23 @@ const SidebarLayout = () => {
                         <h5 className="text-link dark:text-white/70 caption font-semibold leading-6 tracking-widest text-xs pb-2 uppercase">
                           {item.heading}
                         </h5>
-                        {item.children?.map((child, index) => (
-                        <React.Fragment key={child.id && index}>
-                          {child.children ? (
-                            <div className="collpase-items">
-                              <NavCollapse item={child} />
-                            </div>
-                          ) : (
-                            <NavItems item={child} />
-                          )}
-                        </React.Fragment>
-                      ))}
+                        {item.children?.map((child, index) => {
+                          // Conditionally render based on requiredRole
+                          if (child.requiredRole && child.requiredRole !== userRole) {
+                            return null; // Don't render if user doesn't have the required role
+                          }
+                          return (
+                            <React.Fragment key={child.id && index}>
+                              {child.children ? (
+                                <div className="collpase-items">
+                                  <NavCollapse item={child} />
+                                </div>
+                              ) : (
+                                <NavItems item={child} />
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
                       </React.Fragment>
                     </div>
                   ))}

@@ -39,7 +39,7 @@ interface PrivateRouteProps {
 }
 
 const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
-    const { user, loading } = useAuth();
+    const { user, loading, userRole } = useAuth();
 
     if (loading) {
         return <div>Cargando...</div>;
@@ -49,10 +49,10 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
         return <Navigate to="/auth/login" />;
     }
 
-    // Suponiendo que el rol del usuario está en user.app_metadata.role
-    const userRole = user.app_metadata?.role; // Changed from user_metadata to app_metadata
+    const currentUserRole = userRole; 
 
-    if (allowedRoles && !allowedRoles.includes(userRole)) {
+    // Asegurarse de que currentUserRole no sea null antes de usar includes
+    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
         return <Navigate to="/access-denied" />;
     }
 

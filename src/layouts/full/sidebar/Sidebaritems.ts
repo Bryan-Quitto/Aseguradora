@@ -6,7 +6,8 @@ export interface ChildItem {
   item?: any;
   url?: any;
   color?: string;
-  isPro?:boolean
+  isPro?:boolean;
+  requiredRole?: string; // Add this line
 }
 
 export interface MenuItem {
@@ -18,7 +19,8 @@ export interface MenuItem {
   items?: MenuItem[];
   children?: ChildItem[];
   url?: any;
-  isPro?:boolean
+  isPro?:boolean;
+  requiredRole?: string; // Add this line
 }
 
 import { uniqueId } from "lodash";
@@ -53,6 +55,27 @@ const SidebarContent: MenuItem[] = [
         id: uniqueId(),
         url: "/auth/register",
        isPro: false,
+      },
+    ],
+  },
+  {
+    heading: "ADMINISTRATION", // New heading
+    children: [
+      {
+        name: "Crear Usuarios",
+        icon: "solar:user-plus-rounded-linear", // You might need to find a suitable icon
+        id: uniqueId(),
+        url: "/admin/dashboard/create-users", // Define a new route for creating users
+        isPro: false,
+        requiredRole: "admin",
+      },
+      {
+        name: "Listar Usuarios",
+        icon: "solar:users-group-rounded-linear", // You might need to find a suitable icon
+        id: uniqueId(),
+        url: "/admin/dashboard/list-users", // Define a new route for listing users
+        isPro: false,
+        requiredRole: "admin",
       },
     ],
   },

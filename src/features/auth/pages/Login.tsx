@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "../../../supabase/client.ts";
+import { supabase } from "../../../supabase/client";
 import { Label, TextInput, Button } from "flowbite-react";
 
 const gradientStyle = {
@@ -20,98 +20,95 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     setError(null);
     setLoading(true);
 
+    // 1. Iniciar sesión
     const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
+      email,
+      password,
     });
 
     setLoading(false);
+    if (supabaseError || !data.session) {
+      console.error("Error al iniciar sesión:", supabaseError?.message);
+      setError(`Error al iniciar sesión: ${supabaseError?.message}`);
+      return;
+    }
 
-    if (supabaseError) {
-      console.error("Error al iniciar sesión:", supabaseError.message);
-      setError(`Error al iniciar sesión: ${supabaseError.message}`);
+    // 2. Obtener perfil y rol desde tabla 'profiles'
+    const userId = data.session.user.id;
+    console.log('↪ Buscando perfil para userId:', userId);
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    console.log('↪ profileError:', profileError);
+    console.log('↪ profile data:', profile);
+
+    // 3. Redirección según rol
+    if (profileError || !profile) {
+      console.warn('No se encontró perfil, redirigiendo a landing');
+      return navigate('/');
+    }
+
+    if (profile.role === 'admin') {
+      console.log('Usuario es admin, redirigiendo a /admin/dashboard');
+      navigate('/admin/dashboard');
     } else {
-      console.log("Inicio de sesión exitoso:", data);
-
-      // --- Lógica de redirección basada en el rol del usuario ---
-      if (data.user) {
-        // Accede a los metadatos del usuario para obtener el rol
-        const userRole = data.user.app_metadata?.role; // Changed from user_metadata to app_metadata
-
-        if (userRole === "admin") {
-          navigate("/admin/dashboard");
-        } else {
-          navigate("/");
-        }
-      } else {
-        navigate("/");
-      }
-      // --- Fin de la lógica de redirección ---
-
-      setError(null); // Limpiar errores si tuvo éxito
+      console.log('Usuario NO es admin, redirigiendo a /dashboard');
+      navigate('/dashboard');
     }
   };
 
   return (
-    <div style={gradientStyle} className="bg-white relative overflow-hidden h-screen py-40">
-      <div className="flex flex-col gap-2 p-0 w-full ">
-        <div className="mx-auto">
+    <div style={gradientStyle} className="overflow-hidden h-screen py-40">
+      <div className="flex flex-col gap-2 w-full">
+        <div className="mx-auto text-center">
           <FullLogo />
-          <p className="text-black block text-sm font-medium text-center my-3">Nombre Aseguradora</p>
+          <p className="text-black text-sm font-medium my-3">Nombre Aseguradora</p>
         </div>
-      </div>
-      <div className="flex h-full justify-center items-center px-4">
-        <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 md:w-96 border-none">
-          <div className="flex flex-col gap-2 p-0 w-full">
+        <div className="flex h-full justify-center items-center px-4">
+          <div className="rounded-xl shadow-md bg-white p-10 md:w-96">
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="email" value="Correo" className="text-black block text-sm font-medium" />
-                </div>
+                <Label htmlFor="email" value="Correo" className="text-black text-sm font-medium" />
                 <TextInput
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="form-control form-rounded-xl"
                 />
               </div>
 
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="password" value="Contraseña" className="text-black block text-sm font-medium" />
-                </div>
+                <Label htmlFor="password" value="Contraseña" className="text-black text-sm font-medium" />
                 <TextInput
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="form-control form-rounded-xl"
                 />
               </div>
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
-              <Button type="submit" color="primary" className="w-full" disabled={loading}>
+              <Button type="submit" color="primary" disabled={loading} className="w-full">
                 {loading ? 'Cargando...' : 'Ingresar'}
               </Button>
             </form>
 
-            <div className="text-sm text-left mt-3 ">
-              <a href="#" className="text-link">¿Ha olvidado su contraseña?</a>
+            <div className="text-sm text-left mt-3">
+              <Link to="#" className="text-link">¿Ha olvidado su contraseña?</Link>
             </div>
 
-            <div className="flex gap-2 text-sm text-black text-ld font-medium mt-3 items-center justify-left">
-              <p><b>¿No tiene una cuenta?</b></p>
-              <Link to="/auth/register" className="text-link font-medium">
-                Crear una cuenta
-              </Link>
+            <div className="flex gap-2 text-sm font-medium mt-3">
+              <p>¿No tiene una cuenta?</p>
+              <Link to="/auth/register" className="text-link">Crear una cuenta</Link>
             </div>
           </div>
         </div>
