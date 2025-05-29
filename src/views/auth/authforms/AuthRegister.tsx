@@ -87,10 +87,10 @@ const AuthRegister = () => {
         const userEmail = data.user.email!;
         const fullName = `${nombres} ${primerApellido} ${segundoApellido}`;
 
-        // Inserción en profiles
-        const { error: profileError } = await supabase
+        // Upsert en profiles
+        const { error: upsertError } = await supabase
           .from('profiles')
-          .insert([
+          .upsert([
             {
               user_id: userId,
               primer_apellido: primerApellido,
@@ -109,10 +109,10 @@ const AuthRegister = () => {
               peso: parseFloat(peso),
               role: 'user'
             }
-          ]);
+          ], { onConflict: 'user_id' });
 
-        if (profileError) {
-          console.error("Error al guardar perfil:", profileError);
+        if (upsertError) {
+          console.error("Error al guardar perfil (upsert):", upsertError);
           setError("Usuario registrado, pero hubo un error al guardar los datos del perfil.");
         } else {
           setSuccess("¡Registro exitoso! Revisa tu correo para verificar tu cuenta.");
