@@ -88,35 +88,35 @@ const AuthRegister = () => {
         const fullName = `${nombres} ${primerApellido} ${segundoApellido}`;
 
         // Upsert en profiles
-        const { error: upsertError } = await supabase
-          .from('profiles')
-          .upsert([
-            {
-              user_id: userId,
-              primer_apellido: primerApellido,
-              segundo_apellido: segundoApellido,
-              nombres,
-              full_name: fullName,
-              email: userEmail,
-              nacionalidad,
-              tipo_identificacion: tipoIdentificacion,
-              numero_identificacion: numeroIdentificacion,
-              lugar_nacimiento: lugarNacimiento,
-              fecha_nacimiento: fechaNacimiento,
-              sexo,
-              estado_civil: estadoCivil,
-              estatura: parseFloat(estatura),
-              peso: parseFloat(peso),
-              role: 'user'
-            }
-          ], { onConflict: 'user_id' });
+        const { error: insertError } = await supabase
+  .from('profiles')
+  .insert([
+    {
+      user_id: userId,
+      primer_apellido: primerApellido,
+      segundo_apellido: segundoApellido,
+      nombres,
+      full_name: fullName,
+      email: userEmail,
+      nacionalidad,
+      tipo_identificacion: tipoIdentificacion,
+      numero_identificacion: numeroIdentificacion,
+      lugar_nacimiento: lugarNacimiento,
+      fecha_nacimiento: fechaNacimiento,
+      sexo,
+      estado_civil: estadoCivil,
+      estatura: parseFloat(estatura),
+      peso: parseFloat(peso),
+      role: 'user'
+    }
+  ]);
 
-        if (upsertError) {
-          console.error("Error al guardar perfil (upsert):", upsertError);
-          setError("Usuario registrado, pero hubo un error al guardar los datos del perfil.");
-        } else {
-          setSuccess("¡Registro exitoso! Revisa tu correo para verificar tu cuenta.");
-        }
+if (insertError) {
+  console.error("Error al guardar perfil (insert):", insertError);
+  setError("Usuario registrado, pero hubo un error al guardar los datos del perfil.");
+} else {
+  setSuccess("¡Registro exitoso! Revisa tu correo para verificar tu cuenta.");
+}
       }
     } catch (e) {
       console.error("Excepción inesperada durante signUp:", e);
