@@ -1,9 +1,8 @@
-import { Button, Label, Select, TextInput } from 'flowbite-react';
-import { useState } from 'react';
-import { createUserProfile } from 'src/features/admin/hooks/administrador_backend'; // Importa la función de backend
-import { supabase } from 'src/supabase/client'; // Importa la instancia de Supabase
+import { Button, Label, Select, TextInput, Modal } from 'flowbite-react';
+import { useState, useEffect } from 'react';
+import { getUserProfileById, updateUserProfile, UserProfile } from 'src/features/admin/hooks/administrador_backend';
 
-// Array de nacionalidades para reutilizar (copiado de Register.tsx)
+// Array de nacionalidades para reutilizar (copiado de Register.tsx y CrearUsuarios.tsx)
 const NATIONALITIES = [
   "Panameña", "Colombiana", "Venezolana", "Brasileña", "Peruana", "Estadounidense",
   "Canadiense", "Española", "Italiana", "Francesa", "Alemana", "Británica",
@@ -12,7 +11,7 @@ const NATIONALITIES = [
   "Salvadoreña", "Nicaragüense", "Costarricense", "Ecuatoriana"
 ];
 
-// Array de países derivado de NATIONALITIES (copiado de Register.tsx)
+// Array de países derivado de NATIONALITIES (copiado de Register.tsx y CrearUsuarios.tsx)
 const COUNTRIES = NATIONALITIES.map(nationality => {
   switch (nationality) {
     case "Panameña": return "Panamá";
@@ -47,15 +46,14 @@ const COUNTRIES = NATIONALITIES.map(nationality => {
   }
 });
 
-// Interfaz para los datos del formulario
+// Interfaz para los datos del formulario de edición
+// Todos los campos son opcionales en el objeto de actualización, pero aquí son strings para el estado del formulario.
 interface FormData {
   primerNombre: string;
   segundoNombre: string;
   primerApellido: string;
   segundoApellido: string;
   email: string;
-  password?: string; // Añadido para la contraseña
-  confirmPassword?: string; // Añadido para confirmar contraseña
   nacionalidad: string;
   nacionalidadOtra: string;
   tipoID: string;
@@ -77,8 +75,6 @@ interface FormErrors {
   primerApellido?: string;
   segundoApellido?: string;
   email?: string;
-  password?: string;
-  confirmPassword?: string;
   nacionalidad?: string;
   nacionalidadOtra?: string;
   tipoID?: string;
@@ -93,15 +89,63 @@ interface FormErrors {
   rol?: string;
 }
 
-export default function CrearUsuarios() {
+// Props para el componente EditarUsuario
+interface EditarUsuarioProps {
+  userId: string; // El ID del usuario a editar
+  onNavigate: (view: string) => void; // Para volver a la lista de usuarios
+}
+
+// Componente de Modal Personalizado (copiado de ListarUsuarios.tsx)
+interface CustomModalProps {
+  show: boolean;
+  onClose: () => void;
+  message: string;
+  title: string;
+  type: 'alert' | 'confirm';
+  onConfirm?: () => void;
+}
+
+const CustomModal: React.FC<CustomModalProps> = ({ show, onClose, message, title, type, onConfirm }) => {
+  if (!show) return null;
+
+  return (
+    <Modal show={show} onClose={onClose} dismissible>
+      <Modal.Header>{title}</Modal.Header>
+      <Modal.Body>
+        <div className="space-y-6">
+          <p className="text-base leading-relaxed text-gray-500 dark:text-gray-400">
+            {message}
+          </p>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        {type === 'confirm' && (
+          <Button color="gray" onClick={onClose}>
+            Cancelar
+          </Button>
+        )}
+        <Button
+          color={type === 'alert' ? 'blue' : 'failure'}
+          onClick={() => {
+            if (onConfirm) onConfirm();
+            onClose();
+          }}
+        >
+          {type === 'alert' ? 'Aceptar' : 'Confirmar'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+};
+
+
+export default function EditarUsuario({ userId, onNavigate }: EditarUsuarioProps) {
   const [formData, setFormData] = useState<FormData>({
     primerNombre: '',
     segundoNombre: '',
     primerApellido: '',
     segundoApellido: '',
     email: '',
-    password: '', // Inicializado
-    confirmPassword: '', // Inicializado
     nacionalidad: '',
     nacionalidadOtra: '',
     tipoID: '',
@@ -116,10 +160,18 @@ export default function CrearUsuarios() {
     rol: ''
   });
 
+  const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<FormErrors>({});
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
 
-  // Validaciones
+  // Estados para el modal personalizado
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalType, setModalType] = useState<'alert' | 'confirm'>('alert');
+  const [modalAction, setModalAction] = useState<(() => void) | null>(null);
+
+  // Validaciones (copiadas de CrearUsuarios.tsx)
   const validateName = (value: string): boolean => {
     return /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/.test(value);
   };
@@ -140,15 +192,53 @@ export default function CrearUsuarios() {
     return /^\d{4}-\d{2}-\d{2}$/.test(date);
   };
 
+  // Cargar datos del usuario al iniciar el componente
+  useEffect(() => {
+    const fetchUserData = async () => {
+      setLoading(true);
+      const { data, error } = await getUserProfileById(userId);
+      if (error) {
+        setSubmissionMessage(`Error al cargar datos del usuario: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+      if (data) {
+        // Mapear los datos del perfil a los campos del formulario
+        setFormData({
+          primerNombre: data.primer_nombre || '',
+          segundoNombre: data.segundo_nombre || '',
+          primerApellido: data.primer_apellido || '',
+          segundoApellido: data.segundo_apellido || '',
+          email: data.email || '',
+          nacionalidad: NATIONALITIES.includes(data.nacionalidad || '') ? (data.nacionalidad || '') : 'Otra',
+          nacionalidadOtra: NATIONALITIES.includes(data.nacionalidad || '') ? '' : (data.nacionalidad || ''),
+          tipoID: data.tipo_identificacion || '',
+          numeroID: data.numero_identificacion || '',
+          lugarNacimiento: COUNTRIES.includes(data.lugar_nacimiento || '') ? (data.lugar_nacimiento || '') : 'Otra',
+          lugarNacimientoOtra: COUNTRIES.includes(data.lugar_nacimiento || '') ? '' : (data.lugar_nacimiento || ''),
+          fechaNacimiento: data.fecha_nacimiento || '',
+          sexo: data.sexo || '',
+          estadoCivil: data.estado_civil || '',
+          estatura: data.estatura?.toString() || '',
+          peso: data.peso?.toString() || '',
+          rol: data.role || ''
+        });
+      }
+      setLoading(false);
+    };
+
+    fetchUserData();
+  }, [userId]); // Se ejecuta cuando el userId cambia
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
     const newErrors = { ...errors };
 
-    // Validaciones específicas por campo
+    // Validaciones específicas por campo (copiadas de CrearUsuarios.tsx)
     if (['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido'].includes(name)) {
-      if (value && !validateName(value)) { // Solo validar si hay valor
+      if (value && !validateName(value)) {
         newErrors[name as keyof FormErrors] = 'Solo se permiten letras';
       } else {
         delete newErrors[name as keyof FormErrors];
@@ -177,17 +267,6 @@ export default function CrearUsuarios() {
       } else {
         delete newErrors[name as keyof FormErrors];
       }
-    } else if (name === 'password' || name === 'confirmPassword') {
-      if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'Las contraseñas no coinciden';
-      } else {
-        delete newErrors.confirmPassword;
-      }
-      if (value && value.length < 6) {
-        newErrors[name as keyof FormErrors] = 'Mínimo 6 caracteres';
-      } else {
-        delete newErrors[name as keyof FormErrors];
-      }
     }
 
     // Limpiar errores de campos condicionales si la opción "Otra" no está seleccionada
@@ -210,13 +289,12 @@ export default function CrearUsuarios() {
     // Validar todos los campos antes de enviar
     const newErrors: FormErrors = {};
     const requiredFields: Array<keyof FormData> = [
-      'primerNombre', 'primerApellido', 'email', 'password', 'confirmPassword',
+      'primerNombre', 'primerApellido', 'email',
       'nacionalidad', 'tipoID', 'numeroID', 'lugarNacimiento', 'fechaNacimiento',
       'sexo', 'estadoCivil', 'estatura', 'peso', 'rol'
     ];
 
     requiredFields.forEach(field => {
-      // Manejar campos condicionales
       if (field === 'nacionalidadOtra' && formData.nacionalidad !== 'Otra') return;
       if (field === 'lugarNacimientoOtra' && formData.lugarNacimiento !== 'Otra') return;
 
@@ -231,13 +309,6 @@ export default function CrearUsuarios() {
       }
     });
 
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Las contraseñas no coinciden';
-    }
-    if (formData.password && formData.password.length < 6) {
-      newErrors.password = 'Mínimo 6 caracteres';
-    }
-
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) {
@@ -247,100 +318,71 @@ export default function CrearUsuarios() {
 
     setSubmissionMessage(null);
 
+    // Preparar datos para la actualización
+    const updates = {
+      primer_nombre: formData.primerNombre,
+      segundo_nombre: formData.segundoNombre || null, // Asegurar que sea null si está vacío
+      primer_apellido: formData.primerApellido,
+      segundo_apellido: formData.segundoApellido || null,
+      full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
+      email: formData.email,
+      nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+      tipo_identificacion: formData.tipoID,
+      numero_identificacion: formData.numeroID,
+      lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtra : formData.lugarNacimiento,
+      fecha_nacimiento: formData.fechaNacimiento,
+      sexo: formData.sexo,
+      estado_civil: formData.estadoCivil,
+      estatura: parseFloat(formData.estatura) || null,
+      peso: parseFloat(formData.peso) || null,
+      role: formData.rol,
+    };
+
     try {
-      // 1. Crear el usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password!, // Usar la contraseña del formulario
-        options: {
-          data: {
-            primer_nombre: formData.primerNombre,
-            segundo_nombre: formData.segundoNombre,
-            primer_apellido: formData.primerApellido,
-            segundo_apellido: formData.segundoApellido,
-            full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
-            role: formData.rol,
-          },
-        },
-      });
+      setModalTitle('Confirmar Actualización');
+      setModalMessage('¿Estás seguro de que quieres actualizar este perfil?');
+      setModalType('confirm');
+      setModalAction(() => async () => {
+        const { data, error: updateError } = await updateUserProfile(userId, updates);
 
-      if (authError) {
-        console.error('Error al registrar usuario en Auth:', authError.message);
-        if (authError.message.includes("already registered")) {
-          setSubmissionMessage('El usuario con este email ya está registrado.');
+        if (updateError) {
+          console.error('Error al actualizar perfil:', updateError.message);
+          setSubmissionMessage(`Error al actualizar perfil: ${updateError.message}`);
+          setModalTitle('Error');
+          setModalMessage(`Error al actualizar perfil: ${updateError.message}`);
+          setModalType('alert');
+        } else if (data) {
+          setSubmissionMessage('Perfil actualizado exitosamente!');
+          setModalTitle('Éxito');
+          setModalMessage('Perfil actualizado exitosamente!');
+          setModalType('alert');
+          onNavigate('listar-usuarios'); // Volver a la lista después de actualizar
         } else {
-          setSubmissionMessage(`Error al registrar usuario: ${authError.message}`);
+          setSubmissionMessage('No se pudo actualizar el perfil. Inténtalo de nuevo.');
+          setModalTitle('Error');
+          setModalMessage('No se pudo actualizar el perfil. Inténtalo de nuevo.');
+          setModalType('alert');
         }
-        return;
-      }
-
-      if (authData.user) {
-        // 2. Crear el perfil en la tabla 'profiles'
-        const profileDataToInsert = {
-          user_id: authData.user.id,
-          primer_nombre: formData.primerNombre,
-          segundo_nombre: formData.segundoNombre,
-          primer_apellido: formData.primerApellido,
-          segundo_apellido: formData.segundoApellido,
-          full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
-          email: formData.email,
-          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
-          tipo_identificacion: formData.tipoID,
-          numero_identificacion: formData.numeroID,
-          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtra : formData.lugarNacimiento,
-          fecha_nacimiento: formData.fechaNacimiento,
-          sexo: formData.sexo,
-          estado_civil: formData.estadoCivil,
-          estatura: parseFloat(formData.estatura) || null,
-          peso: parseFloat(formData.peso) || null,
-          role: formData.rol,
-        };
-
-        const { error: profileError } = await createUserProfile(profileDataToInsert);
-
-        if (profileError) {
-          console.error('Error al crear perfil en la tabla profiles:', profileError.message);
-          setSubmissionMessage(`Usuario creado en Auth, pero error al crear perfil: ${profileError.message}`);
-          return;
-        }
-
-        setSubmissionMessage('Usuario creado exitosamente! Se ha enviado un correo de verificación.');
-        // Limpiar formulario después de éxito
-        setFormData({
-          primerNombre: '',
-          segundoNombre: '',
-          primerApellido: '',
-          segundoApellido: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-          nacionalidad: '',
-          nacionalidadOtra: '',
-          tipoID: '',
-          numeroID: '',
-          lugarNacimiento: '',
-          lugarNacimientoOtra: '',
-          fechaNacimiento: '',
-          sexo: '',
-          estadoCivil: '',
-          estatura: '',
-          peso: '',
-          rol: ''
-        });
-        setErrors({});
-      } else {
-        setSubmissionMessage('No se pudo crear el usuario. Inténtalo de nuevo.');
-      }
+      });
+      setShowModal(true);
 
     } catch (error: any) {
       console.error('Error inesperado:', error.message);
       setSubmissionMessage(`Error inesperado: ${error.message}`);
+      setModalTitle('Error');
+      setModalMessage(`Error inesperado: ${error.message}`);
+      setModalType('alert');
+      setShowModal(true);
     }
   };
 
+  if (loading) {
+    return <div className="text-center p-10">Cargando datos del usuario...</div>;
+  }
+
   return (
     <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
-      <h2 className="text-2xl font-bold text-blue-800 mb-6">Crear Nuevo Usuario</h2>
+      <h2 className="text-2xl font-bold text-blue-800 mb-6">Editar Usuario</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Nombres y Apellidos */}
@@ -411,38 +453,6 @@ export default function CrearUsuarios() {
           />
         </div>
 
-        {/* Contraseñas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="password" value="Contraseña" />
-            <TextInput
-              id="password"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              color={errors.password ? 'failure' : undefined}
-              helperText={errors.password || 'Mínimo 6 caracteres'}
-              required
-              minLength={6}
-            />
-          </div>
-          <div>
-            <Label htmlFor="confirmPassword" value="Confirmar Contraseña" />
-            <TextInput
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              color={errors.confirmPassword ? 'failure' : undefined}
-              helperText={errors.confirmPassword}
-              required
-              minLength={6}
-            />
-          </div>
-        </div>
-
         {/* Nacionalidad */}
         <div>
           <Label htmlFor="nacionalidad" value="Nacionalidad" />
@@ -455,7 +465,7 @@ export default function CrearUsuarios() {
             color={errors.nacionalidad ? 'failure' : undefined}
             helperText={errors.nacionalidad}
           >
-            <option value="">Selecciona la nacionalidad</option>
+            <option value="">Selecciona tu nacionalidad</option>
             {NATIONALITIES.map((nationality) => (
               <option key={nationality} value={nationality}>{nationality}</option>
             ))}
@@ -523,7 +533,7 @@ export default function CrearUsuarios() {
               color={errors.lugarNacimiento ? 'failure' : undefined}
               helperText={errors.lugarNacimiento}
             >
-              <option value="">Selecciona el lugar de nacimiento</option>
+              <option value="">Selecciona tu lugar de nacimiento</option>
               {COUNTRIES.map((place) => (
                 <option key={place} value={place}>{place}</option>
               ))}
@@ -572,7 +582,7 @@ export default function CrearUsuarios() {
               color={errors.sexo ? 'failure' : undefined}
               helperText={errors.sexo}
             >
-              <option value="">Selecciona el sexo</option>
+              <option value="">Selecciona tu sexo</option>
               <option value="F">Femenino</option>
               <option value="M">Masculino</option>
               <option value="Otro">Otro</option>
@@ -590,7 +600,7 @@ export default function CrearUsuarios() {
               color={errors.estadoCivil ? 'failure' : undefined}
               helperText={errors.estadoCivil}
             >
-              <option value="">Selecciona el estado civil</option>
+              <option value="">Selecciona tu estado civil</option>
               <option value="Soltero">Soltero/a</option>
               <option value="Casado">Casado/a</option>
               <option value="Divorciado">Divorciado/a</option>
@@ -647,8 +657,9 @@ export default function CrearUsuarios() {
           >
             <option value="">Seleccionar rol</option>
             <option value="admin">Administrador</option>
-            <option value="agente">Agente</option>
-            <option value="client">Cliente</option> {/* Corregido: de 'user' a 'client' */}
+            <option value="agent">Agente</option>
+            <option value="client">Cliente</option>
+            <option value="inactive">Inactivo</option> {/* Permitir seleccionar inactivo si es necesario */}
           </Select>
         </div>
 
@@ -658,16 +669,29 @@ export default function CrearUsuarios() {
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button color="gray" onClick={() => onNavigate('listar-usuarios')}>
+            Cancelar
+          </Button>
           <Button
             type="submit"
             color="blue"
-            disabled={Object.keys(errors).length > 0}
+            disabled={Object.keys(errors).length > 0 || loading}
           >
-            Crear Usuario
+            Guardar Cambios
           </Button>
         </div>
       </form>
+
+      {/* Modal Personalizado */}
+      <CustomModal
+        show={showModal}
+        onClose={() => setShowModal(false)}
+        title={modalTitle}
+        message={modalMessage}
+        type={modalType}
+        onConfirm={modalAction || undefined}
+      />
     </div>
   );
 }

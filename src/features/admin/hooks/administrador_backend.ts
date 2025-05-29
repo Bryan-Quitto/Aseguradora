@@ -1,9 +1,24 @@
 import { supabase } from '../../../supabase/client';
 
 // Define la interfaz para el perfil de usuario, basándote en la tabla 'profiles' que creamos
+// ¡IMPORTANTE! Esta interfaz debe coincidir con la estructura de tu tabla 'profiles' en Supabase.
 export interface UserProfile {
-  id: string;
+  user_id: string;
+  primer_nombre: string | null; // Añadido
+  segundo_nombre: string | null; // Añadido
+  primer_apellido: string | null;
+  segundo_apellido: string | null;
   full_name: string | null;
+  email: string | null; // Añadido
+  nacionalidad: string | null; // Añadido
+  tipo_identificacion: string | null; // Añadido
+  numero_identificacion: string | null; // Añadido
+  lugar_nacimiento: string | null; // Añadido
+  fecha_nacimiento: string | null; // Añadido (asumiendo string en formato 'YYYY-MM-DD' para la fecha)
+  sexo: string | null; // Añadido
+  estado_civil: string | null; // Añadido
+  estatura: number | null; // Añadido (asumiendo number)
+  peso: number | null; // Añadido (asumiendo number)
   role: string;
   created_at: string;
   updated_at: string;
@@ -16,7 +31,7 @@ export interface UserProfile {
 export async function getAllUserProfiles(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*');
+    .select('*'); // Selecciona todas las columnas, incluyendo las nuevas
 
   if (error) {
     console.error('Error al obtener perfiles de usuario:', error.message);
@@ -27,14 +42,78 @@ export async function getAllUserProfiles(): Promise<{ data: UserProfile[] | null
 }
 
 /**
- * Crea un nuevo perfil de usuario en la tabla 'profiles'.
- * @param profileData Los datos del perfil a crear (full_name, role).
- * @returns Una promesa que resuelve con el nuevo UserProfile o un error.
+ * Obtiene un perfil de usuario por su ID.
+ * @param user_id El ID del usuario a buscar.
+ * @returns Una promesa que resuelve con el UserProfile o un error.
  */
-export async function createUserProfile(profileData: { id: string; full_name: string; role: string }): Promise<{ data: UserProfile | null; error: Error | null }> {
+export async function getUserProfileById(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
-    .insert([profileData])
+    .select('*')
+    .eq('user_id', user_id)
+    .single(); // Esperamos un solo resultado
+
+  if (error) {
+    console.error(`Error al obtener perfil de usuario con ID ${user_id}:`, error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile, error: null };
+}
+
+/**
+ * Interfaz para los datos que se esperan al crear un perfil.
+ * Debe coincidir con los datos que se envían desde el formulario de 'Crear Usuarios'.
+ */
+interface CreateUserProfileData {
+  user_id: string;
+  primer_nombre: string;
+  segundo_nombre: string;
+  primer_apellido: string;
+  segundo_apellido: string;
+  full_name: string;
+  email: string;
+  nacionalidad: string;
+  tipo_identificacion: string;
+  numero_identificacion: string;
+  lugar_nacimiento: string;
+  fecha_nacimiento: string;
+  sexo: string;
+  estado_civil: string;
+  estatura: number | null;
+  peso: number | null;
+  role: string;
+}
+
+/**
+ * Crea un nuevo perfil de usuario en la tabla 'profiles'.
+ * @param profileData Los datos del perfil a crear.
+ * @returns Una promesa que resuelve con el nuevo UserProfile o un error.
+ */
+export async function createUserProfile(profileData: CreateUserProfileData): Promise<{ data: UserProfile | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert([
+      {
+        user_id: profileData.user_id,
+        primer_nombre: profileData.primer_nombre,
+        segundo_nombre: profileData.segundo_nombre,
+        primer_apellido: profileData.primer_apellido,
+        segundo_apellido: profileData.segundo_apellido,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        nacionalidad: profileData.nacionalidad,
+        tipo_identificacion: profileData.tipo_identificacion,
+        numero_identificacion: profileData.numero_identificacion,
+        lugar_nacimiento: profileData.lugar_nacimiento,
+        fecha_nacimiento: profileData.fecha_nacimiento,
+        sexo: profileData.sexo,
+        estado_civil: profileData.estado_civil,
+        estatura: profileData.estatura,
+        peso: profileData.peso,
+        role: profileData.role
+      }
+    ])
     .select()
     .single();
 
@@ -47,16 +126,39 @@ export async function createUserProfile(profileData: { id: string; full_name: st
 }
 
 /**
+ * Interfaz para los datos que se esperan al actualizar un perfil.
+ * Ahora permite 'null' para campos opcionales, además de 'undefined'.
+ */
+interface UpdateUserProfileData {
+  primer_nombre?: string | null; // Modificado
+  segundo_nombre?: string | null; // Modificado
+  primer_apellido?: string | null; // Modificado
+  segundo_apellido?: string | null; // Modificado
+  full_name?: string | null; // Modificado
+  email?: string | null; // Modificado
+  nacionalidad?: string | null; // Modificado
+  tipo_identificacion?: string | null; // Modificado
+  numero_identificacion?: string | null; // Modificado
+  lugar_nacimiento?: string | null; // Modificado
+  fecha_nacimiento?: string | null; // Modificado
+  sexo?: string | null; // Modificado
+  estado_civil?: string | null; // Modificado
+  estatura?: number | null;
+  peso?: number | null;
+  role?: string | null; // Modificado
+}
+
+/**
  * Actualiza un perfil de usuario existente en la tabla 'profiles'.
- * @param id El ID del perfil a actualizar.
- * @param updates Los campos a actualizar (full_name, role).
+ * @param user_id El ID del perfil a actualizar.
+ * @param updates Los campos a actualizar.
  * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
  */
-export async function updateUserProfile(id: string, updates: { full_name?: string; role?: string }): Promise<{ data: UserProfile | null; error: Error | null }> {
+export async function updateUserProfile(user_id: string, updates: UpdateUserProfileData): Promise<{ data: UserProfile | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
     .update(updates)
-    .eq('id', id)
+    .eq('user_id', user_id)
     .select()
     .single();
 
@@ -73,14 +175,14 @@ export async function updateUserProfile(id: string, updates: { full_name?: strin
  * Nota: Supabase no tiene una función de 'desactivar' nativa. Esto es una implementación lógica.
  * Aquí, simplemente actualizaremos el rol a 'inactive' o similar, o podrías añadir un campo 'is_active'.
  * Para este ejemplo, asumiremos que cambiar el rol a 'inactive' es suficiente.
- * @param id El ID del perfil a desactivar.
+ * @param user_id El ID del perfil a desactivar.
  * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
  */
-export async function deactivateUserProfile(id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
+export async function deactivateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
     .update({ role: 'inactive' }) // O podrías tener un campo 'status: 'active' | 'inactive''
-    .eq('id', id)
+    .eq('user_id', user_id)
     .select()
     .single();
 

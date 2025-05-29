@@ -8,7 +8,11 @@ const AuthRegister = () => {
 
   const [primerApellido, setPrimerApellido] = useState("");
   const [segundoApellido, setSegundoApellido] = useState("");
-  const [nombres, setNombres] = useState("");
+  // --- CAMBIO: AÑADIR primerNombre y segundoNombre, ELIMINAR nombres ---
+  const [primerNombre, setPrimerNombre] = useState("");
+  const [segundoNombre, setSegundoNombre] = useState("");
+  // const [nombres, setNombres] = useState(""); // <-- ELIMINADO
+  // --- FIN CAMBIO ---
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -28,13 +32,15 @@ const AuthRegister = () => {
     setError(null);
     setSuccess(null);
 
-    // Validación de campos
-    if (!primerApellido || !segundoApellido || !nombres || !email || !password || !confirmPassword ||
+    // --- CAMBIO: Actualizar validación de campos ---
+    if (!primerApellido || !segundoApellido || !primerNombre || !email || !password || !confirmPassword ||
         !nacionalidad || !tipoIdentificacion || !numeroIdentificacion || !lugarNacimiento ||
         !fechaNacimiento || !sexo || !estadoCivil || !estatura || !peso) {
       setError("Por favor, completa todos los campos.");
       return;
     }
+    // --- FIN CAMBIO ---
+
     if (password !== confirmPassword) {
       setError("Las contraseñas no coinciden.");
       return;
@@ -85,38 +91,44 @@ const AuthRegister = () => {
       if (data.user) {
         const userId = data.user.id;
         const userEmail = data.user.email!;
-        const fullName = `${nombres} ${primerApellido} ${segundoApellido}`;
+        // --- CAMBIO: Construir full_name con primer y segundo nombre ---
+        const fullName = `${primerNombre} ${segundoNombre ? segundoNombre + ' ' : ''}${primerApellido} ${segundoApellido}`;
+        // --- FIN CAMBIO ---
 
         // Upsert en profiles
         const { error: insertError } = await supabase
-  .from('profiles')
-  .insert([
-    {
-      user_id: userId,
-      primer_apellido: primerApellido,
-      segundo_apellido: segundoApellido,
-      nombres,
-      full_name: fullName,
-      email: userEmail,
-      nacionalidad,
-      tipo_identificacion: tipoIdentificacion,
-      numero_identificacion: numeroIdentificacion,
-      lugar_nacimiento: lugarNacimiento,
-      fecha_nacimiento: fechaNacimiento,
-      sexo,
-      estado_civil: estadoCivil,
-      estatura: parseFloat(estatura),
-      peso: parseFloat(peso),
-      role: 'user'
-    }
-  ]);
+          .from('profiles')
+          .insert([
+            {
+              user_id: userId,
+              primer_apellido: primerApellido,
+              segundo_apellido: segundoApellido,
+              // --- CAMBIO: Insertar primer_nombre y segundo_nombre ---
+              primer_nombre: primerNombre,
+              segundo_nombre: segundoNombre,
+              // nombres, // <-- ELIMINADO
+              // --- FIN CAMBIO ---
+              full_name: fullName,
+              email: userEmail,
+              nacionalidad,
+              tipo_identificacion: tipoIdentificacion,
+              numero_identificacion: numeroIdentificacion,
+              lugar_nacimiento: lugarNacimiento,
+              fecha_nacimiento: fechaNacimiento,
+              sexo,
+              estado_civil: estadoCivil,
+              estatura: parseFloat(estatura),
+              peso: parseFloat(peso),
+              role: 'client'
+            }
+          ]);
 
-if (insertError) {
-  console.error("Error al guardar perfil (insert):", insertError);
-  setError("Usuario registrado, pero hubo un error al guardar los datos del perfil.");
-} else {
-  setSuccess("¡Registro exitoso! Revisa tu correo para verificar tu cuenta.");
-}
+        if (insertError) {
+          console.error("Error al guardar perfil (insert):", insertError);
+          setError("Usuario registrado, pero hubo un error al guardar los datos del perfil.");
+        } else {
+          setSuccess("¡Registro exitoso! Revisa tu correo para verificar tu cuenta.");
+        }
       }
     } catch (e) {
       console.error("Excepción inesperada durante signUp:", e);
@@ -127,7 +139,28 @@ if (insertError) {
   return (
     <div className="max-w-4xl mx-auto p-4 overflow-x-auto">
       <form onSubmit={handleSubmit} className="min-w-[700px] md:min-w-full">
-        {/* Formulario (sin cambios en HTML) */}
+        {/* Aquí deberías añadir los campos de entrada para primerNombre y segundoNombre */}
+        {/*
+        <div className="mb-2 block">
+            <Label htmlFor="primerNombre" value="Primer Nombre" />
+        </div>
+        <TextInput
+            id="primerNombre"
+            name="primerNombre"
+            value={primerNombre}
+            onChange={(e) => setPrimerNombre(e.target.value)}
+            required
+        />
+        <div className="mb-2 block mt-4">
+            <Label htmlFor="segundoNombre" value="Segundo Nombre" />
+        </div>
+        <TextInput
+            id="segundoNombre"
+            name="segundoNombre"
+            value={segundoNombre}
+            onChange={(e) => setSegundoNombre(e.target.value)}
+        />
+        */}
         <Button color={'primary'} type="submit" className="w-full">Registrarse</Button>
       </form>
     </div>

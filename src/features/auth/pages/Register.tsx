@@ -1,8 +1,8 @@
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
-import { Link, useNavigate } from "react-router-dom"; // Keep this import from react-router-dom
+import { Link, useNavigate } from "react-router-dom";
 import React, { useState } from "react";
 import { supabase } from "../../../supabase/client";
-import { Label, TextInput} from "flowbite-react";
+import { Label, TextInput, Select, Button } from "flowbite-react"; // Asegúrate de importar Button si no está
 
 const gradientStyle = {
   background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
@@ -13,12 +13,48 @@ const gradientStyle = {
 
 // Array de nacionalidades para reutilizar
 const NATIONALITIES = [
-  "Panameña", "Colombiana", "Venezolana", "Brazileña", "Peruana", "Estadounidense",
+  "Panameña", "Colombiana", "Venezolana", "Brasileña", "Peruana", "Estadounidense",
   "Canadiense", "Española", "Italiana", "Francesa", "Alemana", "Británica",
   "Suiza", "Australiana", "Mexicana", "Argentina", "Chilena", "Uruguaya",
   "Paraguaya", "Boliviana", "Cubana", "Dominicana", "Hondureña", "Guatemalteca",
-  "Salvadoreña", "Nicaragüense", "Costarricense", "Ecuatoriana" // Nacionalidad 'Ecuatoriana' añadida
+  "Salvadoreña", "Nicaragüense", "Costarricense", "Ecuatoriana"
 ];
+
+// --- NUEVO: Array de países derivado de NATIONALITIES ---
+const COUNTRIES = NATIONALITIES.map(nationality => {
+  switch (nationality) {
+    case "Panameña": return "Panamá";
+    case "Colombiana": return "Colombia";
+    case "Venezolana": return "Venezuela";
+    case "Brasileña": return "Brasil";
+    case "Peruana": return "Perú";
+    case "Estadounidense": return "Estados Unidos";
+    case "Canadiense": return "Canadá";
+    case "Española": return "España";
+    case "Italiana": return "Italia";
+    case "Francesa": return "Francia";
+    case "Alemana": return "Alemania";
+    case "Británica": return "Reino Unido"; // O "Gran Bretaña" si lo prefieres
+    case "Suiza": return "Suiza";
+    case "Australiana": return "Australia";
+    case "Mexicana": return "México";
+    case "Argentina": return "Argentina";
+    case "Chilena": return "Chile";
+    case "Uruguaya": return "Uruguay";
+    case "Paraguaya": return "Paraguay";
+    case "Boliviana": return "Bolivia";
+    case "Cubana": return "Cuba";
+    case "Dominicana": return "República Dominicana";
+    case "Hondureña": return "Honduras";
+    case "Guatemalteca": return "Guatemala";
+    case "Salvadoreña": return "El Salvador";
+    case "Nicaragüense": return "Nicaragua";
+    case "Costarricense": return "Costa Rica";
+    case "Ecuatoriana": return "Ecuador";
+    default: return nationality; // En caso de que haya una que no mapee
+  }
+});
+// --- FIN NUEVO ---
 
 const Register = () => {
   const navigate = useNavigate();
@@ -28,7 +64,8 @@ const Register = () => {
   const [formData, setFormData] = useState({
     primerApellido: "",
     segundoApellido: "",
-    nombres: "",
+    primerNombre: "",
+    segundoNombre: "",
     nacionalidad: "",
     nacionalidadOtra: "",
     tipoID: "",
@@ -48,7 +85,7 @@ const Register = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
-    if (["primerApellido", "segundoApellido", "nombres"].includes(name)) {
+    if (["primerApellido", "segundoApellido", "primerNombre", "segundoNombre"].includes(name)) {
       if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]*$/.test(value)) return;
     }
 
@@ -78,16 +115,18 @@ const Register = () => {
     setError(null);
     setSuccess(null);
 
-    for (const key in formData) {
-      const typedKey = key as keyof typeof formData;
-      if (typedKey === "nacionalidadOtra" && formData.nacionalidad !== "Otra") {
-        continue;
-      }
-      if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento !== "Otra") {
-        continue;
-      }
+    const requiredFields = [
+      "primerApellido", "primerNombre", "correo", "password", "confirmPassword",
+      "nacionalidad", "tipoID", "numeroID", "lugarNacimiento", "fechaNacimiento", "sexo",
+      "estadoCivil", "estatura", "peso"
+    ];
 
-      if (formData[typedKey].trim() === "") {
+    for (const key of requiredFields) {
+      const typedKey = key as keyof typeof formData;
+      if (formData[typedKey].toString().trim() === "") {
+        if (typedKey === "nacionalidadOtra" && formData.nacionalidad !== "Otra") continue;
+        if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento !== "Otra") continue;
+
         if (typedKey === "nacionalidadOtra" && formData.nacionalidad === "Otra") {
             setError("Por favor, especifique la nacionalidad.");
             return;
@@ -96,6 +135,7 @@ const Register = () => {
             setError("Por favor, especifique el lugar de nacimiento.");
             return;
         }
+
         setError("Por favor, complete todos los campos requeridos.");
         return;
       }
@@ -116,10 +156,11 @@ const Register = () => {
       password: formData.password,
       options: {
         data: {
-          nombres: formData.nombres,
+          primer_nombre: formData.primerNombre,
+          segundo_nombre: formData.segundoNombre,
           primer_apellido: formData.primerApellido,
           segundo_apellido: formData.segundoApellido,
-          role: 'user',
+          role: 'client',
         }
       }
     });
@@ -137,12 +178,13 @@ const Register = () => {
     } else if (signUpData.user) {
       setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta.");
       console.log("Usuario registrado:", signUpData.user);
-      
+
       const profileDataToInsert = {
         user_id: signUpData.user.id,
         primer_apellido: formData.primerApellido,
         segundo_apellido: formData.segundoApellido,
-        nombres: formData.nombres,
+        primer_nombre: formData.primerNombre,
+        segundo_nombre: formData.segundoNombre,
         nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
         tipo_identificacion: formData.tipoID,
         numero_identificacion: formData.numeroID,
@@ -152,7 +194,7 @@ const Register = () => {
         estado_civil: formData.estadoCivil,
         estatura: parseFloat(formData.estatura) || null,
         peso: parseFloat(formData.peso) || null,
-        role: 'user',
+        role: 'client',
       };
 
       const { error: profileError } = await supabase
@@ -171,17 +213,17 @@ const Register = () => {
   };
 
   return (
-    <div style={gradientStyle} className="bg-white relative h-screen py-20 flex justify-center items-center overflow-auto px-4"> {/* Ajustado: overflow-auto y flex para centrado */}
-      <div className="flex flex-col gap-2 p-0 w-full absolute top-0 left-0 right-0"> {/* Ajustado para que el logo esté en la parte superior */}
-        <div className="mx-auto mt-5"> {/* Margen superior para el logo */}
+    <div style={gradientStyle} className="bg-white relative h-screen py-20 flex justify-center items-center overflow-auto px-4">
+      <div className="flex flex-col gap-2 p-0 w-full absolute top-0 left-0 right-0">
+        <div className="mx-auto mt-5">
           <FullLogo />
           <p className="text-black block text-sm font-medium text-center my-3">Nombre Aseguradora</p>
         </div>
       </div>
-      <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 w-full max-w-4xl border-none my-auto"> {/* my-auto para centrado vertical */}
+      <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 w-full max-w-4xl border-none my-auto">
         <h2 className="text-xl font-bold border-b border-black mb-4">1. Información Personal del Titular</h2>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* col-span-2 eliminado, ahora es 1 o 2 columnas */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="mb-2 block">
                 <Label htmlFor="primerApellido" value="Primer Apellido" />
@@ -205,18 +247,31 @@ const Register = () => {
                 onChange={handleChange}
               />
             </div>
-            <div className="md:col-span-2"> {/* Para que el nombre ocupe ambas columnas en pantallas medianas */}
+            {/* --- CAMBIO: Añadir campos para Primer Nombre y Segundo Nombre --- */}
+            <div>
               <div className="mb-2 block">
-                <Label htmlFor="nombres" value="Nombre(s)" />
+                <Label htmlFor="primerNombre" value="Primer Nombre" />
               </div>
               <TextInput
-                id="nombres"
-                name="nombres"
-                value={formData.nombres}
+                id="primerNombre"
+                name="primerNombre"
+                value={formData.primerNombre}
                 onChange={handleChange}
                 required
               />
             </div>
+            <div>
+              <div className="mb-2 block">
+                <Label htmlFor="segundoNombre" value="Segundo Nombre" />
+              </div>
+              <TextInput
+                id="segundoNombre"
+                name="segundoNombre"
+                value={formData.segundoNombre}
+                onChange={handleChange}
+              />
+            </div>
+            {/* --- FIN CAMBIO --- */}
           </div>
           
           {/* Correo */}
@@ -235,7 +290,7 @@ const Register = () => {
           </div>
 
           {/* Contraseñas */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Ajustado para mejor responsividad */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="mb-2 block">
                 <Label htmlFor="password" value="Contraseña" />
@@ -341,9 +396,11 @@ const Register = () => {
                 required
               >
                 <option value="">Seleccione</option>
-                {NATIONALITIES.map((place) => ( // Reutilizamos NATIONALITIES para los lugares de nacimiento
+                {/* --- CAMBIO: Usar COUNTRIES en lugar de NATIONALITIES --- */}
+                {COUNTRIES.map((place) => (
                   <option key={place} value={place}>{place}</option>
                 ))}
+                {/* --- FIN CAMBIO --- */}
                 <option value="Otra">Otra</option>
               </select>
             </div>

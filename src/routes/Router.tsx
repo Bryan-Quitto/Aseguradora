@@ -69,12 +69,16 @@ const Router = [
             { path: '/dashboard', exact: true, element: <Dashboard /> }, // Dashboard general para usuarios normales (si lo deseas)
             {
                 path: '/admin/dashboard', // Ruta específica para el dashboard del administrador
-                exact: true,
                 element: (
                     <PrivateRoute allowedRoles={['admin']}> {/* Protege esta ruta solo para administradores */}
                         <DashboardAdmin />
                     </PrivateRoute>
                 ),
+                children: [
+                    { path: 'list-users', element: <DashboardAdmin /> }, // Child route for ListarUsuarios
+                    { path: 'create-users', element: <DashboardAdmin /> }, // Child route for CrearUsuarios
+                    { path: '', element: <DashboardAdmin /> }, // Default child route for /admin/dashboard
+                ]
             },
             { path: '/ui/typography', exact: true, element: <Typography/> },
             { path: '/ui/table', exact: true, element: <Table/> },
