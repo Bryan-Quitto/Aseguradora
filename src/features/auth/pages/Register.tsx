@@ -118,6 +118,7 @@ const Register = () => {
           nombres: formData.nombres,
           primer_apellido: formData.primerApellido,
           segundo_apellido: formData.segundoApellido,
+          role: 'user', // Add a default role for new registrations
           // ... otros datos que quieras pasar
         }
       }
@@ -156,6 +157,7 @@ const Register = () => {
         estado_civil: formData.estadoCivil,
         estatura: parseFloat(formData.estatura) || null,
         peso: parseFloat(formData.peso) || null,
+        role: 'user', // Also add role to the profiles table for consistency
       };
 
       const { error: profileError } = await supabase

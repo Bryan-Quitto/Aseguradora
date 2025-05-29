@@ -1,202 +1,363 @@
-import { Button, Label, TextInput } from "flowbite-react";
+import { Button, Label, TextInput, Select } from "flowbite-react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../../../supabase/client.ts"; // Importar el cliente de Supabase
-import { useState } from "react"; // Importar useState
+import { supabase } from "../../../supabase/client.ts";
+import { useState } from "react";
 
 const AuthRegister = () => {
-  const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null); // Estado para mensajes de error
-  const [success, setSuccess] = useState<string | null>(null); // Estado para mensajes de éxito
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  // Estados para los nuevos campos
+  const [primerApellido, setPrimerApellido] = useState("");
+  const [segundoApellido, setSegundoApellido] = useState("");
   const [nombres, setNombres] = useState("");
-  const [apellidos, setApellidos] = useState("");
-  const [cedula, setCedula] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
+  const [nacionalidad, setNacionalidad] = useState("Paraguay");
+  const [tipoIdentificacion, setTipoIdentificacion] = useState("Cédula");
+  const [numeroIdentificacion, setNumeroIdentificacion] = useState("");
+  const [lugarNacimiento, setLugarNacimiento] = useState("Ecuador");
+  const [fechaNacimiento, setFechaNacimiento] = useState("");
+  const [sexo, setSexo] = useState("Masculino");
+  const [estadoCivil, setEstadoCivil] = useState("Soltero");
+  const [estatura, setEstatura] = useState("");
+  const [peso, setPeso] = useState("");
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    // Limpiar mensajes anteriores
     setError(null);
     setSuccess(null);
 
-    // Validar campos en el frontend
-    if (!nombres || !apellidos || !cedula || !email || !password || !confirmPassword) {
+    // --- LOGS DE VALIDACIÓN ---
+    console.log("Iniciando handleSubmit...");
+    console.log("Valores actuales de los campos:", {
+      primerApellido, segundoApellido, nombres, email, nacionalidad,
+      tipoIdentificacion, numeroIdentificacion, lugarNacimiento,
+      fechaNacimiento, sexo, estadoCivil, estatura, peso
+    });
+
+    if (!primerApellido || !segundoApellido || !nombres || !email || !password || !confirmPassword ||
+        !nacionalidad || !tipoIdentificacion || !numeroIdentificacion || !lugarNacimiento ||
+        !fechaNacimiento || !sexo || !estadoCivil || !estatura || !peso) {
+      console.error("Error: Campos incompletos.");
       setError("Por favor, completa todos los campos.");
       return;
     }
 
     if (password !== confirmPassword) {
+      console.error("Error: Contraseñas no coinciden.");
       setError("Las contraseñas no coinciden.");
       return;
     }
 
-    // Validación básica de cédula (solo números)
-    if (!/^\d+$/.test(cedula)) {
-        setError("La cédula solo debe contener números.");
+    if (!/^\d+$/.test(numeroIdentificacion)) {
+      console.error("Error: Número de identificación inválido.");
+      setError("El número de identificación solo debe contener números.");
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento)) {
+        console.error("Error: Formato de fecha de nacimiento inválido.");
+        setError("Por favor, ingresa una fecha de nacimiento válida en formato YYYY-MM-DD.");
         return;
     }
 
-    // Validación básica de formato de correo (aunque el input type="email" ayuda)
-    if (!/\S+@\S+\.\S+/.test(email)) {
-        setError("Por favor, ingresa un correo electrónico válido.");
+    if (isNaN(parseFloat(estatura)) || isNaN(parseFloat(peso))) {
+        console.error("Error: Estatura o Peso no son números válidos.");
+        setError("Estatura y Peso deben ser números válidos.");
         return;
     }
 
-    // --- Inicio de la lógica para verificar si el correo ya existe ---
-    // Intentar iniciar sesión con una contraseña ficticia para verificar si el correo existe
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: "dummy-password-para-verificar-existencia", // Contraseña ficticia
-    });
+    // --- LOGS DE VERIFICACIÓN DE PERFIL EXISTENTE ---
+    console.log("Verificando perfil existente con email:", email, "o numero_identificacion:", numeroIdentificacion);
+    try {
+        const { data: existingProfiles, error: fetchError } = await supabase
+            .from('profiles')
+            .select('id')
+            .or(`email.eq.${email},numero_identificacion.eq.${numeroIdentificacion}`);
 
-    // Si el error indica credenciales inválidas, significa que el correo existe
-    if (signInError && /Invalid login credentials/i.test(signInError.message)) {
-      setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
-      setSuccess(null); // Asegurarse de que el mensaje de éxito esté vacío
-      return; // Detener el proceso si el correo ya existe
+        if (fetchError) {
+            console.error("Error al verificar perfil existente (fetchError):", fetchError);
+            setError("Ocurrió un error al verificar el perfil. Intenta de nuevo.");
+            return;
+        }
+
+        if (existingProfiles && existingProfiles.length > 0) {
+            console.warn("Advertencia: Correo o número de identificación ya registrado.");
+            setError("Este correo o número de identificación ya está registrado. Por favor, inicia sesión.");
+            return;
+        }
+        console.log("Verificación de perfil existente: OK. No se encontró perfil duplicado.");
+
+    } catch (e) {
+        // Esto rara vez se activa con supabase.from, pero por si acaso.
+        console.error("Excepción en la verificación de perfil existente:", e);
+        setError("Ocurrió una excepción al verificar el perfil. Intenta de nuevo.");
+        return;
     }
-    // --- Fin de la lógica para verificar si el correo ya existe ---
 
 
-    // Si el correo no existe (o signInWithPassword falló por otra razón), proceder con el registro
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: email,
-      password: password,
-      // Nota: Los campos adicionales (nombres, apellidos, cedula) no se pasan directamente
-      // en el método signUp con email/password. Deberás guardarlos en una tabla de perfiles
-      // separada en Supabase después de que el usuario se registre y confirme su correo.
-      // Puedes pasar datos adicionales en el objeto 'data', pero no se guardan por defecto
-      // en la tabla auth.users. Se usan para el correo de confirmación.
-      // data: { nombres: nombres, apellidos: apellidos, cedula: cedula } // Ejemplo de cómo pasar data, pero requiere lógica backend/DB para guardarlos
-    });
+    // --- Preparando datos para Supabase Auth ---
+    const userData = {
+        primer_apellido: primerApellido,
+        segundo_apellido: segundoApellido,
+        nombres: nombres,
+        nacionalidad: nacionalidad,
+        tipo_identificacion: tipoIdentificacion,
+        numero_identificacion: numeroIdentificacion,
+        lugar_nacimiento: lugarNacimiento,
+        fecha_nacimiento: fechaNacimiento,
+        sexo: sexo,
+        estado_civil: estadoCivil,
+        estatura: parseFloat(estatura),
+        peso: parseFloat(peso),
+    };
+    console.log("Datos a enviar en options.data para signUp:", userData);
 
-    if (signUpError) {
-      console.error("Error al registrar usuario:", signUpError.message);
+    // --- Llamada a supabase.auth.signUp con try/catch ---
+    try {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+            email: email,
+            password: password,
+            options: {
+                data: userData,
+            }
+        });
 
-      // Aunque ya hicimos una verificación previa, este bloque maneja cualquier otro error de signUp
-      // incluyendo la posibilidad de que la verificación previa no haya sido 100% efectiva
-      // o que haya un error diferente (ej: problemas de red, configuración de Supabase, etc.)
-       if (signUpError.status === 400 &&
-          /already registered|duplicate/i.test(signUpError.message)) {
-        setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
-      } else {
-        setError(`Error al registrar usuario: ${signUpError.message}`);
-      }
-      setSuccess(null); // Asegurarse de que el mensaje de éxito esté vacío
-    } else {
-      console.log("Usuario registrado exitosamente:", data);
-      setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta."); // Mostrar mensaje de éxito
-      setError(null); // Asegurarse de que el mensaje de error esté vacío
-      // Supabase enviará un correo de verificación.
-      // El usuario deberá verificar su correo antes de poder iniciar sesión.
-      // Considera mostrar un mensaje al usuario indicando que revise su correo.
-      // navigate("/auth/login"); // Eliminada la redirección
+        if (signUpError) {
+            console.error("Error completo de Supabase Auth signUp:", signUpError);
+            console.error("Mensaje de error de signUp:", signUpError.message);
+            console.error("Código de error de signUp:", signUpError.code);
+            console.error("Status de error de signUp:", signUpError.status);
+
+            if (signUpError.status === 400 && /already registered|duplicate/i.test(signUpError.message)) {
+                setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
+            } else {
+                setError(`Error al registrar usuario: ${signUpError.message}`);
+            }
+            setSuccess(null);
+        } else {
+            console.log("signUp exitoso. Datos de usuario devueltos:", data);
+            // Verifica raw_user_meta_data aquí en la consola
+            console.log("user_metadata después de signUp (desde 'data.user'):", data.user?.user_metadata); // Nota: Supabase devuelve 'user_metadata' en el objeto user
+            console.log("app_metadata después de signUp (desde 'data.user'):", data.user?.app_metadata);
+
+
+            setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta.");
+            setError(null);
+        }
+    } catch (e) {
+        console.error("Excepción inesperada durante supabase.auth.signUp:", e);
+        setError("Ocurrió una excepción inesperada durante el registro.");
     }
   };
 
   return (
-    <>
-      <form onSubmit={handleSubmit} >
-        {/* Campo Nombres */}
-        <div className="mb-4">
-          <div className="mb-2 block">
-            <Label htmlFor="nombres" value="Nombres" />
+    <div className="max-w-4xl mx-auto p-4 overflow-x-auto">
+      <form onSubmit={handleSubmit} className="min-w-[700px] md:min-w-full">
+        <h2 className="text-xl font-semibold mb-6">1. Información Personal del Titular</h2>
+        <hr className="mb-6" />
+
+        {/* ... (resto del formulario HTML, sin cambios) ... */}
+
+        {/* Primer Apellido y Segundo Apellido */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label htmlFor="primer_apellido" value="Primer Apellido" />
+            <TextInput
+              id="primer_apellido"
+              type="text"
+              required
+              value={primerApellido}
+              onChange={(e) => setPrimerApellido(e.target.value)}
+            />
           </div>
+          <div>
+            <Label htmlFor="segundo_apellido" value="Segundo Apellido" />
+            <TextInput
+              id="segundo_apellido"
+              type="text"
+              required
+              value={segundoApellido}
+              onChange={(e) => setSegundoApellido(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Nombres */}
+        <div className="mb-4">
+          <Label htmlFor="nombres" value="Nombre(s)" />
           <TextInput
             id="nombres"
             type="text"
-            sizing="md"
             required
-            className="form-control form-rounded-xl"
             value={nombres}
             onChange={(e) => setNombres(e.target.value)}
           />
         </div>
 
-        {/* Campo Apellidos */}
+        {/* Correo Electrónico */}
         <div className="mb-4">
-          <div className="mb-2 block">
-            <Label htmlFor="apellidos" value="Apellidos" />
-          </div>
+          <Label htmlFor="email" value="Correo Electrónico" />
           <TextInput
-            id="apellidos"
-            type="text"
-            sizing="md"
-            required
-            className="form-control form-rounded-xl"
-            value={apellidos}
-            onChange={(e) => setApellidos(e.target.value)}
-          />
-        </div>
-
-        {/* Campo Cédula */}
-        <div className="mb-4">
-          <div className="mb-2 block">
-            <Label htmlFor="cedula" value="Cédula" />
-          </div>
-          <TextInput
-            id="cedula"
-            type="text" // Usamos text para permitir validación manual, o number si solo quieres teclado numérico
-            sizing="md"
-            required
-            className="form-control form-rounded-xl"
-            value={cedula}
-            onChange={(e) => setCedula(e.target.value)}
-            // pattern="\d*" // Opcional: usar pattern para validación HTML5 básica (solo números)
-          />
-        </div>
-
-        {/* Campo Correo electrónico */}
-        <div className="mb-4">
-          <div className="mb-2 block">
-            <Label htmlFor="emadd" value="Correo electrónico" />
-          </div>
-          <TextInput
-            id="emadd"
+            id="email"
             type="email"
-            sizing="md"
             required
-            className="form-control form-rounded-xl"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
-        {/* Campo Contraseña */}
-        <div className="mb-6">
-          <div className="mb-2 block">
-            <Label htmlFor="userpwd" value="Contraseña" />
+        {/* Contraseña y Confirmar Contraseña */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <Label htmlFor="password" value="Contraseña" />
+            <TextInput
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
+          <div>
+            <Label htmlFor="confirm_password" value="Confirmar Contraseña" />
+            <TextInput
+              id="confirm_password"
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Nacionalidad y Tipo de Identificación */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label htmlFor="nacionalidad" value="Nacionalidad" />
+            <Select
+              id="nacionalidad"
+              required
+              value={nacionalidad}
+              onChange={(e) => setNacionalidad(e.target.value)}
+            >
+              <option value="Paraguay">Paraguay</option>
+              <option value="Ecuador">Ecuador</option>
+              {/* Añade más opciones según sea necesario */}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="tipo_identificacion" value="Tipo de Identificación" />
+            <Select
+              id="tipo_identificacion"
+              required
+              value={tipoIdentificacion}
+              onChange={(e) => setTipoIdentificacion(e.target.value)}
+            >
+              <option value="Cédula">Cédula</option>
+              <option value="Pasaporte">Pasaporte</option>
+              {/* Añade más opciones */}
+            </Select>
+          </div>
+        </div>
+
+        {/* Número de Identificación */}
+        <div className="mb-4">
+          <Label htmlFor="numero_identificacion" value="Número de Identificación" />
           <TextInput
-            id="userpwd"
-            type="password"
-            sizing="md"
+            id="numero_identificacion"
+            type="text"
             required
-            className="form-control form-rounded-xl"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={numeroIdentificacion}
+            onChange={(e) => setNumeroIdentificacion(e.target.value)}
           />
         </div>
 
-        {/* Campo Confirmar contraseña */}
-        <div className="mb-6">
-          <div className="mb-2 block">
-            <Label htmlFor="confirmUserpwd" value="Confirmar contraseña" />
+        {/* Lugar de Nacimiento y Fecha de Nacimiento */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label htmlFor="lugar_nacimiento" value="Lugar de Nacimiento" />
+            <Select
+              id="lugar_nacimiento"
+              required
+              value={lugarNacimiento}
+              onChange={(e) => setLugarNacimiento(e.target.value)}
+            >
+              <option value="Ecuador">Ecuador</option>
+              <option value="Colombia">Colombia</option>
+              {/* Añade más opciones */}
+            </Select>
           </div>
-          <TextInput
-            id="confirmUserpwd"
-            type="password"
-            sizing="md"
-            required
-            className="form-control form-rounded-xl"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
+          <div>
+            <Label htmlFor="fecha_nacimiento" value="Fecha de Nacimiento" />
+            <TextInput
+              id="fecha_nacimiento"
+              type="date"
+              required
+              value={fechaNacimiento}
+              onChange={(e) => setFechaNacimiento(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Sexo y Estado Civil */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label htmlFor="sexo" value="Sexo" />
+            <Select
+              id="sexo"
+              required
+              value={sexo}
+              onChange={(e) => setSexo(e.target.value)}
+            >
+              <option value="Masculino">Masculino</option>
+              <option value="Femenino">Femenino</option>
+              <option value="Otro">Otro</option>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="estado_civil" value="Estado Civil" />
+            <Select
+              id="estado_civil"
+              required
+              value={estadoCivil}
+              onChange={(e) => setEstadoCivil(e.target.value)}
+            >
+              <option value="Soltero">Soltero</option>
+              <option value="Casado">Casado</option>
+              <option value="Divorciado">Divorciado</option>
+              <option value="Viudo">Viudo</option>
+              <option value="Union Libre">Unión Libre</option>
+            </Select>
+          </div>
+        </div>
+
+        {/* Estatura y Peso */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <Label htmlFor="estatura" value="Estatura (en cm)" />
+            <TextInput
+              id="estatura"
+              type="number"
+              step="0.1"
+              required
+              value={estatura}
+              onChange={(e) => setEstatura(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="peso" value="Peso (en kg)" />
+            <TextInput
+              id="peso"
+              type="number"
+              step="0.1"
+              required
+              value={peso}
+              onChange={(e) => setPeso(e.target.value)}
+            />
+          </div>
         </div>
 
 
@@ -215,8 +376,8 @@ const AuthRegister = () => {
         <Button color={'primary'} type="submit" className="w-full">Registrarse</Button>
 
       </form>
-    </>
+    </div>
   )
 }
 
-export default AuthRegister
+export default AuthRegister;
