@@ -1,12 +1,11 @@
 
 
-import Logo from "/src/assets/images/logos/logo.svg";
 import { Link } from "react-router-dom";
 const FullLogo = () => {
   return (
-    <Link to={"/"}>
-      <img src={Logo} alt="logo" className="block" />
-    </Link>
+    <h1 className="text-3xl font-bold text-blue-800 mb-4">
+    Menu
+    </h1>
   );
 };
 

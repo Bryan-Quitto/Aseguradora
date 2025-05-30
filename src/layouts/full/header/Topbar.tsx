@@ -1,6 +1,6 @@
 
 import { Link, useLocation } from "react-router-dom";
-import wrappixel_logo from "/src/assets/images/logos/logo-wrappixel.svg";
+import wrappixel_logo from "/src/assets/images/logos/logo-wrappixel.png"; 
 import { Button } from "flowbite-react"; // Importa Button
 import { Icon } from "@iconify/react";
 import { useAuth } from 'src/contexts/AuthContext'; // Importar useAuth
@@ -11,7 +11,7 @@ const Topbar = () => {
     const location = useLocation();
     const isLandingPage = location.pathname === '/';
     const isAdminDashboard = location.pathname === '/admin/dashboard'; // Verifica si es el dashboard del administrador
-    const { user } = useAuth(); // Obtener el usuario del contexto
+    const { user } = useAuth(); 
     const navigate = useNavigate();
 
     const handleLogout = async () => {
@@ -24,7 +24,7 @@ const Topbar = () => {
     };
 
   return (
-    <div className="py-3 px-4 bg-dark z-40 sticky top-0">
+    <div className="py-3 px-4 bg-white z-40 sticky top-0">
       <div className="flex items-center lg:justify-between flex-wrap justify-center">
         <div className="flex items-center gap-12">
             <img src={wrappixel_logo} alt="logo" />
