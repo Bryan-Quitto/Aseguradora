@@ -1,15 +1,14 @@
-
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
-import { Link, useNavigate } from "react-router-dom"; // Keep this import from react-router-dom
+import { Link, useNavigate } from "react-router-dom";
 import React, { useState } from "react";
 import { supabase } from "../../../supabase/client";
-import { Label, TextInput} from "flowbite-react";
+import { Label, TextInput } from "flowbite-react";
 
 const gradientStyle = {
-  background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
+  background: "linear-gradient(-45deg, #4A90E2, #333333, #A2D5C6, #FFFFFF)",
   backgroundSize: "400% 400%",
   animation: "gradient 15s ease infinite",
-  height: "100vh"
+  minHeight: "100vh",
 };
 
 const Register = () => {
@@ -33,8 +32,8 @@ const Register = () => {
     estatura: "",
     peso: "",
     correo: "",
-    password: "", // NUEVO: Campo para contraseña
-    confirmPassword: "", // NUEVO: Campo para confirmar contraseña
+    password: "",
+    confirmPassword: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -180,60 +179,53 @@ const Register = () => {
   };
 
   return (
-    <div style={gradientStyle} className="bg-white relative overflow-hidden h-screen py-40">
-      <div className="flex flex-col gap-2 p-0 w-full">
-        <div className="mx-auto">
+    <div style={gradientStyle} className="min-h-screen flex items-center justify-center py-8">
+      <div className="w-full max-w-3xl mx-auto">
+        <div className="flex flex-col items-center mb-6">
           <FullLogo />
-          <p className="text-black block text-sm font-medium text-center my-3">Nombre Aseguradora</p>
+          <p className="text-black text-sm font-medium text-center my-3">Nombre Aseguradora</p>
         </div>
-      </div>
-      <div className="flex h-full justify-center items-center px-4">
-        <div className="rounded-xl dark:shadow-dark-md shadow-md bg-white dark:bg-darkgray p-10 w-full max-w-4xl border-none">
-          <h2 className="text-xl font-bold border-b border-black mb-4">1. Información Personal del Titular</h2>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl shadow-lg px-6 py-10 md:px-12 md:py-14">
+          <h2 className="text-2xl font-bold text-center mb-8 border-b border-gray-200 pb-4">
+            1. Información Personal del Titular
+          </h2>
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="primerApellido" value="Primer Apellido" />
-                </div>
+                <Label htmlFor="primerApellido" value="Primer Apellido" className="font-semibold text-gray-700" />
                 <TextInput
                   id="primerApellido"
                   name="primerApellido"
                   value={formData.primerApellido}
                   onChange={handleChange}
                   required
+                  className="mt-1"
                 />
               </div>
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="segundoApellido" value="Segundo Apellido" />
-                </div>
+                <Label htmlFor="segundoApellido" value="Segundo Apellido" className="font-semibold text-gray-700" />
                 <TextInput
                   id="segundoApellido"
                   name="segundoApellido"
                   value={formData.segundoApellido}
                   onChange={handleChange}
-                />
-              </div>
-              <div className="col-span-2">
-                <div className="mb-2 block">
-                  <Label htmlFor="nombres" value="Nombre(s)" />
-                </div>
-                <TextInput
-                  id="nombres"
-                  name="nombres"
-                  value={formData.nombres}
-                  onChange={handleChange}
-                  required
+                  className="mt-1"
                 />
               </div>
             </div>
-            
-            {/* Correo */}
             <div>
-              <div className="mb-2 block">
-                <Label htmlFor="correo" value="Correo Electrónico" />
-              </div>
+              <Label htmlFor="nombres" value="Nombre(s)" className="font-semibold text-gray-700" />
+              <TextInput
+                id="nombres"
+                name="nombres"
+                value={formData.nombres}
+                onChange={handleChange}
+                required
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="correo" value="Correo Electrónico" className="font-semibold text-gray-700" />
               <TextInput
                 id="correo"
                 name="correo"
@@ -241,15 +233,12 @@ const Register = () => {
                 value={formData.correo}
                 onChange={handleChange}
                 required
+                className="mt-1"
               />
             </div>
-
-            {/* Contraseñas */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="password" value="Contraseña" />
-                </div>
+                <Label htmlFor="password" value="Contraseña" className="font-semibold text-gray-700" />
                 <TextInput
                   id="password"
                   name="password"
@@ -258,12 +247,11 @@ const Register = () => {
                   onChange={handleChange}
                   required
                   minLength={6}
+                  className="mt-1"
                 />
               </div>
               <div>
-                <div className="mb-2 block">
-                  <Label htmlFor="confirmPassword" value="Confirmar Contraseña" />
-                </div>
+                <Label htmlFor="confirmPassword" value="Confirmar Contraseña" className="font-semibold text-gray-700" />
                 <TextInput
                   id="confirmPassword"
                   name="confirmPassword"
@@ -272,244 +260,230 @@ const Register = () => {
                   onChange={handleChange}
                   required
                   minLength={6}
+                  className="mt-1"
                 />
               </div>
             </div>
 
-
-          {/* Nacionalidad y Tipo ID */}
-          {/* ... (campos existentes: nacionalidad, tipoID) ... */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Ajustado para mejor responsividad */}
-            <div>
-              <label className="block text-sm font-medium">Nacionalidad</label>
-              <select
-                name="nacionalidad"
-                value={formData.nacionalidad}
-                onChange={handleChange}
-                className="w-full border border-black px-2 py-1"
-                required
-              >
-                <option value="">Seleccione</option>
-                <option value="Panameña">Panameña</option>
-                <option value="Colombiana">Colombiana</option>
-                <option value="Venezolana">Venezolana</option>
-                <option value="Brazileña">Brazileña</option>
-                <option value="Peruana">Peruana</option>
-                <option value="Estadounidense">Estadounidense</option>
-                <option value="Canadiense">Canadiense</option>
-                <option value="Española">Española</option>
-                <option value="Italiana">Italiana</option>
-                <option value="Francesa">Francesa</option>
-                <option value="Alemana">Alemana</option>
-                <option value="Británica">Británica</option>
-                <option value="Suiza">Suiza</option>
-                <option value="Australiana">Australiana</option>
-                <option value="Mexicana">Mexicana</option>
-                <option value="Argentina">Argentina</option>
-                <option value="Chilena">Chilena</option>
-                <option value="Uruguaya">Uruguaya</option>
-                <option value="Paraguaya">Paraguaya</option>
-                <option value="Boliviana">Boliviana</option>
-                <option value="Cubana">Cubana</option>
-                <option value="Dominicana">Dominicana</option>
-                <option value="Hondureña">Hondureña</option>
-                <option value="Guatemalteca">Guatemalteca</option>
-                <option value="Salvadoreña">Salvadoreña</option>
-                <option value="Nicaragüense">Nicaragüense</option>
-                <option value="Costarricense">Costarricense</option>
-                <option value="Panameña">Panameña</option>
-                <option value="Paraguaya">Paraguaya</option>
-                <option value="Otra">Otra</option>
-              </select>
+            {/* Nacionalidad y Tipo ID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="nacionalidad" value="Nacionalidad" className="font-semibold text-gray-700" />
+                <select
+                  name="nacionalidad"
+                  value={formData.nacionalidad}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Panameña">Panameña</option>
+                  <option value="Colombiana">Colombiana</option>
+                  <option value="Venezolana">Venezolana</option>
+                  <option value="Brazileña">Brazileña</option>
+                  <option value="Peruana">Peruana</option>
+                  <option value="Estadounidense">Estadounidense</option>
+                  <option value="Canadiense">Canadiense</option>
+                  <option value="Española">Española</option>
+                  <option value="Italiana">Italiana</option>
+                  <option value="Francesa">Francesa</option>
+                  <option value="Alemana">Alemana</option>
+                  <option value="Británica">Británica</option>
+                  <option value="Suiza">Suiza</option>
+                  <option value="Australiana">Australiana</option>
+                  <option value="Mexicana">Mexicana</option>
+                  <option value="Argentina">Argentina</option>
+                  <option value="Chilena">Chilena</option>
+                  <option value="Uruguaya">Uruguaya</option>
+                  <option value="Paraguaya">Paraguaya</option>
+                  <option value="Boliviana">Boliviana</option>
+                  <option value="Cubana">Cubana</option>
+                  <option value="Dominicana">Dominicana</option>
+                  <option value="Hondureña">Hondureña</option>
+                  <option value="Guatemalteca">Guatemalteca</option>
+                  <option value="Salvadoreña">Salvadoreña</option>
+                  <option value="Nicaragüense">Nicaragüense</option>
+                  <option value="Costarricense">Costarricense</option>
+                  <option value="Otra">Otra</option>
+                </select>
+                {formData.nacionalidad === "Otra" && (
+                  <input
+                    name="nacionalidadOtra"
+                    value={formData.nacionalidadOtra}
+                    onChange={handleChange}
+                    type="text"
+                    placeholder="Especifique nacionalidad"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    required
+                  />
+                )}
+              </div>
+              <div>
+                <Label htmlFor="tipoID" value="Tipo de Identificación" className="font-semibold text-gray-700" />
+                <select
+                  name="tipoID"
+                  value={formData.tipoID}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Cédula">Cédula</option>
+                  <option value="Pasaporte">Pasaporte</option>
+                </select>
+              </div>
             </div>
 
-            {formData.nacionalidad === "Otra" && (
+            {/* Número de Identificación */}
+            <div>
+              <Label htmlFor="numeroID" value="Número de Identificación" className="font-semibold text-gray-700" />
+              <TextInput
+                id="numeroID"
+                name="numeroID"
+                value={formData.numeroID}
+                onChange={handleChange}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            {/* Lugar y Fecha de Nacimiento */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium">Especifique nacionalidad</label>
-                <input
-                  name="nacionalidadOtra"
-                  value={formData.nacionalidadOtra}
+                <Label htmlFor="lugarNacimiento" value="Lugar de Nacimiento" className="font-semibold text-gray-700" />
+                <select
+                  name="lugarNacimiento"
+                  value={formData.lugarNacimiento}
                   onChange={handleChange}
-                  type="text"
-                  className="w-full border border-black px-2 py-1"
-                  required={formData.nacionalidad === "Otra"} // Requerido solo si "Otra" está seleccionado
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Ecuador">Ecuador</option>
+                  {/* ...más opciones... */}
+                  <option value="Otra">Otra</option>
+                </select>
+                {formData.lugarNacimiento === "Otra" && (
+                  <input
+                    name="lugarNacimientoOtro"
+                    value={formData.lugarNacimientoOtro}
+                    onChange={handleChange}
+                    type="text"
+                    placeholder="Especifique lugar de nacimiento"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    required
+                  />
+                )}
+              </div>
+              <div>
+                <Label htmlFor="fechaNacimiento" value="Fecha de Nacimiento" className="font-semibold text-gray-700" />
+                <input
+                  id="fechaNacimiento"
+                  name="fechaNacimiento"
+                  value={formData.fechaNacimiento}
+                  onChange={handleChange}
+                  type="date"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
                 />
+              </div>
+            </div>
+
+            {/* Sexo y Estado Civil */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="sexo" value="Sexo" className="font-semibold text-gray-700" />
+                <select
+                  name="sexo"
+                  value={formData.sexo}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Seleccione</option>
+                  <option value="F">Femenino</option>
+                  <option value="M">Masculino</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="estadoCivil" value="Estado Civil" className="font-semibold text-gray-700" />
+                <select
+                  name="estadoCivil"
+                  value={formData.estadoCivil}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  <option value="">Seleccione</option>
+                  <option value="Soltero">Soltero</option>
+                  <option value="Casado">Casado</option>
+                  <option value="Divorciado">Divorciado</option>
+                  <option value="Viudo">Viudo</option>
+                  <option value="U/Libre">U/Libre</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Estatura y Peso */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="estatura" value="Estatura (en cm)" className="font-semibold text-gray-700" />
+                <TextInput
+                  id="estatura"
+                  name="estatura"
+                  value={formData.estatura}
+                  onChange={handleChange}
+                  placeholder="Ej. 170"
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="peso" value="Peso (en kg)" className="font-semibold text-gray-700" />
+                <TextInput
+                  id="peso"
+                  name="peso"
+                  value={formData.peso}
+                  onChange={handleChange}
+                  placeholder="Ej. 65.5"
+                  required
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Mensajes de error/éxito */}
+            {error && (
+              <div className="text-red-500 text-sm mt-4 p-2 bg-red-100 border border-red-500 rounded">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="text-green-500 text-sm mt-4 p-2 bg-green-100 border border-green-500 rounded">
+                {success}
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium">Tipo de Identificación</label>
-              <select
-                name="tipoID"
-                value={formData.tipoID}
-                onChange={handleChange}
-                className="w-full border border-black px-2 py-1"
-                required
+            {/* Botón y Link */}
+            <div className="mt-8 flex flex-col items-center gap-2">
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded transition"
               >
-                <option value="">Seleccione</option>
-                <option value="Cédula">Cédula</option>
-                <option value="Pasaporte">Pasaporte</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Número ID */}
-          {/* ... (campo existente: numeroID) ... */}
-          <div>
-            <label className="block text-sm font-medium">Número de Identificación</label>
-            <input
-              name="numeroID"
-              value={formData.numeroID}
-              onChange={handleChange}
-              type="text"
-              className="w-full border border-black px-2 py-1"
-              required
-            />
-          </div>
-
-          {/* Lugar y Fecha de Nacimiento */}
-          {/* ... (campos existentes: lugarNacimiento, fechaNacimiento) ... */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Ajustado para mejor responsividad */}
-            <div>
-              <label className="block text-sm font-medium">Lugar de Nacimiento</label>
-              <select
-                name="lugarNacimiento"
-                value={formData.lugarNacimiento}
-                onChange={handleChange}
-                className="w-full border border-black px-2 py-1"
-                required
-              >
-                <option value="">Seleccione</option>
-                <option value="Ecuador">Ecuador</option>
-                {/* ... más opciones ... */}
-                <option value="Otra">Otra</option>
-              </select>
-            </div>
-
-            {formData.lugarNacimiento === "Otra" && (
-              <div>
-                <label className="block text-sm font-medium">Especifique lugar de nacimiento</label>
-                <input
-                  name="lugarNacimientoOtro"
-                  value={formData.lugarNacimientoOtro}
-                  onChange={handleChange}
-                  type="text"
-                  className="w-full border border-black px-2 py-1"
-                  required={formData.lugarNacimiento === "Otra"} // Requerido solo si "Otra" está seleccionado
-                />
+                Registrarse
+              </button>
+              <div className="flex gap-2 text-sm font-medium items-center justify-center">
+                <p>¿Ya tiene una cuenta?</p>
+                <Link to="/auth/login" className="text-blue-700 underline">
+                  Ingrese
+                </Link>
               </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium">Fecha de Nacimiento</label>
-              <input
-                name="fechaNacimiento"
-                value={formData.fechaNacimiento}
-                onChange={handleChange}
-                type="date"
-                className="w-full border border-black px-2 py-1"
-                required
-              />
             </div>
-          </div>
-
-          {/* Sexo y Estado Civil */}
-          {/* ... (campos existentes: sexo, estadoCivil) ... */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium">Sexo</label>
-              <select
-                name="sexo"
-                value={formData.sexo}
-                onChange={handleChange}
-                className="w-full border border-black px-2 py-1"
-                required
-              >
-                <option value="">Seleccione</option>
-                <option value="F">Femenino</option>
-                <option value="M">Masculino</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium">Estado Civil</label>
-              <select
-                name="estadoCivil"
-                value={formData.estadoCivil}
-                onChange={handleChange}
-                className="w-full border border-black px-2 py-1"
-                required
-              >
-                <option value="">Seleccione</option>
-                <option value="Soltero">Soltero</option>
-                <option value="Casado">Casado</option>
-                <option value="Divorciado">Divorciado</option>
-                <option value="Viudo">Viudo</option>
-                <option value="U/Libre">U/Libre</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Estatura y Peso */}
-          {/* ... (campos existentes: estatura, peso) ... */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium">Estatura (en cm)</label>
-              <input
-                name="estatura"
-                value={formData.estatura}
-                onChange={handleChange}
-                type="text"
-                className="w-full border border-black px-2 py-1"
-                placeholder="Ej. 170"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium">Peso (en kg)</label>
-              <input
-                name="peso"
-                value={formData.peso}
-                onChange={handleChange}
-                type="text"
-                className="w-full border border-black px-2 py-1"
-                placeholder="Ej. 65.5"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Mensajes de error/éxito */}
-          {error && (
-            <div className="text-red-500 text-sm mt-4 p-2 bg-red-100 border border-red-500 rounded">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="text-green-500 text-sm mt-4 p-2 bg-green-100 border border-green-500 rounded">
-              {success}
-            </div>
-          )}
-
-          {/* Botón y Link */}
-          <div className="mt-6 flex justify-center">
-            <button type="submit" className="bg-black text-white px-6 py-2 rounded">
-              Registrarse
-            </button>
-          </div>
-
-          <div className="flex gap-2 text-sm font-medium mt-4 items-center justify-center">
-            <p>¿Ya tiene una cuenta?</p>
-            <Link to="/auth/login" className="text-black underline">
-              Ingrese
-            </Link>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default Register;
