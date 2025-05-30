@@ -1,7 +1,7 @@
-import { Button, Label, Select, TextInput, Modal } from 'flowbite-react';
+import { Button, Modal } from 'flowbite-react';
 import { useState, useEffect } from 'react';
-import { getUserProfileById, updateUserProfile, UserProfile } from 'src/features/admin/hooks/administrador_backend';
-import { createUserProfile } from 'src/features/admin/hooks/createUserProfile';
+import { getUserProfileById, updateUserProfile} from 'src/features/admin/hooks/administrador_backend';
+import { useParams, useNavigate } from 'react-router-dom';
 
 // Array de nacionalidades para reutilizar (copiado de Register.tsx y CrearUsuarios.tsx)
 const NATIONALITIES = [
@@ -93,7 +93,7 @@ interface FormErrors {
 // Props para el componente EditarUsuario
 interface EditarUsuarioProps {
   userId: string; // El ID del usuario a editar
-  onNavigate: (view: string) => void; // Para volver a la lista de usuarios
+  onNavigate: () => void; // Para volver a la lista de usuarios
 }
 
 // Componente de Modal Personalizado (copiado de ListarUsuarios.tsx)
@@ -281,4 +281,109 @@ export default function EditarUsuario({ userId, onNavigate }: EditarUsuarioProps
     }
 
     setErrors(newErrors);
-    setSubmissionMessage(null;
+    setSubmissionMessage(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Limpiar errores antes de validar
+    let newErrors: FormErrors = {};
+
+    // Validar campos requeridos
+    const requiredFields = [
+      'primerNombre', 'primerApellido', 'email', 'nacionalidad', 'tipoID', 'numeroID',
+      'lugarNacimiento', 'fechaNacimiento', 'sexo', 'estadoCivil', 'estatura', 'peso', 'rol'
+    ];
+    for (const field of requiredFields) {
+      if (!formData[field as keyof FormData]) {
+        newErrors[field as keyof FormErrors] = 'Este campo es requerido';
+      }
+    }
+
+    // Validaciones específicas
+    if (formData.email && !validateEmail(formData.email)) {
+      newErrors.email = 'Email inválido';
+    }
+    if (formData.numeroID && !validateNumber(formData.numeroID)) {
+      newErrors.numeroID = 'Solo se permiten números';
+    }
+    if (formData.fechaNacimiento && !validateDate(formData.fechaNacimiento)) {
+      newErrors.fechaNacimiento = 'Formato AAAA-MM-DD requerido';
+    }
+    if (formData.estatura && !validateDecimalNumber(formData.estatura)) {
+      newErrors.estatura = 'Solo números y un punto decimal';
+    }
+    if (formData.peso && !validateDecimalNumber(formData.peso)) {
+      newErrors.peso = 'Solo números y un punto decimal';
+    }
+
+    setErrors(newErrors);
+
+    // Si hay errores, no enviar
+    if (Object.keys(newErrors).length > 0) {
+      setSubmissionMessage('Por favor corrige los errores en el formulario');
+      return;
+    }
+
+    // Preparar datos para envío
+    const updates = {
+      primer_nombre: formData.primerNombre,
+      segundo_nombre: formData.segundoNombre,
+      primer_apellido: formData.primerApellido,
+      segundo_apellido: formData.segundoApellido,
+      email: formData.email,
+      nacionalidad: formData.nacionalidad,
+      tipo_identificacion: formData.tipoID,
+      numero_identificacion: formData.numeroID,
+      lugar_nacimiento: formData.lugarNacimiento,
+      fecha_nacimiento: formData.fechaNacimiento,
+      sexo: formData.sexo,
+      estado_civil: formData.estadoCivil,
+      estatura: parseFloat(formData.estatura),
+      peso: parseFloat(formData.peso),
+      role: formData.rol
+    };
+
+    setLoading(true);
+    const { data, error } = await updateUserProfile(userId, updates);
+    setLoading(false);
+
+    if (error) {
+      setSubmissionMessage(`Error al actualizar el usuario: ${error.message}`);
+    } else {
+      setSubmissionMessage('Usuario actualizado con éxito');
+      setTimeout(() => {
+        onNavigate(); // Redirige a la lista de usuarios
+      }, 1200);
+    }
+  };
+
+  // En el formulario, agrega un botón para volver:
+  return (
+    <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 max-w-2xl mx-auto">
+      <h2 className="text-2xl font-bold text-blue-800 mb-6">Editar Usuario</h2>
+      <form onSubmit={handleSubmit}>
+        {/* ...campos del formulario... */}
+        <div className="flex justify-between mt-6">
+          <Button color="gray" onClick={onNavigate}>Cancelar</Button>
+          <Button color="blue" type="submit">Guardar Cambios</Button>
+        </div>
+      </form>
+      {/* Mensaje de confirmación o error */}
+      {submissionMessage && (
+        <div className={`my-4 p-3 rounded ${submissionMessage.includes('éxito') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          {submissionMessage}
+        </div>
+      )}
+      {/* ...modal y mensajes... */}
+    </div>
+  );
+}
+
+// Wrapper para el router
+export const EditarUsuarioWrapper = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  return <EditarUsuario userId={id!} onNavigate={() => navigate('/admin/dashboard/list-users')} />;
+};

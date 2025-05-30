@@ -59,25 +59,28 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
     return children;
 };
 
+// Importa el wrapper para editar usuario
+import EditarUsuarioWrapper from '../features/admin/ListarUsuarios'; // Asegúrate de que esté exportado correctamente
+
 const Router = [
-    LandingRoutes, // Incluye las rutas de la landing page aquí
+    LandingRoutes,
     {
         path: '/',
         element: <FullLayout />,
         children: [
-            // { path: '/', exact: true, element: <LandingPage /> }, // Ya no es necesario aquí
-            { path: '/dashboard', exact: true, element: <Dashboard /> }, // Dashboard general para usuarios normales (si lo deseas)
+            { path: '/dashboard', exact: true, element: <Dashboard /> },
             {
-                path: '/admin/dashboard', // Ruta específica para el dashboard del administrador
+                path: '/admin/dashboard',
                 element: (
-                    <PrivateRoute allowedRoles={['admin']}> {/* Protege esta ruta solo para administradores */}
+                    <PrivateRoute allowedRoles={['admin']}>
                         <DashboardAdmin />
                     </PrivateRoute>
                 ),
                 children: [
-                    { path: 'list-users', element: <DashboardAdmin /> }, // Child route for ListarUsuarios
-                    { path: 'create-users', element: <DashboardAdmin /> }, // Child route for CrearUsuarios
-                    { path: '', element: <DashboardAdmin /> }, // Default child route for /admin/dashboard
+                    { path: 'list-users', element: <DashboardAdmin /> },
+                    { path: 'create-users', element: <DashboardAdmin /> },
+                    { path: '', element: <DashboardAdmin /> },
+                    { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> }
                 ]
             },
             {
@@ -91,10 +94,10 @@ const Router = [
             { path: '*', element: <Navigate to="/auth/404" /> },
         ],
     },
-    AuthRoutes, // Incluye las rutas de autenticación aquí
+    AuthRoutes,
     {
-        path: '/access-denied', // Ruta para acceso denegado
-        element: <BlankLayout />, // O un layout simple
+        path: '/access-denied',
+        element: <BlankLayout />,
         children: [
             { path: '', element: <div>Acceso Denegado. No tienes permisos para ver esta página.</div> }
         ]

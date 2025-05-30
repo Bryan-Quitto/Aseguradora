@@ -3,7 +3,7 @@ import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllUserProfiles, UserProfile, updateUserProfile } from 'src/features/admin/hooks/administrador_backend';
 import { deactivateUserProfile } from 'src/features/admin/hooks/deactivateUser';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate, useParams } from 'react-router-dom';// Asegúrate de que esté exportado correctamente
 
 // Componente de Modal Personalizado para reemplazar alert/confirm
 interface CustomModalProps {
@@ -48,18 +48,13 @@ const CustomModal: React.FC<CustomModalProps> = ({ show, onClose, message, title
   );
 };
 
-
-// Remove the onNavigate prop interface as it's no longer needed
-// interface ListarUsuariosProps {
-//   onNavigate: (view: string) => void;
-// }
-
-// Remove the onNavigate prop from the function signature
-export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) {
+export default function ListarUsuarios() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState(''); // Estado para el término de búsqueda
+  const [searchTerm, setSearchTerm] = useState('');
+  const [view, setView] = useState<'list' | 'edit'>('list');
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const navigate = useNavigate(); // Initialize useNavigate
 
@@ -104,8 +99,7 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
     });
   }, [users, searchTerm]);
 
-  const handleUpdateUser = async (userId: string, currentRole: string) => {
-    // This function will now navigate to the edit page instead of changing role directly
+  const handleUpdateUser = (userId: string) => {
     navigate(`/admin/dashboard/edit-user/${userId}`);
   };
 
@@ -129,6 +123,11 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
     setShowModal(true);
   };
 
+  const handleEdit = (userId: string) => {
+    setSelectedUserId(userId);
+    setView('edit');
+  };
+
   if (loading) {
     return <div className="text-center p-10">Cargando usuarios...</div>;
   }
@@ -149,8 +148,7 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        {/* Use navigate to go to the create-users route */}
-        <Button color="blue" onClick={() => navigate('create-users')}>
+        <Button color="blue" onClick={() => navigate('/admin/dashboard/create-users')}>
           Crear Nuevo Usuario
         </Button>
       </div>
@@ -193,10 +191,10 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
                 </Table.Cell>
                 <Table.Cell>
                   <div className="flex gap-2">
-                    <Button size="xs" color="light" onClick={() => handleUpdateUser(user.user_id, user.role)}>
+                    {/* <Button size="xs" color="light" onClick={() => handleUpdateUser(user.user_id)}>
                       Editar
-                    </Button>
-                    {user.role !== 'inactive' && ( // Solo mostrar el botón si no está ya inactivo
+                    </Button> */}
+                    {user.role !== 'inactive' && (
                       <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
                         Desactivar
                       </Button>
@@ -221,3 +219,5 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
     </div>
   );
 }
+
+
