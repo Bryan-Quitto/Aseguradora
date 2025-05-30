@@ -1,6 +1,6 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import  { lazy } from 'react';
+import { lazy } from 'react';
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 
@@ -8,12 +8,11 @@ import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
-// Landing Page
-// const LandingPage = Loadable(lazy(() => import('../features/landing/pages/LandingPage'))); // Ya no es necesario aquí
-
-// Dashboard
+// Dashboard (general)
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
-// const AuthDashboard = Loadable(lazy(() => import('../views/auth/Dashboard'))); // Ya no es necesario aquí
+
+// Dashboard del Administrador (¡Nueva importación!)
+const DashboardAdmin = Loadable(lazy(() => import('../features/admin/Dashboard_administrador')));
 
 // utilities
 const Typography = Loadable(lazy(() => import("../views/typography/Typography")));
@@ -24,34 +23,80 @@ const Alert = Loadable(lazy(() => import("../views/alerts/Alerts")));
 // icons
 const Solar = Loadable(lazy(() => import("../views/icons/Solar")));
 
-// authentication
-// const Login = Loadable(lazy(() => import('../features/auth/pages/Login'))); // Ya no es necesario aquí
-// const Register = Loadable(lazy(() => import('../views/auth/register/Register'))); // Ya no es necesario aquí
 const SamplePage = Loadable(lazy(() => import('../views/sample-page/SamplePage')));
-// const Error = Loadable(lazy(() => import('../views/auth/error/Error'))); // Ya no es necesario aquí
 
 // Importa las rutas de autenticación y de la landing page desde sus nuevos archivos
 import AuthRoutes from '../features/auth/auth.routes';
 import LandingRoutes from '../features/landing/landing.routes';
 
+// Componente para la redirección condicional después del login
+// Necesitarás una función o hook para obtener el rol del usuario de Supabase
+import { useAuth } from '../contexts/AuthContext'; // Importa useAuth desde la nueva ubicación
+
+interface PrivateRouteProps {
+    children: React.ReactNode;
+    allowedRoles?: string[];
+}
+
+const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
+    const { user, loading, userRole } = useAuth();
+
+    if (loading) {
+        return <div>Cargando...</div>;
+    }
+
+    if (!user) {
+        return <Navigate to="/auth/login" />;
+    }
+
+    const currentUserRole = userRole; 
+
+    // Asegurarse de que currentUserRole no sea null antes de usar includes
+    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
+        return <Navigate to="/access-denied" />;
+    }
+
+    return children;
+};
+
 const Router = [
-  LandingRoutes, // Incluye las rutas de la landing page aquí
-  {
-    path: '/',
-    element: <FullLayout />,
-    children: [
-      // { path: '/', exact: true, element: <LandingPage /> }, // Ya no es necesario aquí
-      { path: '/dashboard', exact: true, element: <Dashboard /> }, // Opcional: si quieres mantener el Dashboard en otra ruta
-      { path: '/ui/typography', exact: true, element: <Typography/> },
-      { path: '/ui/table', exact: true, element: <Table/> },
-      { path: '/ui/form', exact: true, element: <Form/> },
-      { path: '/ui/alert', exact: true, element: <Alert/> },
-      { path: '/icons/solar', exact: true, element: <Solar /> },
-      { path: '/sample-page', exact: true, element: <SamplePage /> },
-      { path: '*', element: <Navigate to="/auth/404" /> },
-    ],
-  },
-  AuthRoutes, // Incluye las rutas de autenticación aquí
+    LandingRoutes, // Incluye las rutas de la landing page aquí
+    {
+        path: '/',
+        element: <FullLayout />,
+        children: [
+            // { path: '/', exact: true, element: <LandingPage /> }, // Ya no es necesario aquí
+            { path: '/dashboard', exact: true, element: <Dashboard /> }, // Dashboard general para usuarios normales (si lo deseas)
+            {
+                path: '/admin/dashboard', // Ruta específica para el dashboard del administrador
+                element: (
+                    <PrivateRoute allowedRoles={['admin']}> {/* Protege esta ruta solo para administradores */}
+                        <DashboardAdmin />
+                    </PrivateRoute>
+                ),
+                children: [
+                    { path: 'list-users', element: <DashboardAdmin /> }, // Child route for ListarUsuarios
+                    { path: 'create-users', element: <DashboardAdmin /> }, // Child route for CrearUsuarios
+                    { path: '', element: <DashboardAdmin /> }, // Default child route for /admin/dashboard
+                ]
+            },
+            { path: '/ui/typography', exact: true, element: <Typography/> },
+            { path: '/ui/table', exact: true, element: <Table/> },
+            { path: '/ui/form', exact: true, element: <Form/> },
+            { path: '/ui/alert', exact: true, element: <Alert/> },
+            { path: '/icons/solar', exact: true, element: <Solar /> },
+            { path: '/sample-page', exact: true, element: <SamplePage /> },
+            { path: '*', element: <Navigate to="/auth/404" /> },
+        ],
+    },
+    AuthRoutes, // Incluye las rutas de autenticación aquí
+    {
+        path: '/access-denied', // Ruta para acceso denegado
+        element: <BlankLayout />, // O un layout simple
+        children: [
+            { path: '', element: <div>Acceso Denegado. No tienes permisos para ver esta página.</div> }
+        ]
+    }
 ];
 
 const router = createBrowserRouter(Router)

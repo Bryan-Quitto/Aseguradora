@@ -1,10 +1,23 @@
-
 import { Button, Dropdown } from "flowbite-react";
 import { Icon } from "@iconify/react";
 import user1 from "/src/assets/images/profile/user-1.jpg";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from 'src/contexts/AuthContext'; // Importar useAuth
+import { supabase } from 'src/supabase/client'; // Importar supabase
 
 const Profile = () => {
+  const { user } = useAuth(); // Obtener el usuario del contexto
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Error al cerrar sesión:", error.message);
+    } else {
+      navigate("/auth/login"); // Redirigir al login después de cerrar sesión
+    }
+  };
+
   return (
     <div className="relative group/menu">
       <Dropdown
@@ -23,8 +36,15 @@ const Profile = () => {
           </span>
         )}
       >
-
-        <Dropdown.Item
+        {user && (
+          <Dropdown.Header className="px-3 py-3">
+            <span className="block text-sm font-medium truncate">
+              {user.email} {/* Mostrar el correo del usuario */}
+            </span>
+          </Dropdown.Header>
+        )}
+        {/* Eliminamos los Dropdown.Item que no son necesarios */}
+        {/* <Dropdown.Item
           as={Link}
           to="#"
           className="px-3 py-3 flex items-center bg-hover group/link w-full gap-3 text-dark"
@@ -47,9 +67,15 @@ const Profile = () => {
         >
           <Icon icon="solar:checklist-linear" height={20} />
           My Task
-        </Dropdown.Item>
+        </Dropdown.Item> */}
         <div className="p-3 pt-0">
-        <Button as={Link}  size={'sm'}  to="/auth/login" className="mt-2 border border-primary text-primary bg-transparent hover:bg-lightprimary outline-none focus:outline-none">Salir</Button>
+          <Button
+            size={'sm'}
+            onClick={handleLogout}
+            className="mt-2 border border-primary text-primary bg-transparent hover:bg-lightprimary outline-none focus:outline-none"
+          >
+            Salir
+          </Button>
         </div>
       </Dropdown>
     </div>

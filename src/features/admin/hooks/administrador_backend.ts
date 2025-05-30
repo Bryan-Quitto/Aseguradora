@@ -25,6 +25,23 @@ export interface UserProfile {
 }
 
 /**
+ * Obtiene todos los perfiles de usuario de la tabla 'profiles'.
+ * @returns Una promesa que resuelve con un array de UserProfile o un error.
+ */
+export async function getAllUserProfiles(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*'); // Selecciona todas las columnas, incluyendo las nuevas
+
+  if (error) {
+    console.error('Error al obtener perfiles de usuario:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile[], error: null };
+}
+
+/**
  * Obtiene un perfil de usuario por su ID.
  * @param user_id El ID del usuario a buscar.
  * @returns Una promesa que resuelve con el UserProfile o un error.
@@ -80,6 +97,30 @@ export async function updateUserProfile(user_id: string, updates: UpdateUserProf
 
   if (error) {
     console.error('Error al actualizar perfil de usuario:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile, error: null };
+}
+
+/**
+ * Desactiva un perfil de usuario (ej. cambiando su rol o añadiendo un campo 'status').
+ * Nota: Supabase no tiene una función de 'desactivar' nativa. Esto es una implementación lógica.
+ * Aquí, simplemente actualizaremos el rol a 'inactive' o similar, o podrías añadir un campo 'is_active'.
+ * Para este ejemplo, asumiremos que cambiar el rol a 'inactive' es suficiente.
+ * @param user_id El ID del perfil a desactivar.
+ * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
+ */
+export async function deactivateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ role: 'inactive' }) // O podrías tener un campo 'status: 'active' | 'inactive''
+    .eq('user_id', user_id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error al desactivar perfil de usuario:', error.message);
     return { data: null, error };
   }
 
