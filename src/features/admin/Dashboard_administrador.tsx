@@ -37,15 +37,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-blue-50 flex flex-col">
-      {/* Encabezado Superior */}
-      {/* <header className="bg-white shadow p-4 flex justify-between items-center border-b">
-        <h2 className="text-xl font-semibold text-blue-800">Panel de Administración</h2>
-        <div className="flex items-center gap-4">
-          <div className="text-gray-600 font-medium">admin@example.com</div>
-          <button className="bg-blue-600 text-white px-4 py-1 rounded-md hover:bg-blue-700">Cerrar sesión</button>
-        </div>
-      </header> */}
-
       <div className="flex flex-1">
         {/* Menú Lateral */}
         {/* <div className="w-64 bg-white shadow-md border-r">

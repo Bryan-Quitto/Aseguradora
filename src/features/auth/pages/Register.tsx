@@ -1,7 +1,7 @@
 import logo from 'src/assets/images/logos/logo-wrappixel.png';
 import { Link, useNavigate } from "react-router-dom";
 import React, { useState } from "react";
-import { supabase } from "../../../supabase/client";
+import { supabase } from "../../../supabase/client"; // Asegúrate de que esta ruta sea correcta
 import { Label, TextInput } from "flowbite-react";
 
 const gradientStyle = {
@@ -19,7 +19,8 @@ const Register = () => {
   const [formData, setFormData] = useState({
     primerApellido: "",
     segundoApellido: "",
-    nombres: "",
+    primerNombre: "",
+    segundoNombre: "",
     nacionalidad: "",
     nacionalidadOtra: "",
     tipoID: "",
@@ -40,7 +41,7 @@ const Register = () => {
     const { name, value } = e.target;
 
     // Solo letras y espacios para nombres y apellidos
-    if (["primerApellido", "segundoApellido", "nombres"].includes(name)) {
+    if (["primerApellido", "segundoApellido", "primerNombre", "segundoNombre"].includes(name)) {
       if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]*$/.test(value)) return;
       // No permitir solo espacios
       if (value.length > 0 && value.trim() === "") return;
@@ -75,18 +76,22 @@ const Register = () => {
     setSuccess(null);
 
     // Validar si algún campo está vacío
-    for (const key in formData) {
-      const typedKey = key as keyof typeof formData;
-      // Omitir la validación de campos "Otra" si la opción principal no es "Otra"
-      if (typedKey === "nacionalidadOtra" && formData.nacionalidad !== "Otra") {
-        continue;
-      }
-      if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento !== "Otra") {
-        continue;
-      }
+    const requiredFields = [
+      "primerApellido", "primerNombre", "nacionalidad", "tipoID", "numeroID",
+      "lugarNacimiento", "fechaNacimiento", "sexo", "estadoCivil",
+      "estatura", "peso", "correo", "password", "confirmPassword"
+    ];
 
+    for (const key of requiredFields) {
+      const typedKey = key as keyof typeof formData;
       if (formData[typedKey].trim() === "") {
-        // Personalizar mensaje si es un campo "Otra" requerido
+        if (typedKey === "nacionalidadOtra" && formData.nacionalidad !== "Otra") {
+          continue;
+        }
+        if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento !== "Otra") {
+          continue;
+        }
+
         if (typedKey === "nacionalidadOtra" && formData.nacionalidad === "Otra") {
             setError("Por favor, especifique la nacionalidad.");
             return;
@@ -112,16 +117,40 @@ const Register = () => {
         return;
     }
 
-    // Proceder con el registro
+    // Verificar si el número de identificación ya existe en 'profiles'
+    try {
+      const { data: existingIdProfiles, error: fetchIdError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('numero_identificacion', formData.numeroID);
+
+      if (fetchIdError) {
+        console.error("Error al verificar número de identificación existente:", fetchIdError);
+        setError("Ocurrió un error al verificar el número de identificación. Intenta de nuevo.");
+        return;
+      }
+      if (existingIdProfiles && existingIdProfiles.length > 0) {
+        setError("Este número de identificación ya está registrado.");
+        return;
+      }
+    } catch (e) {
+      console.error("Excepción al verificar número de identificación existente:", e);
+      setError("Ocurrió una excepción al verificar el número de identificación. Intenta de nuevo.");
+      return;
+    }
+
+
+    // Proceder con el registro de autenticación en Supabase
+    // Supabase creará automáticamente una entrada en auth.users y (si tienes un trigger) en profiles.
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: formData.correo,
       password: formData.password,
+      // Los datos adicionales en 'options.data' solo se guardan en la tabla 'auth.users.user_metadata'
+      // No se insertan directamente en tu tabla 'profiles' a menos que tengas un trigger personalizado.
       options: {
         data: {
-          nombres: formData.nombres,
-          primer_apellido: formData.primerApellido,
-          segundo_apellido: formData.segundoApellido,
-          // ... otros datos que quieras pasar
+          primer_nombre_auth: formData.primerNombre, // Ejemplo: si quisieras guardar esto en metadata de auth.users
+          // Otros datos si deseas guardarlos en user_metadata (no en tu tabla profiles directamente)
         }
       }
     });
@@ -137,19 +166,18 @@ const Register = () => {
         setError(`Error al registrar usuario: ${signUpError.message}`);
       }
     } else if (signUpData.user) {
+      // Si el registro de auth es exitoso, ahora actualizamos la tabla 'profiles'
+      // Asumimos que un trigger de Supabase ya creó la fila básica con el user_id.
       setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta.");
-      console.log("Usuario registrado:", signUpData.user);
+      console.log("Usuario registrado en auth:", signUpData.user);
 
-      // AQUÍ: Lógica para guardar el resto de formData en tu tabla de perfiles
-      // Deberás crear una tabla en Supabase (ej: 'profiles') con columnas para
-      // user_id (FK a auth.users.id), primerApellido, segundoApellido, nombres, etc.
-      // Ejemplo:
-      
-      const profileDataToInsert = {
-        user_id: signUpData.user.id,
+      const profileDataToUpdate = {
         primer_apellido: formData.primerApellido,
         segundo_apellido: formData.segundoApellido,
-        nombres: formData.nombres,
+        primer_nombre: formData.primerNombre,
+        segundo_nombre: formData.segundoNombre,
+        // Agrega esta línea para construir el nombre completo
+        full_name: `${formData.primerNombre || ''} ${formData.segundoNombre || ''} ${formData.primerApellido || ''} ${formData.segundoApellido || ''}`.trim().replace(/\s\s+/g, ' '),
         nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
         tipo_identificacion: formData.tipoID,
         numero_identificacion: formData.numeroID,
@@ -159,23 +187,21 @@ const Register = () => {
         estado_civil: formData.estadoCivil,
         estatura: parseFloat(formData.estatura) || null,
         peso: parseFloat(formData.peso) || null,
+        email: formData.correo,
+        role: 'client',
       };
 
       const { error: profileError } = await supabase
-        .from('profiles') // Reemplaza 'profiles' con el nombre de tu tabla
-        .insert(profileDataToInsert);
-
+        .from('profiles')
+        .update(profileDataToUpdate)
+        .eq('user_id', signUpData.user.id);
+        
       if (profileError) {
-        console.error("Error al guardar perfil:", profileError);
+        console.error("Error al actualizar perfil:", profileError);
         setError(`Usuario registrado, pero hubo un error al guardar los datos del perfil: ${profileError.message}`);
       } else {
-        console.log("Perfil guardado exitosamente");
-        // Opcional: Redirigir al login o a una página de "revisa tu correo"
-        // setTimeout(() => navigate('/auth/login'), 5000); // Ejemplo de redirección
+        console.log("Perfil actualizado exitosamente");
       }
-      
-      // Por ahora, limpiamos el formulario (opcional)
-      // setFormData({ /* ...resetear a valores iniciales... */ });
     } else {
         // Caso inesperado donde no hay error pero tampoco usuario (ej. confirmación manual habilitada y no hay sesión)
         setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para completar el proceso.");
@@ -187,7 +213,7 @@ const Register = () => {
       <div className="w-full max-w-3xl mx-auto">
         <div className="flex flex-col items-center mb-6">
           <img src={logo} alt="Logo" className="h-50" />
-          </div>
+        </div>
         <div className="bg-white rounded-2xl shadow-lg px-6 py-10 md:px-12 md:py-14">
           <h2 className="text-2xl font-bold text-center mb-8 border-b border-gray-200 pb-4">
             1. Información Personal del Titular
@@ -216,16 +242,28 @@ const Register = () => {
                 />
               </div>
             </div>
-            <div>
-              <Label htmlFor="nombres" value="Nombre Completos" className="font-semibold text-gray-700" />
-              <TextInput
-                id="nombres"
-                name="nombres"
-                value={formData.nombres}
-                onChange={handleChange}
-                required
-                className="mt-1"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="primerNombre" value="Primer Nombre" className="font-semibold text-gray-700" />
+                <TextInput
+                  id="primerNombre"
+                  name="primerNombre"
+                  value={formData.primerNombre}
+                  onChange={handleChange}
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="segundoNombre" value="Segundo Nombre" className="font-semibold text-gray-700" />
+                <TextInput
+                  id="segundoNombre"
+                  name="segundoNombre"
+                  value={formData.segundoNombre}
+                  onChange={handleChange}
+                  className="mt-1"
+                />
+              </div>
             </div>
             <div>
               <Label htmlFor="correo" value="Correo Electrónico" className="font-semibold text-gray-700" />
@@ -283,7 +321,7 @@ const Register = () => {
                   <option value="Panameña">Panameña</option>
                   <option value="Colombiana">Colombiana</option>
                   <option value="Venezolana">Venezolana</option>
-                  <option value="Brazileña">Brazileña</option>
+                  <option value="Brasileña">Brasileña</option>
                   <option value="Peruana">Peruana</option>
                   <option value="Estadounidense">Estadounidense</option>
                   <option value="Canadiense">Canadiense</option>
@@ -307,16 +345,17 @@ const Register = () => {
                   <option value="Salvadoreña">Salvadoreña</option>
                   <option value="Nicaragüense">Nicaragüense</option>
                   <option value="Costarricense">Costarricense</option>
+                  <option value="Ecuatoriana">Ecuatoriana</option>
                   <option value="Otra">Otra</option>
                 </select>
                 {formData.nacionalidad === "Otra" && (
-                  <input
+                  <TextInput
                     name="nacionalidadOtra"
                     value={formData.nacionalidadOtra}
                     onChange={handleChange}
                     type="text"
                     placeholder="Especifique nacionalidad"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="mt-2"
                     required
                   />
                 )}
@@ -364,30 +403,56 @@ const Register = () => {
                 >
                   <option value="">Seleccione</option>
                   <option value="Ecuador">Ecuador</option>
-                  {/* ...más opciones... */}
+                  <option value="Panamá">Panamá</option>
+                  <option value="Colombia">Colombia</option>
+                  <option value="Venezuela">Venezuela</option>
+                  <option value="Brasil">Brasil</option>
+                  <option value="Perú">Perú</option>
+                  <option value="Estados Unidos">Estados Unidos</option>
+                  <option value="Canadá">Canadá</option>
+                  <option value="España">España</option>
+                  <option value="Italia">Italia</option>
+                  <option value="Francia">Francia</option>
+                  <option value="Alemania">Alemania</option>
+                  <option value="Reino Unido">Reino Unido</option>
+                  <option value="Suiza">Suiza</option>
+                  <option value="Australia">Australia</option>
+                  <option value="México">México</option>
+                  <option value="Argentina">Argentina</option>
+                  <option value="Chile">Chile</option>
+                  <option value="Uruguay">Uruguay</option>
+                  <option value="Paraguay">Paraguay</option>
+                  <option value="Bolivia">Bolivia</option>
+                  <option value="Cuba">Cuba</option>
+                  <option value="República Dominicana">República Dominicana</option>
+                  <option value="Honduras">Honduras</option>
+                  <option value="Guatemala">Guatemala</option>
+                  <option value="El Salvador">El Salvador</option>
+                  <option value="Nicaragua">Nicaragua</option>
+                  <option value="Costa Rica">Costa Rica</option>
                   <option value="Otra">Otra</option>
                 </select>
                 {formData.lugarNacimiento === "Otra" && (
-                  <input
+                  <TextInput
                     name="lugarNacimientoOtro"
                     value={formData.lugarNacimientoOtro}
                     onChange={handleChange}
                     type="text"
                     placeholder="Especifique lugar de nacimiento"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="mt-2"
                     required
                   />
                 )}
               </div>
               <div>
                 <Label htmlFor="fechaNacimiento" value="Fecha de Nacimiento" className="font-semibold text-gray-700" />
-                <input
+                <TextInput
                   id="fechaNacimiento"
                   name="fechaNacimiento"
                   value={formData.fechaNacimiento}
                   onChange={handleChange}
                   type="date"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 mt-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="mt-1"
                   required
                 />
               </div>

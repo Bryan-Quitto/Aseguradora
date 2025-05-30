@@ -1,6 +1,5 @@
 import { Button, Label, Select, TextInput } from 'flowbite-react';
 import { useState } from 'react';
-import { createUserProfile } from 'src/features/admin/hooks/createUserProfile'; // Importa la función de backend
 import { supabase } from 'src/supabase/client'; // Importa la instancia de Supabase
 
 // Array de nacionalidades para reutilizar (copiado de Register.tsx)
@@ -54,8 +53,8 @@ interface FormData {
   primerApellido: string;
   segundoApellido: string;
   email: string;
-  password?: string; // Añadido para la contraseña
-  confirmPassword?: string; // Añadido para confirmar contraseña
+  password?: string;
+  confirmPassword?: string;
   nacionalidad: string;
   nacionalidadOtra: string;
   tipoID: string;
@@ -100,8 +99,8 @@ export default function CrearUsuarios() {
     primerApellido: '',
     segundoApellido: '',
     email: '',
-    password: '', // Inicializado
-    confirmPassword: '', // Inicializado
+    password: '',
+    confirmPassword: '',
     nacionalidad: '',
     nacionalidadOtra: '',
     tipoID: '',
@@ -249,9 +248,10 @@ export default function CrearUsuarios() {
 
     try {
       // 1. Crear el usuario en Supabase Auth
+      // Todos los datos del perfil se envían en 'options.data' para que el trigger los recoja.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
-        password: formData.password!, // Usar la contraseña del formulario
+        password: formData.password!,
         options: {
           data: {
             primer_nombre: formData.primerNombre,
@@ -259,7 +259,16 @@ export default function CrearUsuarios() {
             primer_apellido: formData.primerApellido,
             segundo_apellido: formData.segundoApellido,
             full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
-            role: formData.rol,
+            nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+            tipo_identificacion: formData.tipoID,
+            numero_identificacion: formData.numeroID,
+            lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtra : formData.lugarNacimiento,
+            fecha_nacimiento: formData.fechaNacimiento,
+            sexo: formData.sexo,
+            estado_civil: formData.estadoCivil,
+            estatura: parseFloat(formData.estatura) || null,
+            peso: parseFloat(formData.peso) || null,
+            role: formData.rol, // Pasa el rol seleccionado a raw_user_meta_data
           },
         },
       });
@@ -275,34 +284,8 @@ export default function CrearUsuarios() {
       }
 
       if (authData.user) {
-        // 2. Crear el perfil en la tabla 'profiles'
-        const profileDataToInsert = {
-          user_id: authData.user.id,
-          primer_nombre: formData.primerNombre,
-          segundo_nombre: formData.segundoNombre,
-          primer_apellido: formData.primerApellido,
-          segundo_apellido: formData.segundoApellido,
-          full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
-          email: formData.email,
-          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
-          tipo_identificacion: formData.tipoID,
-          numero_identificacion: formData.numeroID,
-          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtra : formData.lugarNacimiento,
-          fecha_nacimiento: formData.fechaNacimiento,
-          sexo: formData.sexo,
-          estado_civil: formData.estadoCivil,
-          estatura: parseFloat(formData.estatura) || null,
-          peso: parseFloat(formData.peso) || null,
-          role: formData.rol,
-        };
-
-        const { error: profileError } = await createUserProfile(profileDataToInsert);
-
-        if (profileError) {
-          console.error('Error al crear perfil en la tabla profiles:', profileError.message);
-          setSubmissionMessage(`Usuario creado en Auth, pero error al crear perfil: ${profileError.message}`);
-          return;
-        }
+        // ¡IMPORTANTE! El perfil ahora se crea automáticamente por el trigger de Supabase.
+        // No es necesario llamar a createUserProfile aquí.
 
         setSubmissionMessage('Usuario creado exitosamente! Se ha enviado un correo de verificación.');
         // Limpiar formulario después de éxito
@@ -506,7 +489,7 @@ export default function CrearUsuarios() {
               color={errors.numeroID ? 'failure' : undefined}
               helperText={errors.numeroID}
               required
-               maxLength={10}
+              maxLength={10}
             />
           </div>
         </div>
@@ -648,8 +631,8 @@ export default function CrearUsuarios() {
           >
             <option value="">Seleccionar rol</option>
             <option value="admin">Administrador</option>
-            <option value="agente">Agente</option>
-            <option value="client">Cliente</option> {/* Corregido: de 'user' a 'client' */}
+            <option value="agent">Agente</option> {/* Corregido: de 'agente' a 'agent' para que coincida con el backend */}
+            <option value="client">Cliente</option>
           </Select>
         </div>
 

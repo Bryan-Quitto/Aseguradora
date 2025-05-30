@@ -12,7 +12,6 @@ import product5 from "/src/assets/images/products/s5.jpg";
 
 import SimpleBar from "simplebar-react";
 
-
 const PopularProducts = () => {
   const ProductTableData = [
     {
