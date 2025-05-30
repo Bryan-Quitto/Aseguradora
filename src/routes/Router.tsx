@@ -80,12 +80,14 @@ const Router = [
                     { path: '', element: <DashboardAdmin /> }, // Default child route for /admin/dashboard
                 ]
             },
-            { path: '/ui/typography', exact: true, element: <Typography/> },
-            { path: '/ui/table', exact: true, element: <Table/> },
-            { path: '/ui/form', exact: true, element: <Form/> },
-            { path: '/ui/alert', exact: true, element: <Alert/> },
-            { path: '/icons/solar', exact: true, element: <Solar /> },
-            { path: '/sample-page', exact: true, element: <SamplePage /> },
+            {
+                path: '/auth/dashboard',
+                element: (
+                    <PrivateRoute allowedRoles={['admin']}>
+                        <DashboardAdmin />
+                    </PrivateRoute>
+                ),
+            },
             { path: '*', element: <Navigate to="/auth/404" /> },
         ],
     },

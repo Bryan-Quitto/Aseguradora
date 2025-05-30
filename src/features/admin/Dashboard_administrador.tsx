@@ -4,9 +4,16 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import ListarUsuarios from './ListarUsuarios';
 import CrearUsuarios from './CrearUsuarios'; 
+import { useAuth } from 'src/contexts/AuthContext';
 
 export default function Dashboard() {
   const location = useLocation();
+  const { profile } = useAuth(); // Obtén el perfil del usuario
+
+  // Construye el nombre completo
+  const fullName = profile
+    ? `${profile.primer_nombre || ''} ${profile.primer_apellido || ''}`.trim()
+    : '';
 
   const renderContent = () => {
     switch (location.pathname) {
@@ -18,7 +25,7 @@ export default function Dashboard() {
         return (
           <div className="bg-white rounded-xl shadow-lg p-10 w-full max-w-2xl text-center border border-blue-100">
             <h1 className="text-4xl font-bold text-blue-800 mb-4">
-              ¡Bienvenido, Administrador!
+              ¡Bienvenido, {fullName || "Administrador"}!
             </h1>
             <p className="text-lg text-gray-600">
               Selecciona una opción del menú lateral para comenzar.

@@ -1,4 +1,4 @@
-import FullLogo from "src/layouts/full/shared/logo/FullLogo";
+import logo from 'src/assets/images/logos/logo-wrappixel.png';
 import { Link, useNavigate } from "react-router-dom";
 import React, { useState } from "react";
 import { supabase } from "../../../supabase/client";
@@ -39,25 +39,29 @@ const Register = () => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
+    // Solo letras y espacios para nombres y apellidos
     if (["primerApellido", "segundoApellido", "nombres"].includes(name)) {
       if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]*$/.test(value)) return;
+      // No permitir solo espacios
+      if (value.length > 0 && value.trim() === "") return;
     }
 
+    // Solo números y máximo 10 dígitos para número de identificación
     if (name === "numeroID") {
       if (!/^\d*$/.test(value)) return;
+      if (value.length > 10) return;
     }
 
+    // Solo números y punto decimal para estatura y peso
     if (["estatura", "peso"].includes(name)) {
       if (!/^[0-9.]*$/.test(value)) return;
     }
 
     setFormData((prev) => {
       const newState = { ...prev, [name]: value };
-      // Si se cambia Nacionalidad y no es "Otra", limpiar nacionalidadOtra
       if (name === "nacionalidad" && value !== "Otra") {
         newState.nacionalidadOtra = "";
       }
-      // Si se cambia Lugar de Nacimiento y no es "Otra", limpiar lugarNacimientoOtro
       if (name === "lugarNacimiento" && value !== "Otra") {
         newState.lugarNacimientoOtro = "";
       }
@@ -182,9 +186,8 @@ const Register = () => {
     <div style={gradientStyle} className="min-h-screen flex items-center justify-center py-8">
       <div className="w-full max-w-3xl mx-auto">
         <div className="flex flex-col items-center mb-6">
-          <FullLogo />
-          <p className="text-black text-sm font-medium text-center my-3">Nombre Aseguradora</p>
-        </div>
+          <img src={logo} alt="Logo" className="h-50" />
+          </div>
         <div className="bg-white rounded-2xl shadow-lg px-6 py-10 md:px-12 md:py-14">
           <h2 className="text-2xl font-bold text-center mb-8 border-b border-gray-200 pb-4">
             1. Información Personal del Titular
@@ -214,7 +217,7 @@ const Register = () => {
               </div>
             </div>
             <div>
-              <Label htmlFor="nombres" value="Nombre(s)" className="font-semibold text-gray-700" />
+              <Label htmlFor="nombres" value="Nombre Completos" className="font-semibold text-gray-700" />
               <TextInput
                 id="nombres"
                 name="nombres"
@@ -343,6 +346,7 @@ const Register = () => {
                 value={formData.numeroID}
                 onChange={handleChange}
                 required
+                maxLength={10}
                 className="mt-1"
               />
             </div>

@@ -5,7 +5,13 @@ import { User } from '@supabase/supabase-js';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  userRole: string | null; // Añadir esta línea
+  userRole: string | null;
+  profile: {
+    primer_nombre?: string;
+    segundo_nombre?: string;
+    primer_apellido?: string;
+    segundo_apellido?: string;
+  } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -13,63 +19,66 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userRole, setUserRole] = useState<string | null>(null); // Añadir esta línea
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    const getSessionAndProfile = async () => { // Renombrar la función para reflejar su nueva tarea
+    const getSessionAndProfile = async () => {
       setLoading(true);
       const { data: { session }, error } = await supabase.auth.getSession();
       if (error) {
-        console.error('Error getting session:', error);
         setUser(null);
         setUserRole(null);
+        setProfile(null);
         setLoading(false);
         return;
       }
-
       setUser(session?.user || null);
 
       if (session?.user) {
-        // Obtener el rol del usuario de la tabla 'profiles'
-        const { data: profile, error: profileError } = await supabase
+        // Selecciona los campos necesarios
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido')
           .eq('user_id', session.user.id)
           .single();
 
-        if (profileError || !profile) {
-          console.warn('No se encontró perfil para el usuario:', session.user.id, profileError);
+        if (profileError || !profileData) {
           setUserRole(null);
+          setProfile(null);
         } else {
-          setUserRole(profile.role);
+          setUserRole(profileData.role);
+          setProfile(profileData);
         }
       } else {
         setUserRole(null);
+        setProfile(null);
       }
       setLoading(false);
     };
 
-    getSessionAndProfile(); // Llamar a la nueva función
+    getSessionAndProfile();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
       if (session?.user) {
-        // Re-obtener el rol en cada cambio de estado de autenticación
         supabase
           .from('profiles')
-          .select('role')
+          .select('role, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido')
           .eq('user_id', session.user.id)
           .single()
-          .then(({ data: profile, error: profileError }) => {
-            if (profileError || !profile) {
-              console.warn('No se encontró perfil en onAuthStateChange:', session.user.id, profileError);
+          .then(({ data: profileData, error: profileError }) => {
+            if (profileError || !profileData) {
               setUserRole(null);
+              setProfile(null);
             } else {
-              setUserRole(profile.role);
+              setUserRole(profileData.role);
+              setProfile(profileData);
             }
           });
       } else {
         setUserRole(null);
+        setProfile(null);
       }
       setLoading(false);
     });
@@ -80,7 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, userRole }}> {/* Añadir userRole aquí */}
+    <AuthContext.Provider value={{ user, loading, userRole, profile }}>
       {children}
     </AuthContext.Provider>
   );

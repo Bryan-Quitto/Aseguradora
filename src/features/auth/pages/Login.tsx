@@ -1,14 +1,14 @@
 import React, { useState } from "react";
-import FullLogo from "src/layouts/full/shared/logo/FullLogo";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase/client";
 import { Label, TextInput, Button } from "flowbite-react";
+import logo from 'src/assets/images/logos/logo-wrappixel.png'; // Asegúrate de que la ruta sea correcta
 
 const gradientStyle = {
-  background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
+  background: "linear-gradient(-45deg, #4A90E2, #333333, #A2D5C6, #FFFFFF)",
   backgroundSize: "400% 400%",
   animation: "gradient 15s ease infinite",
-  height: "100vh",
+  minHeight: "100vh",
 };
 
 const Login = () => {
@@ -32,7 +32,7 @@ const Login = () => {
     setLoading(false);
     if (supabaseError || !data.session) {
       console.error("Error al iniciar sesión:", supabaseError?.message);
-      setError(`Error al iniciar sesión: ${supabaseError?.message}`);
+      setError(`Correo o contraseña incorrectos`);
       return;
     }
 
@@ -73,8 +73,7 @@ const Login = () => {
     <div style={gradientStyle} className="overflow-hidden h-screen py-40">
       <div className="flex flex-col gap-2 w-full">
         <div className="mx-auto text-center">
-          <FullLogo />
-          <p className="text-black text-sm font-medium my-3">Nombre Aseguradora</p>
+          <img src={logo} alt="Logo Savalta" className="h-25 mx-auto mb-2" />
         </div>
         <div className="flex h-full justify-center items-center px-4">
           <div className="rounded-xl shadow-md bg-white p-10 md:w-96">
@@ -107,11 +106,6 @@ const Login = () => {
                 {loading ? 'Cargando...' : 'Ingresar'}
               </Button>
             </form>
-
-            <div className="text-sm text-left mt-3">
-              <Link to="#" className="text-link">¿Ha olvidado su contraseña?</Link>
-            </div>
-
             <div className="flex gap-2 text-sm font-medium mt-3">
               <p>¿No tiene una cuenta?</p>
               <Link to="/auth/register" className="text-link">Crear una cuenta</Link>

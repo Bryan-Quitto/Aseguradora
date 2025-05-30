@@ -38,9 +38,7 @@ const NavItems: React.FC<NavItemsProps> = ({ item }) => {
               } `}
             ></span>
           )}
-          <span
-            className={`max-w-24 text-ellipsis overflow-x-hidden`}
-          >
+          <span className="">
             {item.name}
           </span>
         </span> 
