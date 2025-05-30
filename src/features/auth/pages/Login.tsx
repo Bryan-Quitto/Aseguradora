@@ -49,9 +49,15 @@ const Login = () => {
     console.log('↪ profile data:', profile);
 
     // 3. Redirección según rol
-    if (profileError || !profile) {
-      console.warn('No se encontró perfil, redirigiendo a landing');
-      return navigate('/');
+    if (profileError) {
+      console.warn(`Error al obtener perfil para ${userId}:`, profileError.message);
+      if (profileError.code === 'PGRST116') {
+        console.warn(`Perfil no encontrado para el usuario ${userId}. Redirigiendo a landing.`);
+      }
+      return navigate('/'); // Redirigir a landing si hay un error al obtener el perfil
+    } else if (!profile) {
+      console.warn(`Perfil nulo para el usuario ${userId}. Redirigiendo a landing.`);
+      return navigate('/'); // Redirigir a landing si el perfil es nulo (aunque PGRST116 ya lo cubre)
     }
 
     if (profile.role === 'admin') {

@@ -1,8 +1,8 @@
 import FullLogo from "src/layouts/full/shared/logo/FullLogo";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import React, { useState } from "react";
 import { supabase } from "../../../supabase/client";
-import { Label, TextInput, Select, Button } from "flowbite-react"; // Asegúrate de importar Button si no está
+import { Label, TextInput, Select, Button } from "flowbite-react";
 
 const gradientStyle = {
   background: "linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab)",
@@ -11,7 +11,6 @@ const gradientStyle = {
   height: "100vh"
 };
 
-// Array de nacionalidades para reutilizar
 const NATIONALITIES = [
   "Panameña", "Colombiana", "Venezolana", "Brasileña", "Peruana", "Estadounidense",
   "Canadiense", "Española", "Italiana", "Francesa", "Alemana", "Británica",
@@ -20,7 +19,6 @@ const NATIONALITIES = [
   "Salvadoreña", "Nicaragüense", "Costarricense", "Ecuatoriana"
 ];
 
-// --- NUEVO: Array de países derivado de NATIONALITIES ---
 const COUNTRIES = NATIONALITIES.map(nationality => {
   switch (nationality) {
     case "Panameña": return "Panamá";
@@ -34,7 +32,7 @@ const COUNTRIES = NATIONALITIES.map(nationality => {
     case "Italiana": return "Italia";
     case "Francesa": return "Francia";
     case "Alemana": return "Alemania";
-    case "Británica": return "Reino Unido"; // O "Gran Bretaña" si lo prefieres
+    case "Británica": return "Reino Unido";
     case "Suiza": return "Suiza";
     case "Australiana": return "Australia";
     case "Mexicana": return "México";
@@ -51,13 +49,11 @@ const COUNTRIES = NATIONALITIES.map(nationality => {
     case "Nicaragüense": return "Nicaragua";
     case "Costarricense": return "Costa Rica";
     case "Ecuatoriana": return "Ecuador";
-    default: return nationality; // En caso de que haya una que no mapee
+    default: return nationality;
   }
 });
-// --- FIN NUEVO ---
 
 const Register = () => {
-  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -94,7 +90,6 @@ const Register = () => {
     }
 
     if (["estatura", "peso"].includes(name)) {
-      // Permite números y un solo punto decimal
       if (!/^[0-9.]*$/.test(value) || (value.match(/\./g) || []).length > 1) return;
     }
 
@@ -134,7 +129,7 @@ const Register = () => {
         if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento === "Otra") {
             setError("Por favor, especifique el lugar de nacimiento.");
             return;
-        }
+            }
 
         setError("Por favor, complete todos los campos requeridos.");
         return;
@@ -151,22 +146,55 @@ const Register = () => {
         return;
     }
 
+    // Verificación de número de identificación existente en la tabla 'profiles'
+    try {
+      const { data: existingIdProfiles, error: fetchIdError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('numero_identificacion', formData.numeroID);
+
+      if (fetchIdError) {
+        console.error("Error al verificar número de identificación existente:", fetchIdError);
+        setError("Ocurrió un error al verificar el número de identificación. Intenta de nuevo.");
+        return;
+      }
+      if (existingIdProfiles && existingIdProfiles.length > 0) {
+        setError("Este número de identificación ya está registrado.");
+        return;
+      }
+    } catch (e) {
+      console.error("Excepción al verificar número de identificación existente:", e);
+      setError("Ocurrió una excepción al verificar el número de identificación. Intenta de nuevo.");
+      return;
+    }
+
+    // Registro en Auth
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: formData.correo,
       password: formData.password,
+      // Los datos del perfil se enviarán aquí para que el trigger los use
       options: {
         data: {
           primer_nombre: formData.primerNombre,
           segundo_nombre: formData.segundoNombre,
           primer_apellido: formData.primerApellido,
           segundo_apellido: formData.segundoApellido,
-          role: 'client',
+          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+          tipo_identificacion: formData.tipoID,
+          numero_identificacion: formData.numeroID,
+          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
+          fecha_nacimiento: formData.fechaNacimiento,
+          sexo: formData.sexo,
+          estado_civil: formData.estadoCivil,
+          estatura: parseFloat(formData.estatura),
+          peso: parseFloat(formData.peso),
+          role: 'client', // Rol por defecto para nuevos usuarios
         }
       }
     });
 
     if (signUpError) {
-      console.error("Error al registrar usuario:", signUpError.message);
+      console.error("Error al registrar usuario en Auth:", signUpError.message);
       if (signUpError.status === 400 && /already registered|duplicate/i.test(signUpError.message)) {
         setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
       } else if (signUpError.message.includes("Password should be at least 6 characters")) {
@@ -179,33 +207,41 @@ const Register = () => {
       setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta.");
       console.log("Usuario registrado:", signUpData.user);
 
-      const profileDataToInsert = {
-        user_id: signUpData.user.id,
-        primer_apellido: formData.primerApellido,
-        segundo_apellido: formData.segundoApellido,
-        primer_nombre: formData.primerNombre,
-        segundo_nombre: formData.segundoNombre,
-        nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
-        tipo_identificacion: formData.tipoID,
-        numero_identificacion: formData.numeroID,
-        lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
-        fecha_nacimiento: formData.fechaNacimiento,
-        sexo: formData.sexo,
-        estado_civil: formData.estadoCivil,
-        estatura: parseFloat(formData.estatura) || null,
-        peso: parseFloat(formData.peso) || null,
-        role: 'client',
-      };
+      const userId = signUpData.user.id;
+      const userEmail = signUpData.user.email!;
+      const fullName = `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim();
 
+      // **** CAMBIO CLAVE: USAR UPSERT EN LUGAR DE INSERT/UPDATE ****
+      // Esto insertará la fila si no existe (si el trigger no la creó)
+      // o la actualizará si ya existe (si el trigger ya la creó).
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert(profileDataToInsert);
+        .upsert({
+          user_id: userId, // CLAVE: Se necesita el user_id para el upsert por PK
+          primer_apellido: formData.primerApellido,
+          segundo_apellido: formData.segundoApellido,
+          // 'nombres' fue eliminada de la DB, así que la quitamos del payload
+          full_name: fullName,
+          email: userEmail,
+          primer_nombre: formData.primerNombre,
+          segundo_nombre: formData.segundoNombre,
+          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+          tipo_identificacion: formData.tipoID,
+          numero_identificacion: formData.numeroID,
+          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
+          fecha_nacimiento: formData.fechaNacimiento,
+          sexo: formData.sexo,
+          estado_civil: formData.estadoCivil,
+          estatura: parseFloat(formData.estatura) || null,
+          peso: parseFloat(formData.peso) || null,
+          role: 'client', // Rol por defecto para nuevos usuarios
+        });
 
       if (profileError) {
-        console.error("Error al guardar perfil:", profileError);
+        console.error("Error al guardar/actualizar perfil:", profileError);
         setError(`Usuario registrado, pero hubo un error al guardar los datos del perfil: ${profileError.message}`);
       } else {
-        console.log("Perfil guardado exitosamente");
+        console.log("Perfil guardado/actualizado exitosamente");
       }
     } else {
         setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para completar el proceso.");
@@ -247,7 +283,6 @@ const Register = () => {
                 onChange={handleChange}
               />
             </div>
-            {/* --- CAMBIO: Añadir campos para Primer Nombre y Segundo Nombre --- */}
             <div>
               <div className="mb-2 block">
                 <Label htmlFor="primerNombre" value="Primer Nombre" />
@@ -271,7 +306,6 @@ const Register = () => {
                 onChange={handleChange}
               />
             </div>
-            {/* --- FIN CAMBIO --- */}
           </div>
           
           {/* Correo */}
@@ -325,11 +359,10 @@ const Register = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium">Nacionalidad</label>
-              <select
+              <Select
                 name="nacionalidad"
                 value={formData.nacionalidad}
                 onChange={handleChange}
-                className="w-full border border-black px-2 py-1 rounded-md" 
                 required
               >
                 <option value="">Seleccione</option>
@@ -337,18 +370,17 @@ const Register = () => {
                   <option key={nat} value={nat}>{nat}</option>
                 ))}
                 <option value="Otra">Otra</option>
-              </select>
+              </Select>
             </div>
 
             {formData.nacionalidad === "Otra" && (
               <div>
                 <label className="block text-sm font-medium">Especifique nacionalidad</label>
-                <input
+                <TextInput
                   name="nacionalidadOtra"
                   value={formData.nacionalidadOtra}
                   onChange={handleChange}
                   type="text"
-                  className="w-full border border-black px-2 py-1 rounded-md"
                   required={formData.nacionalidad === "Otra"}
                 />
               </div>
@@ -357,29 +389,27 @@ const Register = () => {
             {/* Tipo de Identificación */}
             <div>
               <label className="block text-sm font-medium">Tipo de Identificación</label>
-              <select
+              <Select
                 name="tipoID"
                 value={formData.tipoID}
                 onChange={handleChange}
-                className="w-full border border-black px-2 py-1 rounded-md"
                 required
               >
                 <option value="">Seleccione</option>
                 <option value="Cédula">Cédula</option>
                 <option value="Pasaporte">Pasaporte</option>
-              </select>
+              </Select>
             </div>
           </div>
 
           {/* Número ID */}
           <div>
             <label className="block text-sm font-medium">Número de Identificación</label>
-            <input
+            <TextInput
               name="numeroID"
               value={formData.numeroID}
               onChange={handleChange}
               type="text"
-              className="w-full border border-black px-2 py-1 rounded-md"
               required
             />
           </div>
@@ -388,32 +418,28 @@ const Register = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium">Lugar de Nacimiento</label>
-              <select
+              <Select
                 name="lugarNacimiento"
                 value={formData.lugarNacimiento}
                 onChange={handleChange}
-                className="w-full border border-black px-2 py-1 rounded-md"
                 required
               >
                 <option value="">Seleccione</option>
-                {/* --- CAMBIO: Usar COUNTRIES en lugar de NATIONALITIES --- */}
                 {COUNTRIES.map((place) => (
                   <option key={place} value={place}>{place}</option>
                 ))}
-                {/* --- FIN CAMBIO --- */}
                 <option value="Otra">Otra</option>
-              </select>
+              </Select>
             </div>
 
             {formData.lugarNacimiento === "Otra" && (
               <div>
                 <label className="block text-sm font-medium">Especifique lugar de nacimiento</label>
-                <input
+                <TextInput
                   name="lugarNacimientoOtro"
                   value={formData.lugarNacimientoOtro}
                   onChange={handleChange}
                   type="text"
-                  className="w-full border border-black px-2 py-1 rounded-md"
                   required={formData.lugarNacimiento === "Otra"}
                 />
               </div>
@@ -421,12 +447,11 @@ const Register = () => {
 
             <div>
               <label className="block text-sm font-medium">Fecha de Nacimiento</label>
-              <input
+              <TextInput
                 name="fechaNacimiento"
                 value={formData.fechaNacimiento}
                 onChange={handleChange}
                 type="date"
-                className="w-full border border-black px-2 py-1 rounded-md"
                 required
               />
             </div>
@@ -436,26 +461,24 @@ const Register = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium">Sexo</label>
-              <select
+              <Select
                 name="sexo"
                 value={formData.sexo}
                 onChange={handleChange}
-                className="w-full border border-black px-2 py-1 rounded-md"
                 required
               >
                 <option value="">Seleccione</option>
                 <option value="F">Femenino</option>
                 <option value="M">Masculino</option>
-              </select>
+              </Select>
             </div>
 
             <div>
               <label className="block text-sm font-medium">Estado Civil</label>
-              <select
+              <Select
                 name="estadoCivil"
                 value={formData.estadoCivil}
                 onChange={handleChange}
-                className="w-full border border-black px-2 py-1 rounded-md"
                 required
               >
                 <option value="">Seleccione</option>
@@ -464,7 +487,7 @@ const Register = () => {
                 <option value="Divorciado">Divorciado</option>
                 <option value="Viudo">Viudo</option>
                 <option value="U/Libre">U/Libre</option>
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -472,12 +495,11 @@ const Register = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium">Estatura (en cm)</label>
-              <input
+              <TextInput
                 name="estatura"
                 value={formData.estatura}
                 onChange={handleChange}
                 type="text"
-                className="w-full border border-black px-2 py-1 rounded-md"
                 placeholder="Ej. 170"
                 required
               />
@@ -485,12 +507,11 @@ const Register = () => {
 
             <div>
               <label className="block text-sm font-medium">Peso (en kg)</label>
-              <input
+              <TextInput
                 name="peso"
                 value={formData.peso}
                 onChange={handleChange}
                 type="text"
-                className="w-full border border-black px-2 py-1 rounded-md"
                 placeholder="Ej. 65.5"
                 required
               />
@@ -511,9 +532,9 @@ const Register = () => {
 
           {/* Botón y Link */}
           <div className="mt-6 flex justify-center">
-            <button type="submit" className="bg-black text-white px-6 py-2 rounded">
+            <Button type="submit" className="bg-black text-white px-6 py-2 rounded">
               Registrarse
-            </button>
+            </Button>
           </div>
 
           <div className="flex gap-2 text-sm font-medium mt-4 items-center justify-center">
