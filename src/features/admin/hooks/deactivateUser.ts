@@ -9,7 +9,7 @@ import { UserProfile } from './administrador_backend';
 export async function deactivateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
-    .update({ role: 'inactive' })
+    .update({ role: 'deshabilitado' })
     .eq('user_id', user_id)
     .select()
     .single();

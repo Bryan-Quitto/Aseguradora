@@ -1,6 +1,6 @@
 import { Button, Label, Select, TextInput } from 'flowbite-react';
 import { useState } from 'react';
-import { createUserProfile } from 'src/features/admin/hooks/administrador_backend'; // Importa la función de backend
+import { createUserProfile } from 'src/features/admin/hooks/createUserProfile'; // Importa la función de backend
 import { supabase } from 'src/supabase/client'; // Importa la instancia de Supabase
 
 // Array de nacionalidades para reutilizar (copiado de Register.tsx)
@@ -506,6 +506,7 @@ export default function CrearUsuarios() {
               color={errors.numeroID ? 'failure' : undefined}
               helperText={errors.numeroID}
               required
+               maxLength={10}
             />
           </div>
         </div>

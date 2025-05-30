@@ -1,7 +1,8 @@
 import { Button, Table, TextInput, Modal } from 'flowbite-react';
 import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
-import { getAllUserProfiles, UserProfile, updateUserProfile, deactivateUserProfile } from 'src/features/admin/hooks/administrador_backend';
+import { getAllUserProfiles, UserProfile, updateUserProfile } from 'src/features/admin/hooks/administrador_backend';
+import { deactivateUserProfile } from 'src/features/admin/hooks/deactivateUser';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 // Componente de Modal Personalizado para reemplazar alert/confirm
@@ -110,7 +111,7 @@ export default function ListarUsuarios(/*{ onNavigate }: ListarUsuariosProps*/) 
 
   const handleDeactivateUser = async (userId: string, userName: string | null) => {
     setModalTitle('Desactivar Usuario');
-    setModalMessage(`¿Estás seguro de que quieres desactivar a ${userName || 'este usuario'}? Esto cambiará su rol a 'inactive'.`);
+    setModalMessage(`¿Estás seguro de que quieres desactivar a ${userName || 'este usuario'}? Esto cambiará su rol a 'deshabilitado'.`);
     setModalType('confirm');
     setModalAction(() => async () => {
       const { data, error: deactivateError } = await deactivateUserProfile(userId);
