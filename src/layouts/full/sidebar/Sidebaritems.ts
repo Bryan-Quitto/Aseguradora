@@ -57,6 +57,31 @@ const SidebarContent: MenuItem[] = [
         isPro: false,
         requiredRole: "admin",
       },
+      {
+        name: "Listar Admins",
+        icon: "solar:users-group-rounded-linear", // You might need to find a suitable icon
+        id: uniqueId(),
+        url: "/admin/dashboard/list-only-admins", // Define a new route for listing users
+        isPro: false,
+        requiredRole: "admin",
+      },
+      {
+        name: "Listar Clientes",
+        icon: "solar:users-group-rounded-linear", // You might need to find a suitable icon
+        id: uniqueId(),
+        url: "/admin/dashboard/list-only-users", // Define a new route for listing users
+        isPro: false,
+        requiredRole: "admin",
+      },
+      {
+        name: "Listar Agentes",
+        icon: "solar:users-group-rounded-linear", // You might need to find a suitable icon
+        id: uniqueId(),
+        url: "/admin/dashboard/list-only-agents", // Define a new route for listing users
+        isPro: false,
+        requiredRole: "admin",
+      },
+      
     ],
   },
 ];

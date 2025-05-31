@@ -61,6 +61,9 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
 
 // Importa el wrapper para editar usuario
 import EditarUsuarioWrapper from '../features/admin/ListarUsuarios'; // Asegúrate de que esté exportado correctamente
+import ListarSoloUsuarios from '../features/admin/ListarSoloUsuarios'; // Nueva importación
+import ListarSoloAgentes from '../features/admin/ListarSoloAgentes';
+import ListarSoloAdmins from '../features/admin/ListarSoloAdmins';
 
 const Router = [
     LandingRoutes,
@@ -80,7 +83,10 @@ const Router = [
                     { path: 'list-users', element: <DashboardAdmin /> },
                     { path: 'create-users', element: <DashboardAdmin /> },
                     { path: '', element: <DashboardAdmin /> },
-                    { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> }
+                    { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> },
+                    { path: 'list-only-users', element: <ListarSoloUsuarios /> }, // Nueva ruta
+                    { path: 'list-only-agents', element: <ListarSoloAgentes /> },
+                    { path: 'list-only-admins', element: <ListarSoloAdmins /> }
                 ]
             },
             {

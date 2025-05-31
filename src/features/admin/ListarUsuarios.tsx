@@ -137,8 +137,8 @@ export default function ListarUsuarios() {
   }
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
-      <div className="flex justify-between items-center mb-6">
+    <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 top-0">
+      <div className="flex justify-between items-center mb-6 ">
         <div className="w-1/3">
           <TextInput
             icon={HiSearch}

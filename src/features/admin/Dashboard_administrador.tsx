@@ -1,9 +1,9 @@
-import { Sidebar } from 'flowbite-react';
-import { HiChartPie, HiUsers, HiDocumentText, HiCog } from 'react-icons/hi';
-import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import ListarUsuarios from './ListarUsuarios';
 import CrearUsuarios from './CrearUsuarios'; 
+import ListarSoloUsuarios from './ListarSoloUsuarios'; 
+import ListarSoloAgentes from './ListarSoloAgentes'; 
+import ListarSoloAdmins from './ListarSoloAdmins'; 
 import { useAuth } from 'src/contexts/AuthContext';
 
 export default function Dashboard() {
@@ -21,6 +21,12 @@ export default function Dashboard() {
         return <ListarUsuarios />;
       case '/admin/dashboard/create-users':
         return <CrearUsuarios />;
+      case '/admin/dashboard/list-only-users':
+        return <ListarSoloUsuarios />;
+      case '/admin/dashboard/list-only-agents':
+        return <ListarSoloAgentes />;
+      case '/admin/dashboard/list-only-admins':
+        return <ListarSoloAdmins />;
       default:
         return (
           <div className="bg-white rounded-xl shadow-lg p-10 w-full max-w-2xl text-center border border-blue-100">

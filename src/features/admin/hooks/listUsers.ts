@@ -17,3 +17,42 @@ export async function listUsers(): Promise<{ data: UserProfile[] | null; error: 
 
   return { data: data as UserProfile[], error: null };
 }
+export async function listOnlyUsuarios(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'client'); // Solo usuarios con rol 'client'
+
+  if (error) {
+    console.error('Error al obtener solo usuarios:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile[], error: null };
+}
+export async function listOnlyAgentes(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'agent'); // Solo usuarios con rol 'agent'
+
+  if (error) {
+    console.error('Error al obtener solo agentes:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile[], error: null };
+}
+export async function listOnlyAdmins(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('role', 'admin'); // Solo usuarios con rol 'admin'
+
+  if (error) {
+    console.error('Error al obtener solo administradores:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile[], error: null };
+}
