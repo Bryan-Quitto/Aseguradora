@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react"; //esto es solo para que se haga el commit
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase/client";
 import logo from 'src/assets/images/logos/logo-wrappixel.png';
