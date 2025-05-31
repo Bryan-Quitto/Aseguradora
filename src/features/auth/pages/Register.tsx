@@ -15,6 +15,7 @@ const Register = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false); // Nuevo estado de carga
 
   const [formData, setFormData] = useState({
     primerApellido: "",
@@ -74,6 +75,7 @@ const Register = () => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setLoading(true); // Iniciar carga
 
     // Validar si algún campo está vacío
     const requiredFields = [
@@ -94,13 +96,16 @@ const Register = () => {
 
         if (typedKey === "nacionalidadOtra" && formData.nacionalidad === "Otra") {
             setError("Por favor, especifique la nacionalidad.");
+            setLoading(false);
             return;
         }
         if (typedKey === "lugarNacimientoOtro" && formData.lugarNacimiento === "Otra") {
             setError("Por favor, especifique el lugar de nacimiento.");
+            setLoading(false);
             return;
         }
         setError("Por favor, complete todos los campos requeridos.");
+        setLoading(false);
         return;
       }
     }
@@ -108,17 +113,19 @@ const Register = () => {
     // Validar que las contraseñas coincidan
     if (formData.password !== formData.confirmPassword) {
       setError("Las contraseñas no coinciden.");
+      setLoading(false);
       return;
     }
 
     // Validación básica de formato de correo
     if (!/\S+@\S+\.\S+/.test(formData.correo)) {
         setError("Por favor, ingresa un correo electrónico válido.");
+        setLoading(false);
         return;
     }
 
-    // Verificar si el número de identificación ya existe en 'profiles'
     try {
+      // 1. Verificar si el número de identificación ya existe en 'profiles'
       const { data: existingIdProfiles, error: fetchIdError } = await supabase
         .from('profiles')
         .select('user_id')
@@ -127,84 +134,109 @@ const Register = () => {
       if (fetchIdError) {
         console.error("Error al verificar número de identificación existente:", fetchIdError);
         setError("Ocurrió un error al verificar el número de identificación. Intenta de nuevo.");
+        setLoading(false);
         return;
       }
       if (existingIdProfiles && existingIdProfiles.length > 0) {
         setError("Este número de identificación ya está registrado.");
+        setLoading(false);
         return;
       }
-    } catch (e) {
-      console.error("Excepción al verificar número de identificación existente:", e);
-      setError("Ocurrió una excepción al verificar el número de identificación. Intenta de nuevo.");
-      return;
-    }
 
-
-    // Proceder con el registro de autenticación en Supabase
-    // Supabase creará automáticamente una entrada en auth.users y (si tienes un trigger) en profiles.
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: formData.correo,
-      password: formData.password,
-      // Los datos adicionales en 'options.data' solo se guardan en la tabla 'auth.users.user_metadata'
-      // No se insertan directamente en tu tabla 'profiles' a menos que tengas un trigger personalizado.
-      options: {
-        data: {
-          primer_nombre_auth: formData.primerNombre, // Ejemplo: si quisieras guardar esto en metadata de auth.users
-          // Otros datos si deseas guardarlos en user_metadata (no en tu tabla profiles directamente)
-        }
-      }
-    });
-
-    if (signUpError) {
-      console.error("Error al registrar usuario:", signUpError.message);
-      if (signUpError.status === 400 && /already registered|duplicate/i.test(signUpError.message)) {
-        setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
-      } else if (signUpError.message.includes("Password should be at least 6 characters")) {
-        setError("La contraseña debe tener al menos 6 caracteres.");
-      }
-      else {
-        setError(`Error al registrar usuario: ${signUpError.message}`);
-      }
-    } else if (signUpData.user) {
-      // Si el registro de auth es exitoso, ahora actualizamos la tabla 'profiles'
-      // Asumimos que un trigger de Supabase ya creó la fila básica con el user_id.
-      setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta.");
-      console.log("Usuario registrado en auth:", signUpData.user);
-
-      const profileDataToUpdate = {
-        primer_apellido: formData.primerApellido,
-        segundo_apellido: formData.segundoApellido,
-        primer_nombre: formData.primerNombre,
-        segundo_nombre: formData.segundoNombre,
-        // Agrega esta línea para construir el nombre completo
-        full_name: `${formData.primerNombre || ''} ${formData.segundoNombre || ''} ${formData.primerApellido || ''} ${formData.segundoApellido || ''}`.trim().replace(/\s\s+/g, ' '),
-        nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
-        tipo_identificacion: formData.tipoID,
-        numero_identificacion: formData.numeroID,
-        lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
-        fecha_nacimiento: formData.fechaNacimiento,
-        sexo: formData.sexo,
-        estado_civil: formData.estadoCivil,
-        estatura: parseFloat(formData.estatura) || null,
-        peso: parseFloat(formData.peso) || null,
+      // 2. Proceder con el registro de autenticación en Supabase (auth.users)
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: formData.correo,
-        role: 'client',
-      };
+        password: formData.password,
+        options: {
+          data: {
+            full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
+          },
+          emailRedirectTo: `${window.location.origin}/dashboard` // URL a la que redirigir después de la confirmación
+        }
+      });
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update(profileDataToUpdate)
-        .eq('user_id', signUpData.user.id);
-        
-      if (profileError) {
-        console.error("Error al actualizar perfil:", profileError);
-        setError(`Usuario registrado, pero hubo un error al guardar los datos del perfil: ${profileError.message}`);
-      } else {
-        console.log("Perfil actualizado exitosamente");
+      if (signUpError) {
+        console.error("Error al registrar usuario:", signUpError.message);
+        if (signUpError.status === 400 && /already registered|duplicate/i.test(signUpError.message)) {
+          setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
+        } else if (signUpError.message.includes("Password should be at least 6 characters")) {
+          setError("La contraseña debe tener al menos 6 caracteres.");
+        } else {
+          setError(`Error al registrar usuario: ${signUpError.message}`);
+        }
+        setLoading(false);
+        return;
       }
-    } else {
-        // Caso inesperado donde no hay error pero tampoco usuario (ej. confirmación manual habilitada y no hay sesión)
-        setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para completar el proceso.");
+
+      const userId = signUpData.user?.id;
+
+      if (!userId) {
+        // This scenario means Supabase Auth didn't return a user object.
+        // This typically happens if email confirmation is required and the user already exists (unconfirmed)
+        // or a confirmation email was already sent.
+        setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para verificar tu cuenta y completar tu perfil.");
+        setLoading(false);
+        return;
+      }
+
+      // 3. Update the existing row in 'profiles' that was created by the trigger
+      const full_name_combined = `${formData.primerNombre || ''} ${formData.segundoNombre || ''} ${formData.primerApellido || ''} ${formData.segundoApellido || ''}`.trim().replace(/\s\s+/g, ' ');
+
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({
+          primer_apellido: formData.primerApellido,
+          segundo_apellido: formData.segundoApellido,
+          primer_nombre: formData.primerNombre,
+          segundo_nombre: formData.segundoNombre,
+          full_name: full_name_combined,
+          email: formData.correo,
+          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+          tipo_identificacion: formData.tipoID,
+          numero_identificacion: formData.numeroID,
+          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
+          fecha_nacimiento: formData.fechaNacimiento,
+          sexo: formData.sexo,
+          estado_civil: formData.estadoCivil,
+          estatura: parseFloat(formData.estatura) || null,
+          peso: parseFloat(formData.peso) || null,
+          role: 'client', // Asegúrate de que el 'role' se establezca correctamente
+        })
+        .eq('user_id', userId); // Important: Update the row matching the user_id
+
+      if (profileUpdateError) {
+        console.error("Error al actualizar perfil:", profileUpdateError);
+        setError(`¡Registro exitoso en Supabase Auth, pero hubo un error al guardar tus datos de perfil! Error: ${profileUpdateError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Insert into the 'clients' table
+      const { error: clientInsertError } = await supabase
+        .from('clients')
+        .insert({
+          user_id: userId,
+          // Add any other client-specific fields if your 'clients' table has them
+        });
+
+      if (clientInsertError) {
+        console.error("Error al insertar cliente:", clientInsertError);
+        setError(`¡Registro exitoso en Supabase Auth y perfil guardado, pero hubo un error al registrarte como cliente! Error: ${clientInsertError.message}`);
+        setLoading(false);
+        return;
+      }
+
+      setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta. Serás redirigido a la página de inicio.");
+      // Optional: Redirect the user after a short delay
+      setTimeout(() => {
+        navigate('/auth/login'); // Or to a confirmation page
+      }, 6000);
+
+    } catch (e: any) {
+      console.error("Excepción durante el registro:", e);
+      setError(`Ocurrió un error inesperado: ${e.message}`);
+    } finally {
+      setLoading(false); // End loading
     }
   };
 
@@ -216,7 +248,7 @@ const Register = () => {
         </div>
         <div className="bg-white rounded-2xl shadow-lg px-6 py-10 md:px-12 md:py-14">
           <h2 className="text-2xl font-bold text-center mb-8 border-b border-gray-200 pb-4">
-            1. Información Personal del Titular
+            Información personal del titular
           </h2>
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -538,8 +570,9 @@ const Register = () => {
               <button
                 type="submit"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-8 rounded transition"
+                disabled={loading} // Deshabilitar el botón durante la carga
               >
-                Registrarse
+                {loading ? 'Registrando...' : 'Registrarse'}
               </button>
               <div className="flex gap-2 text-sm font-medium items-center justify-center">
                 <p>¿Ya tiene una cuenta?</p>

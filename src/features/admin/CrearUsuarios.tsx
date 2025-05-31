@@ -53,8 +53,6 @@ interface FormData {
   primerApellido: string;
   segundoApellido: string;
   email: string;
-  password?: string;
-  confirmPassword?: string;
   nacionalidad: string;
   nacionalidadOtra: string;
   tipoID: string;
@@ -76,8 +74,6 @@ interface FormErrors {
   primerApellido?: string;
   segundoApellido?: string;
   email?: string;
-  password?: string;
-  confirmPassword?: string;
   nacionalidad?: string;
   nacionalidadOtra?: string;
   tipoID?: string;
@@ -99,8 +95,6 @@ export default function CrearUsuarios() {
     primerApellido: '',
     segundoApellido: '',
     email: '',
-    password: '',
-    confirmPassword: '',
     nacionalidad: '',
     nacionalidadOtra: '',
     tipoID: '',
@@ -176,17 +170,6 @@ export default function CrearUsuarios() {
       } else {
         delete newErrors[name as keyof FormErrors];
       }
-    } else if (name === 'password' || name === 'confirmPassword') {
-      if (formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'Las contraseñas no coinciden';
-      } else {
-        delete newErrors.confirmPassword;
-      }
-      if (value && value.length < 6) {
-        newErrors[name as keyof FormErrors] = 'Mínimo 6 caracteres';
-      } else {
-        delete newErrors[name as keyof FormErrors];
-      }
     }
 
     // Limpiar errores de campos condicionales si la opción "Otra" no está seleccionada
@@ -209,7 +192,7 @@ export default function CrearUsuarios() {
     // Validar todos los campos antes de enviar
     const newErrors: FormErrors = {};
     const requiredFields: Array<keyof FormData> = [
-      'primerNombre', 'primerApellido', 'email', 'password', 'confirmPassword',
+      'primerNombre', 'primerApellido', 'email',
       'nacionalidad', 'tipoID', 'numeroID', 'lugarNacimiento', 'fechaNacimiento',
       'sexo', 'estadoCivil', 'estatura', 'peso', 'rol'
     ];
@@ -230,13 +213,6 @@ export default function CrearUsuarios() {
       }
     });
 
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Las contraseñas no coinciden';
-    }
-    if (formData.password && formData.password.length < 6) {
-      newErrors.password = 'Mínimo 6 caracteres';
-    }
-
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) {
@@ -247,11 +223,10 @@ export default function CrearUsuarios() {
     setSubmissionMessage(null);
 
     try {
-      // 1. Crear el usuario en Supabase Auth
-      // Todos los datos del perfil se envían en 'options.data' para que el trigger los recoja.
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // 1. Crear el usuario en Supabase Auth sin contraseña
+      // Supabase enviará un correo de verificación con un enlace mágico para que el usuario establezca su contraseña.
+      const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
         email: formData.email,
-        password: formData.password!,
         options: {
           data: {
             primer_nombre: formData.primerNombre,
@@ -270,6 +245,7 @@ export default function CrearUsuarios() {
             peso: parseFloat(formData.peso) || null,
             role: formData.rol, // Pasa el rol seleccionado a raw_user_meta_data
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`, // Asegúrate de que esta URL esté configurada en Supabase
         },
       });
 
@@ -283,37 +259,30 @@ export default function CrearUsuarios() {
         return;
       }
 
-      if (authData.user) {
-        // ¡IMPORTANTE! El perfil ahora se crea automáticamente por el trigger de Supabase.
-        // No es necesario llamar a createUserProfile aquí.
-
-        setSubmissionMessage('Usuario creado exitosamente! Se ha enviado un correo de verificación.');
-        // Limpiar formulario después de éxito
-        setFormData({
-          primerNombre: '',
-          segundoNombre: '',
-          primerApellido: '',
-          segundoApellido: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-          nacionalidad: '',
-          nacionalidadOtra: '',
-          tipoID: '',
-          numeroID: '',
-          lugarNacimiento: '',
-          lugarNacimientoOtra: '',
-          fechaNacimiento: '',
-          sexo: '',
-          estadoCivil: '',
-          estatura: '',
-          peso: '',
-          rol: ''
-        });
-        setErrors({});
-      } else {
-        setSubmissionMessage('No se pudo crear el usuario. Inténtalo de nuevo.');
-      }
+      // Si no hay error, Supabase ha enviado un correo al usuario.
+      setSubmissionMessage('Usuario creado exitosamente. Se ha enviado un correo electrónico al usuario para que establezca su contraseña y verifique su cuenta.');
+      
+      // Limpiar formulario después de éxito
+      setFormData({
+        primerNombre: '',
+        segundoNombre: '',
+        primerApellido: '',
+        segundoApellido: '',
+        email: '',
+        nacionalidad: '',
+        nacionalidadOtra: '',
+        tipoID: '',
+        numeroID: '',
+        lugarNacimiento: '',
+        lugarNacimientoOtra: '',
+        fechaNacimiento: '',
+        sexo: '',
+        estadoCivil: '',
+        estatura: '',
+        peso: '',
+        rol: ''
+      });
+      setErrors({});
 
     } catch (error: any) {
       console.error('Error inesperado:', error.message);
@@ -392,38 +361,6 @@ export default function CrearUsuarios() {
             helperText={errors.email}
             required
           />
-        </div>
-
-        {/* Contraseñas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="password" value="Contraseña" />
-            <TextInput
-              id="password"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              color={errors.password ? 'failure' : undefined}
-              helperText={errors.password || 'Mínimo 6 caracteres'}
-              required
-              minLength={6}
-            />
-          </div>
-          <div>
-            <Label htmlFor="confirmPassword" value="Confirmar Contraseña" />
-            <TextInput
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleInputChange}
-              color={errors.confirmPassword ? 'failure' : undefined}
-              helperText={errors.confirmPassword}
-              required
-              minLength={6}
-            />
-          </div>
         </div>
 
         {/* Nacionalidad */}
@@ -631,7 +568,7 @@ export default function CrearUsuarios() {
           >
             <option value="">Seleccionar rol</option>
             <option value="admin">Administrador</option>
-            <option value="agent">Agente</option> {/* Corregido: de 'agente' a 'agent' para que coincida con el backend */}
+            <option value="agent">Agente</option>
             <option value="client">Cliente</option>
           </Select>
         </div>
