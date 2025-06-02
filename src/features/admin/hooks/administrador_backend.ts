@@ -20,6 +20,7 @@ export interface UserProfile {
   estatura: number | null; // Añadido (asumiendo number)
   peso: number | null; // Añadido (asumiendo number)
   role: string;
+  status: 'active' | 'inactive'; // Nuevo campo para el estado
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +80,7 @@ interface UpdateUserProfileData {
   estatura?: number | null;
   peso?: number | null;
   role?: string | null; // Modificado
+  status?: 'active' | 'inactive'; // Añadido
 }
 
 /**
@@ -114,13 +116,34 @@ export async function updateUserProfile(user_id: string, updates: UpdateUserProf
 export async function deactivateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
-    .update({ role: 'inactive' }) // O podrías tener un campo 'status: 'active' | 'inactive''
+    .update({ status: 'inactive' }) // Cambiar el estado a 'inactive'
     .eq('user_id', user_id)
     .select()
     .single();
 
   if (error) {
     console.error('Error al desactivar perfil de usuario:', error.message);
+    return { data: null, error };
+  }
+
+  return { data: data as UserProfile, error: null };
+}
+
+/**
+ * Activa un perfil de usuario cambiando su estado a 'active'.
+ * @param user_id El ID del perfil a activar.
+ * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
+ */
+export async function activateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ status: 'active' })
+    .eq('user_id', user_id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error al activar perfil de usuario:', error.message);
     return { data: null, error };
   }
 

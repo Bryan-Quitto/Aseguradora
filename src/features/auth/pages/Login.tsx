@@ -63,8 +63,14 @@ const Login = () => {
     if (profile.role === 'admin') {
       console.log('Usuario es admin, redirigiendo a /admin/dashboard');
       navigate('/admin/dashboard');
+    } else if (profile.role === 'agent') {
+      console.log('Usuario es agente, redirigiendo a /agent/dashboard');
+      navigate('/agent/dashboard');
+    } else if (profile.role === 'client') {
+      console.log('Usuario es cliente, redirigiendo a /client/dashboard');
+      navigate('/client/dashboard');
     } else {
-      console.log('Usuario NO es admin, redirigiendo a /dashboard');
+      console.log('Usuario NO es admin, agente o cliente, redirigiendo a /dashboard');
       navigate('/dashboard');
     }
   };

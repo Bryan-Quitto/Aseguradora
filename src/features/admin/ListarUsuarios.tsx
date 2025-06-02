@@ -1,9 +1,8 @@
 import { Button, Table, TextInput, Modal } from 'flowbite-react';
 import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
-import { getAllUserProfiles, UserProfile, updateUserProfile } from 'src/features/admin/hooks/administrador_backend';
-import { deactivateUserProfile } from 'src/features/admin/hooks/deactivateUser';
-import { useNavigate, useParams } from 'react-router-dom';// Asegúrate de que esté exportado correctamente
+import { getAllUserProfiles, UserProfile, activateUserProfile, deactivateUserProfile } from 'src/features/admin/hooks/administrador_backend';
+import { useNavigate } from 'react-router-dom';
 
 // Componente de Modal Personalizado para reemplazar alert/confirm
 interface CustomModalProps {
@@ -105,7 +104,7 @@ export default function ListarUsuarios() {
 
   const handleDeactivateUser = async (userId: string, userName: string | null) => {
     setModalTitle('Desactivar Usuario');
-    setModalMessage(`¿Estás seguro de que quieres desactivar a ${userName || 'este usuario'}? Esto cambiará su rol a 'deshabilitado'.`);
+    setModalMessage(`¿Estás seguro de que quieres desactivar a ${userName || 'este usuario'}? Esto cambiará su estado a 'inactivo'.`);
     setModalType('confirm');
     setModalAction(() => async () => {
       const { data, error: deactivateError } = await deactivateUserProfile(userId);
@@ -116,6 +115,26 @@ export default function ListarUsuarios() {
       } else if (data) {
         setModalTitle('Éxito');
         setModalMessage(`Usuario ${data.full_name || 'N/A'} desactivado.`);
+        setModalType('alert');
+        fetchUsers(); // Volver a cargar los usuarios para reflejar el cambio
+      }
+    });
+    setShowModal(true);
+  };
+
+  const handleActivateUser = async (userId: string, userName: string | null) => {
+    setModalTitle('Activar Usuario');
+    setModalMessage(`¿Estás seguro de que quieres activar a ${userName || 'este usuario'}? Esto cambiará su estado a 'activo'.`);
+    setModalType('confirm');
+    setModalAction(() => async () => {
+      const { data, error: activateError } = await activateUserProfile(userId);
+      if (activateError) {
+        setModalTitle('Error');
+        setModalMessage(`Error al activar usuario: ${activateError.message}`);
+        setModalType('alert');
+      } else if (data) {
+        setModalTitle('Éxito');
+        setModalMessage(`Usuario ${data.full_name || 'N/A'} activado.`);
         setModalType('alert');
         fetchUsers(); // Volver a cargar los usuarios para reflejar el cambio
       }
@@ -160,12 +179,13 @@ export default function ListarUsuarios() {
           <Table.HeadCell>Email</Table.HeadCell>
           <Table.HeadCell>Cédula/Pasaporte</Table.HeadCell>
           <Table.HeadCell>Rol</Table.HeadCell>
+          <Table.HeadCell>Estado</Table.HeadCell>
           <Table.HeadCell>Acciones</Table.HeadCell>
         </Table.Head>
         <Table.Body className="divide-y">
           {filteredUsers.length === 0 ? (
             <Table.Row>
-              <Table.Cell colSpan={6} className="text-center text-gray-500">
+              <Table.Cell colSpan={7} className="text-center text-gray-500">
                 No se encontraron usuarios.
               </Table.Cell>
             </Table.Row>
@@ -190,13 +210,22 @@ export default function ListarUsuarios() {
                   </span>
                 </Table.Cell>
                 <Table.Cell>
+                  <span className={`px-3 py-1 rounded-full text-sm ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {user.status === 'active' ? 'Activo' : 'Inactivo'}
+                  </span>
+                </Table.Cell>
+                <Table.Cell>
                   <div className="flex gap-2">
                     {/* <Button size="xs" color="light" onClick={() => handleUpdateUser(user.user_id)}>
                       Editar
                     </Button> */}
-                    {user.role !== 'inactive' && (
+                    {user.status === 'active' ? (
                       <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
                         Desactivar
+                      </Button>
+                    ) : (
+                      <Button size="xs" color="success" onClick={() => handleActivateUser(user.user_id, user.full_name)}>
+                        Activar
                       </Button>
                     )}
                   </div>
@@ -219,5 +248,3 @@ export default function ListarUsuarios() {
     </div>
   );
 }
-
-

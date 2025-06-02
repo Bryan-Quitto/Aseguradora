@@ -9,7 +9,9 @@ const Topbar = () => {
   const location = useLocation();
   const isLandingPage = location.pathname === '/';
   const isAdminDashboard = location.pathname.startsWith('/admin');
-  const { user, profile } = useAuth();
+  const isAgentDashboard = location.pathname.startsWith('/agent');
+  const isClientDashboard = location.pathname.startsWith('/client');
+  const { user, profile, loading, userRole } = useAuth(); // Asegúrate de obtener 'loading' y 'userRole' también
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -26,6 +28,27 @@ const Topbar = () => {
     ? `${profile.primer_nombre || ''} ${profile.primer_apellido || ''}`.trim()
     : '';
 
+  // Determina si estamos en un dashboard (admin, agente, cliente)
+  const isInDashboard = isAdminDashboard || isAgentDashboard || isClientDashboard;
+
+  // Determina la ruta del dashboard según el rol del usuario
+  const getDashboardPath = () => {
+    switch (userRole) {
+      case 'admin':
+        return '/admin/dashboard';
+      case 'agent':
+        return '/agent/dashboard';
+      case 'client':
+        return '/client/dashboard';
+      default:
+        return '/dashboard'; // Ruta por defecto si el rol no coincide
+    }
+  };
+
+  if (loading) {
+    return null; // O un spinner de carga si lo prefieres
+  }
+
   return (
     <div className="py-3 px-4 bg-white z-40 sticky top-0">
       <div className="flex items-center lg:justify-between flex-wrap justify-center">
@@ -33,12 +56,22 @@ const Topbar = () => {
           <img src={wrappixel_logo} alt="logo" />
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-center lg:mt-0 mt-2">
-          {/* Topbar especial para admin dashboard */}
-          {isAdminDashboard && user && (
+          {user ? (
+            // Si el usuario está logeado
             <div className="flex items-center gap-2">
               <span className="text-blue-900 text-[15px]">
                 {fullName || user.email}
               </span>
+              {!isInDashboard && (
+                <Button
+                  color="primary"
+                  size="sm"
+                  onClick={() => navigate(getDashboardPath())}
+                  className="py-2"
+                >
+                  Dashboard
+                </Button>
+              )}
               <Button
                 color="primary"
                 size="sm"
@@ -48,9 +81,8 @@ const Topbar = () => {
                 Cerrar sesión
               </Button>
             </div>
-          )}
-          {/* Botón de login solo en landing y fuera de admin */}
-          {!isAdminDashboard && (
+          ) : (
+            // Si el usuario NO está logeado
             <Button
               color="outlineprimary"
               size="sm"
@@ -60,12 +92,13 @@ const Topbar = () => {
             >
               <div className="flex items-center gap-1">
                 <Icon icon="tabler:device-laptop" className="text-lg" />
-                <p className="text-[15px]">{isLandingPage ? "Iniciar sesión" : "Registrar"}</p>
+                <p className="text-[15px]">Iniciar sesión</p>
               </div>
             </Button>
           )}
-          {/* Botón Planes solo fuera de landing y admin */}
-          {!isLandingPage && !isAdminDashboard && (
+
+          {/* Botón Planes solo si no está en landing y no está logeado */}
+          {!isLandingPage && !user && (
             <Button
               color="primary"
               size="sm"
