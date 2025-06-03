@@ -155,7 +155,7 @@ export default function AgentPolicyForm() {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-blue-100">
-      <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">Crear Nueva Póliza</h2>
+      <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">Crear nueva póliza</h2>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
@@ -338,7 +338,7 @@ export default function AgentPolicyForm() {
             type="submit"
             className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
           >
-            Crear Póliza
+            Crear póliza
           </button>
         </div>
       </form>

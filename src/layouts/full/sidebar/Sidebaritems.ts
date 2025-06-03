@@ -106,7 +106,7 @@ const SidebarContent: MenuItem[] = [
     requiredRole: "agent", // Este encabezado solo aparecerá para agentes
     children: [
       {
-        name: "Gestionar Pólizas",
+        name: "Gestionar pólizas",
         icon: "solar:document-text-line-duotone", // Icono para pólizas
         id: uniqueId(),
         url: "/agent/dashboard/policies",
@@ -114,7 +114,7 @@ const SidebarContent: MenuItem[] = [
         requiredRole: "agent",
       },
       {
-        name: "Crear Póliza",
+        name: "Crear póliza",
         icon: "solar:document-add-line-duotone", // Icono para crear póliza
         id: uniqueId(),
         url: "/agent/dashboard/policies/new",
@@ -122,11 +122,11 @@ const SidebarContent: MenuItem[] = [
         requiredRole: "agent",
       },
       {
-        name: "Revisar Solicitudes",
+        name: "Revisar solicitudes",
         icon: "solar:checklist-minimalistic-line-duotone", // Icono para solicitudes
         id: uniqueId(),
         url: "/agent/dashboard/applications",
-        isPro: false,
+        isPro: false, 
         requiredRole: "agent",
       },
     ],

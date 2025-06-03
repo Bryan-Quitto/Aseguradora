@@ -49,10 +49,10 @@ export default function DashboardAgente() {
           </p>
           <div className="flex justify-center gap-4">
             <Link to="/agent/dashboard/policies" className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition duration-300">
-              Ver y Gestionar Pólizas
+              Ver y gestionar pólizas
             </Link>
             <Link to="/agent/dashboard/applications" className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition duration-300">
-              Revisar Solicitudes
+              Revisar solicitudes
             </Link>
           </div>
         </div>

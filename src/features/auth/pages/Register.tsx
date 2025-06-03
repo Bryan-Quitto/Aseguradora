@@ -144,12 +144,29 @@ const Register = () => {
       }
 
       // 2. Proceder con el registro de autenticación en Supabase (auth.users)
+      const full_name_combined = `${formData.primerNombre || ''} ${formData.segundoNombre || ''} ${formData.primerApellido || ''} ${formData.segundoApellido || ''}`.trim().replace(/\s\s+/g, ' ');
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: formData.correo,
         password: formData.password,
         options: {
           data: {
-            full_name: `${formData.primerNombre} ${formData.segundoNombre || ''} ${formData.primerApellido} ${formData.segundoApellido || ''}`.trim(),
+            // **AQUÍ ES DONDE PASAMOS TODOS LOS DATOS A raw_user_meta_data**
+            primer_apellido: formData.primerApellido,
+            segundo_apellido: formData.segundoApellido,
+            primer_nombre: formData.primerNombre,
+            segundo_nombre: formData.segundoNombre,
+            full_name: full_name_combined, // Ya lo tienes calculado, lo enviamos.
+            nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
+            tipo_identificacion: formData.tipoID,
+            numero_identificacion: formData.numeroID,
+            lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
+            fecha_nacimiento: formData.fechaNacimiento,
+            sexo: formData.sexo,
+            estado_civil: formData.estadoCivil,
+            estatura: parseFloat(formData.estatura) || null, // Convertir a número, o null si no es válido
+            peso: parseFloat(formData.peso) || null, // Convertir a número, o null si no es válido
+            role: 'client', // Importante: Envía el rol desde el frontend
           },
           emailRedirectTo: `${window.location.origin}/dashboard` // URL a la que redirigir después de la confirmación
         }
@@ -168,68 +185,33 @@ const Register = () => {
         return;
       }
 
+      // Con esta estrategia, tu trigger handle_new_user se encargará de
+      // la inserción en 'profiles' y 'clients'.
+      // Por lo tanto, no necesitamos las siguientes llamadas a la base de datos desde el frontend:
+      // - supabase.from('profiles').update(...)
+      // - supabase.from('clients').insert(...)
+
+      // Verificamos si Supabase Auth retornó un usuario. Si la confirmación de email está activa,
+      // es posible que user sea null aquí, pero el registro igual se inició.
       const userId = signUpData.user?.id;
 
       if (!userId) {
-        // This scenario means Supabase Auth didn't return a user object.
-        // This typically happens if email confirmation is required and the user already exists (unconfirmed)
-        // or a confirmation email was already sent.
+        // Este escenario significa que Supabase Auth inició el registro (ej. envió un email de confirmación),
+        // pero no devolvió un usuario activo inmediatamente.
         setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para verificar tu cuenta y completar tu perfil.");
         setLoading(false);
         return;
       }
 
-      // 3. Update the existing row in 'profiles' that was created by the trigger
-      const full_name_combined = `${formData.primerNombre || ''} ${formData.segundoNombre || ''} ${formData.primerApellido || ''} ${formData.segundoApellido || ''}`.trim().replace(/\s\s+/g, ' ');
+      // Si el usuario ya existe pero no confirmado, o si ya se envió un correo,
+      // Supabase.auth.signUp devolverá un 'user' en data.user si ya estaba confirmado,
+      // o null si requiere confirmación y es un nuevo registro/ya fue enviado el email.
 
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({
-          primer_apellido: formData.primerApellido,
-          segundo_apellido: formData.segundoApellido,
-          primer_nombre: formData.primerNombre,
-          segundo_nombre: formData.segundoNombre,
-          full_name: full_name_combined,
-          email: formData.correo,
-          nacionalidad: formData.nacionalidad === "Otra" ? formData.nacionalidadOtra : formData.nacionalidad,
-          tipo_identificacion: formData.tipoID,
-          numero_identificacion: formData.numeroID,
-          lugar_nacimiento: formData.lugarNacimiento === "Otra" ? formData.lugarNacimientoOtro : formData.lugarNacimiento,
-          fecha_nacimiento: formData.fechaNacimiento,
-          sexo: formData.sexo,
-          estado_civil: formData.estadoCivil,
-          estatura: parseFloat(formData.estatura) || null,
-          peso: parseFloat(formData.peso) || null,
-          role: 'client', // Asegúrate de que el 'role' se establezca correctamente
-        })
-        .eq('user_id', userId); // Important: Update the row matching the user_id
-
-      if (profileUpdateError) {
-        console.error("Error al actualizar perfil:", profileUpdateError);
-        setError(`¡Registro exitoso en Supabase Auth, pero hubo un error al guardar tus datos de perfil! Error: ${profileUpdateError.message}`);
-        setLoading(false);
-        return;
-      }
-
-      // 4. Insert into the 'clients' table
-      const { error: clientInsertError } = await supabase
-        .from('clients')
-        .insert({
-          user_id: userId,
-          // Add any other client-specific fields if your 'clients' table has them
-        });
-
-      if (clientInsertError) {
-        console.error("Error al insertar cliente:", clientInsertError);
-        setError(`¡Registro exitoso en Supabase Auth y perfil guardado, pero hubo un error al registrarte como cliente! Error: ${clientInsertError.message}`);
-        setLoading(false);
-        return;
-      }
-
+      // Si llegamos hasta aquí y hay un userId, significa que el registro en auth.users
+      // fue exitoso y el trigger se encargó de las inserciones en profiles y clients.
       setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta. Serás redirigido a la página de inicio.");
-      // Optional: Redirect the user after a short delay
       setTimeout(() => {
-        navigate('/auth/login'); // Or to a confirmation page
+        navigate('/auth/login');
       }, 6000);
 
     } catch (e: any) {

@@ -101,12 +101,12 @@ export default function AgentPolicyList() {
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-blue-700">Pólizas Gestionadas</h2>
+        <h2 className="text-3xl font-bold text-blue-700">Pólizas gestionadas</h2>
         <Link
           to="/agent/dashboard/policies/new"
           className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition duration-300 shadow-md"
         >
-          Crear Nueva Póliza
+          Crear nueva póliza
         </Link>
       </div>
 
