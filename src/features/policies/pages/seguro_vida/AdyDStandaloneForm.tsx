@@ -99,6 +99,7 @@ export default function AdyDStandaloneForm() {
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
+    // Eliminamos 'checked' de la desestructuración aquí
     const { name, value, type } = e.target;
     setFormData(prev => {
       // Prima
@@ -114,12 +115,17 @@ export default function AdyDStandaloneForm() {
         return { ...prev, age_at_inscription: parseInt(value) };
       }
       // Número de beneficiarios
+      // En este formulario no veo un campo 'ad_d_included', así que solo ajusto la desestructuración.
+      // Si en el código completo de este formulario sí tienes un checkbox que usa handleChange,
+      // deberías aplicar la protección de tipo para 'checked' aquí también.
       if (name === 'numBeneficiaries') {
         const num = parseInt(value) || 1;
         if (num < 1 || num > 3) return prev;
         const arr: Beneficiary[] = [];
+        // Asegúrate de que prev.beneficiaries existe antes de intentar acceder a sus elementos
+        const existingBeneficiaries = prev.beneficiaries || []; // Agregado para seguridad
         for (let i = 0; i < num; i++) {
-          arr.push(prev.beneficiaries[i] || { name: '', relationship: '', percentage: 0 });
+          arr.push(existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 });
         }
         return { ...prev, numBeneficiaries: num, beneficiaries: arr };
       }
@@ -296,35 +302,7 @@ export default function AdyDStandaloneForm() {
             ))}
           </select>
         </div>
-
-        {/* Producto de Seguro */}
-        <div>
-          <label
-            htmlFor="product_id"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Producto de Seguro
-          </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {products
-              .filter(p => p.name === 'AD&D Independiente')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – $
-                  {product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
-        </div>
-
+       
         {/* Fechas Inicio / Fin */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
