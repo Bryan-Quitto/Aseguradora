@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
@@ -9,17 +9,154 @@ import {
 } from '../../policy_management';
 import { ClientProfile, getAllClientProfiles } from '../../../clients/hooks/cliente_backend';
 
-/**
- * Formulario específico para el Plan Médico Familiar.
- */
+// Definición de tipos para los campos específicos del Plan Familiar
+interface DependentDetail {
+  name: string;
+  birth_date: string;
+  relationship: string;
+}
+
+interface PlanFamiliarSpecificFields {
+  deductible: number;
+  coinsurance: number;
+  max_annual: number;
+  has_dental_basic: boolean;
+  wants_dental_premium: boolean;
+  has_vision_basic: boolean;
+  wants_vision: boolean;
+  num_dependents: number;
+  dependents_details: DependentDetail[]; // Aseguramos que siempre es un array de objetos con las propiedades
+  has_dental?: boolean; // Se asume que siempre tendrá dental básica
+  has_vision?: boolean; // Se asume que no tendrá visión a menos que se marque
+}
+
+// Combinar CreatePolicyData con los campos específicos del Plan Familiar
+type PlanFamiliarPolicyData = CreatePolicyData & PlanFamiliarSpecificFields;
+
+// Componente reutilizable para campos de formulario
+interface FormFieldProps {
+  id: string;
+  name: string;
+  label: string;
+  type?: string;
+  value: string | number | readonly string[] | undefined; // 'undefined' añadido para casos de arrays
+  onChange?: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => void; // Hacemos onChange opcional
+  required?: boolean;
+  min?: number | string;
+  max?: number | string;
+  step?: string;
+  readOnly?: boolean;
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  rows?: number;
+  infoText?: string;
+  className?: string;
+}
+
+const FormField: React.FC<FormFieldProps> = ({
+  id,
+  name,
+  label,
+  type = 'text',
+  value,
+  onChange, // Ahora es opcional
+  required = false,
+  min,
+  max,
+  step,
+  readOnly = false,
+  options,
+  placeholder,
+  rows,
+  infoText,
+  className = '',
+}) => {
+  const inputClasses = `mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+    readOnly ? 'bg-gray-100 cursor-not-allowed border-gray-200' : ''
+  } ${className}`;
+
+  // Si es un select, usar 'disabled' en lugar de 'readOnly'
+  if (type === 'select' && options) {
+    return (
+      <div>
+        <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+          {label}
+        </label>
+        <select
+          id={id}
+          name={name}
+          value={value}
+          onChange={onChange}
+          required={required}
+          className={inputClasses}
+          disabled={readOnly} // Usar 'disabled' para selects
+        >
+          {options.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+      </div>
+    );
+  }
+
+  // Si es un textarea
+  if (type === 'textarea') {
+    return (
+      <div>
+        <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+          {label}
+        </label>
+        <textarea
+          id={id}
+          name={name}
+          value={value as string} // Castear a string ya que textarea solo acepta string
+          onChange={onChange}
+          required={required}
+          rows={rows}
+          placeholder={placeholder}
+          className={`${inputClasses} font-mono`}
+          readOnly={readOnly}
+        />
+        {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+      </div>
+    );
+  }
+
+  // Para otros tipos de input
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <input
+        type={type}
+        id={id}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required={required}
+        min={min}
+        max={max}
+        step={step}
+        readOnly={readOnly}
+        placeholder={placeholder}
+        className={inputClasses}
+      />
+      {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+    </div>
+  );
+};
+
+// Componente principal del formulario
 export default function PlanFamiliarForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // -----------------------------------------------------
   // Estado base + campos propios de Plan Familiar
-  // -----------------------------------------------------
-  const [formData, setFormData] = useState<CreatePolicyData>({
+  const [formData, setFormData] = useState<PlanFamiliarPolicyData>({
     policy_number: '',
     client_id: '',
     product_id: '',
@@ -29,26 +166,24 @@ export default function PlanFamiliarForm() {
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
-    // ↓ Campos específicos Plan Familiar
-    deductible: 1500,           // rango [1500‒3000]
-    coinsurance: 20,            // 20 % fijo
-    max_annual: 80000,          // máximo desembolsable anual (familiar)
-    has_dental_basic: true,     // Básica incluida
+    deductible: 1500,
+    coinsurance: 20,
+    max_annual: 80000,
+    has_dental_basic: true,
     wants_dental_premium: false,
-    has_vision_basic: false,    // Visión no incluida a menos que marque
+    has_vision_basic: false,
     wants_vision: false,
-    num_dependents: 0,          // Incluye hasta 4 dependientes
-    dependents_details: [] as { name: string; birth_date: string; relationship: string }[],
-    // Campos genéricos de salud que deben estar en CreatePolicyData como opcionales o ser inferidos
+    num_dependents: 0,
+    dependents_details: [],
     has_dental: true, // Se asume que siempre tendrá dental básica
     has_vision: false, // Se asume que no tendrá visión a menos que se marque
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [planFamiliarProduct, setPlanFamiliarProduct] = useState<InsuranceProduct | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -63,9 +198,6 @@ export default function PlanFamiliarForm() {
         setLoading(false);
         return;
       }
-      if (productsData) {
-        setProducts(productsData);
-      }
 
       // Cargar clientes
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
@@ -75,116 +207,143 @@ export default function PlanFamiliarForm() {
         setLoading(false);
         return;
       }
-      if (clientsData) {
-        setClients(clientsData);
-      }
 
+      if (productsData && clientsData) {
+        setClients(clientsData);
+        const foundPlanFamiliarProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Familiar');
+        if (foundPlanFamiliarProduct) {
+          setPlanFamiliarProduct(foundPlanFamiliarProduct);
+          setFormData(prev => ({
+            ...prev,
+            product_id: foundPlanFamiliarProduct.id,
+          }));
+        } else {
+          setError('Error: El producto "Plan Familiar" no fue encontrado. Asegúrate de que existe en la base de datos.');
+        }
+      }
       setLoading(false);
     };
 
     fetchInitialData();
   }, []);
 
-  // -----------------------------------------------------
   // Helpers
-  // -----------------------------------------------------
-  const generatePolicyNumber = () => {
+  const generatePolicyNumber = useCallback(() => {
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-  };
+  }, []);
 
-  const handleChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value, type } = e.target;
-    setFormData(prev => {
-      // Si es premium_amount
-      if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) };
-      }
-      // Si es número de dependientes
-      if (name === 'num_dependents') {
-        const num = parseInt(value) || 0;
-        const newDependentsArray = new Array(num).fill(null).map(() => ({
-          name: '',
-          birth_date: '',
-          relationship: '',
-        }));
-        return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
-      }
-      // Booleanos
-      if (type === 'checkbox') {
-        return { ...prev, [name]: (e.target as HTMLInputElement).checked };
-      }
-      // Resto de inputs
-      return { ...prev, [name]: value };
-    });
-  };
+  const handleChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+      const { name, value, type } = e.target;
 
-  const handleDependentChange = (
-    idx: number,
-    field: 'name' | 'birth_date' | 'relationship',
-    value: string
-  ) => {
-    setFormData(prev => {
-      const newDetails = [...(prev.dependents_details || [])];
-      newDetails[idx] = {
-        ...newDetails[idx],
-        [field]: value,
-      };
-      return { ...prev, dependents_details: newDetails };
-    });
-  };
+      setFormData(prev => {
+        if (name === 'premium_amount') {
+          return { ...prev, [name]: parseFloat(value) };
+        }
+        if (name === 'num_dependents') {
+          const num = parseInt(value) || 0;
+          // Crear un nuevo array de dependientes.
+          // Si el número de dependientes disminuye, se truncan.
+          // Si aumenta, se añaden nuevos objetos vacíos.
+          const newDependentsArray: DependentDetail[] = Array.from({ length: num }, (_, i) => ({
+            name: prev.dependents_details[i]?.name || '',
+            birth_date: prev.dependents_details[i]?.birth_date || '',
+            relationship: prev.dependents_details[i]?.relationship || '',
+          }));
+          return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
+        }
+        if (type === 'checkbox') {
+          const target = e.target as HTMLInputElement;
+          return { ...prev, [name]: target.checked };
+        }
+        return { ...prev, [name]: value };
+      });
+    },
+    []
+  );
+
+  const handleDependentChange = useCallback(
+    (idx: number, field: keyof DependentDetail, value: string) => {
+      setFormData(prev => {
+        const newDetails = [...prev.dependents_details]; // Siempre será un array
+  
+        // Siempre crea un nuevo objeto si el actual es undefined o null
+        const currentDependent = newDetails[idx] || { name: '', birth_date: '', relationship: '' };
+  
+        newDetails[idx] = {
+          ...currentDependent, // Ahora currentDependent siempre es un objeto
+          [field]: value,
+        };
+  
+        return { ...prev, dependents_details: newDetails };
+      });
+    },
+    []
+  );
+  
+  // Función de validación del formulario
+  const validateForm = useCallback((): string | null => {
+    if (!user?.id) {
+      return 'No se pudo obtener el ID del agente para asignar la póliza.';
+    }
+
+    if (!formData.client_id) {
+      return 'Por favor, selecciona un cliente.';
+    }
+
+    if (!formData.start_date || !formData.end_date) {
+        return 'Las fechas de inicio y fin son obligatorias.';
+    }
+
+    if (new Date(formData.start_date) >= new Date(formData.end_date)) {
+        return 'La fecha de fin debe ser posterior a la fecha de inicio.';
+    }
+
+    if (formData.premium_amount < 300 || formData.premium_amount > 1200) {
+        return 'El monto de la prima debe estar entre $300 y $1,200 mensuales.';
+    }
+
+    // Validaciones Plan Familiar
+    if (formData.deductible < 1500 || formData.deductible > 3000) {
+      return 'El deducible debe estar entre $1,500 y $3,000.';
+    }
+    if (formData.coinsurance !== 20) {
+      return 'El coaseguro para Plan Familiar debe ser 20 %.';
+    }
+    if (formData.num_dependents < 0 || formData.num_dependents > 4) {
+      return 'El número de dependientes debe ser entre 0 y 4.';
+    }
+
+    for (let i = 0; i < formData.num_dependents; i++) {
+      const d = formData.dependents_details[i]; // Ya es seguro que existe debido a la lógica en handleChange
+      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
+        return `Por favor completa todos los campos del dependiente ${i + 1}.`;
+      }
+    }
+
+    return null; // No hay errores
+  }, [formData, user?.id]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    if (!user?.id) {
-      setError('No se pudo obtener el ID del agente para asignar la póliza.');
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
-    }
-
-    // Validaciones Plan Familiar
-    // 1) Deducible entre 1500 y 3000
-    if (formData.deductible! < 1500 || formData.deductible! > 3000) { // Añadir '!'
-      setError('El deducible debe estar entre $1,500 y $3,000.');
-      return;
-    }
-    // 2) coinsurance = 20
-    if (formData.coinsurance! !== 20) { // Añadir '!'
-      setError('El coaseguro para Plan Familiar debe ser 20 %.');
-      return;
-    }
-    // 3) num_dependents <= 4
-    if ((formData.num_dependents || 0) < 0 || (formData.num_dependents || 0) > 4) { // Usar || 0
-      setError('El número de dependientes debe ser entre 0 y 4.');
-      return;
-    }
-    // 4) Si hay dependientes, todos deben tener datos
-    for (let i = 0; i < (formData.num_dependents || 0); i++) { // Usar || 0
-      const d = formData.dependents_details?.[i]; // Añadir '?'
-      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
-        setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
-        return;
-      }
     }
 
     const policyNumber = generatePolicyNumber();
-    const policyToCreate: any = {
+    const policyToCreate: PlanFamiliarPolicyData = {
       ...formData,
       policy_number: policyNumber,
-      agent_id: user.id,
+      agent_id: user!.id, // user.id ya validado en validateForm
       premium_amount: Number(formData.premium_amount),
-      deductible: formData.deductible,
-      coinsurance: formData.coinsurance,
-      max_annual: formData.max_annual,
-      has_dental_basic: formData.has_dental_basic,
-      wants_dental_premium: formData.wants_dental_premium,
-      has_vision_basic: formData.has_vision_basic,
-      wants_vision: formData.wants_vision,
-      num_dependents: formData.num_dependents,
-      dependents_details: formData.dependents_details,
+      // Asegurar que has_dental y has_vision se envíen correctamente
+      has_dental: formData.has_dental_basic || formData.wants_dental_premium,
+      has_vision: formData.wants_vision,
     };
 
     const { data, error: createError } = await createPolicy(policyToCreate);
@@ -194,11 +353,11 @@ export default function PlanFamiliarForm() {
       setError(`Error al crear la póliza: ${createError.message}`);
     } else if (data) {
       setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
-      setFormData(prev => ({
-        ...prev,
+      // Restablecer el formulario a su estado inicial
+      setFormData({
         policy_number: '',
         client_id: '',
-        product_id: '',
+        product_id: planFamiliarProduct?.id || '', // Restablecer con el ID del producto si ya se cargó
         start_date: '',
         end_date: '',
         premium_amount: 0,
@@ -213,8 +372,10 @@ export default function PlanFamiliarForm() {
         has_vision_basic: false,
         wants_vision: false,
         num_dependents: 0,
-        dependents_details: [],
-      }));
+        dependents_details: [], // Asegurar que sea un array vacío
+        has_dental: true,
+        has_vision: false,
+      });
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -258,258 +419,155 @@ export default function PlanFamiliarForm() {
         {/* ———————————— Campos Comunes ———————————— */}
 
         {/* Cliente */}
-        <div>
-          <label
-            htmlFor="client_id"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Cliente
-          </label>
-          <select
-            id="client_id"
-            name="client_id"
-            value={formData.client_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un cliente</option>
-            {clients.map(client => (
-              <option key={client.user_id} value={client.user_id}>
-                {client.full_name ||
-                  `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()}{' '}
-                ({client.email})
-              </option>
-            ))}
-          </select>
-        </div>
+        <FormField
+          id="client_id"
+          name="client_id"
+          label="Cliente"
+          type="select"
+          value={formData.client_id}
+          onChange={handleChange}
+          required
+          options={[
+            { value: '', label: 'Selecciona un cliente' },
+            ...clients.map(client => ({
+              value: client.user_id,
+              label: `${client.full_name || `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()} (${client.email})`,
+            })),
+          ]}
+        />
 
-        {/* Producto de Seguro */}
-        <div>
-          <label
-            htmlFor="product_id"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Producto de Seguro
-          </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {products
-              .filter(p => p.name === 'Plan Médico Familiar')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – ${product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
-        </div>
+        {/* Producto de Seguro (solo lectura) */}
+        <FormField
+          id="product_name_display"
+          name="product_name_display"
+          label="Producto de Seguro"
+          value={planFamiliarProduct ? planFamiliarProduct.name : 'Cargando producto...'}
+          readOnly // Esto hará que el onChange sea opcional
+          infoText='Este formulario es específicamente para el "Plan Familiar".'
+        />
 
         {/* Fechas Inicio / Fin */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="start_date"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Fecha de Inicio
-            </label>
-            <input
-              type="date"
-              id="start_date"
-              name="start_date"
-              value={formData.start_date}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="end_date"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Fecha de Fin
-            </label>
-            <input
-              type="date"
-              id="end_date"
-              name="end_date"
-              value={formData.end_date}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
+          <FormField
+            id="start_date"
+            name="start_date"
+            label="Fecha de Inicio"
+            type="date"
+            value={formData.start_date}
+            onChange={handleChange}
+            required
+          />
+          <FormField
+            id="end_date"
+            name="end_date"
+            label="Fecha de Fin"
+            type="date"
+            value={formData.end_date}
+            onChange={handleChange}
+            required
+          />
         </div>
 
         {/* Prima y Frecuencia */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="premium_amount"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Monto de la Prima ($)
-            </label>
-            <input
-              type="number"
-              id="premium_amount"
-              name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="300"
-              max="1200"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $300 – $1,200 mensuales.
-            </p>
-          </div>
-          <div>
-            <label
-              htmlFor="payment_frequency"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Frecuencia de Pago
-            </label>
-            <select
-              id="payment_frequency"
-              name="payment_frequency"
-              value={formData.payment_frequency}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="monthly">Mensual</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="annually">Anual</option>
-            </select>
-          </div>
+          <FormField
+            id="premium_amount"
+            name="premium_amount"
+            label="Monto de la Prima ($)"
+            type="number"
+            value={formData.premium_amount}
+            onChange={handleChange}
+            required
+            min={300}
+            max={1200}
+            step="0.01"
+            infoText="Rango permitido: $300 – $1,200 mensuales."
+          />
+          <FormField
+            id="payment_frequency"
+            name="payment_frequency"
+            label="Frecuencia de Pago"
+            type="select"
+            value={formData.payment_frequency}
+            onChange={handleChange}
+            required
+            options={[
+              { value: 'monthly', label: 'Mensual' },
+              { value: 'quarterly', label: 'Trimestral' },
+              { value: 'annually', label: 'Anual' },
+            ]}
+          />
         </div>
 
         {/* Estado de la Póliza */}
-        <div>
-          <label
-            htmlFor="status"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Estado de la Póliza
-          </label>
-          <select
-            id="status"
-            name="status"
-            value={formData.status}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="pending">Pendiente</option>
-            <option value="active">Activa</option>
-            <option value="cancelled">Cancelada</option>
-            <option value="expired">Expirada</option>
-            <option value="rejected">Rechazada</option>
-          </select>
-        </div>
+        <FormField
+          id="status"
+          name="status"
+          label="Estado de la Póliza"
+          type="select"
+          value={formData.status}
+          onChange={handleChange}
+          required
+          options={[
+            { value: 'pending', label: 'Pendiente' },
+            { value: 'active', label: 'Activa' },
+            { value: 'cancelled', label: 'Cancelada' },
+            { value: 'expired', label: 'Expirada' },
+            { value: 'rejected', label: 'Rechazada' },
+          ]}
+        />
 
         {/* Detalles del Contrato */}
-        <div>
-          <label
-            htmlFor="contract_details"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Detalles del Contrato (Opcional)
-          </label>
-          <textarea
-            id="contract_details"
-            name="contract_details"
-            value={formData.contract_details || ''}
-            onChange={handleChange}
-            rows={4}
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono"
-            placeholder='Ej.: "Plan Familiar con atención domiciliaria incluida."'
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Introduce detalles adicionales si los hay.
-          </p>
-        </div>
+        <FormField
+          id="contract_details"
+          name="contract_details"
+          label="Detalles del Contrato (Opcional)"
+          type="textarea"
+          value={formData.contract_details || ''}
+          onChange={handleChange}
+          rows={4}
+          placeholder='Ej.: "Plan Familiar con atención domiciliaria incluida."'
+          infoText="Introduce detalles adicionales si los hay."
+        />
 
         {/* ———————————— Campos Específicos: Plan Médico Familiar ———————————— */}
 
         {/* Deducible Anual Familiar */}
-        <div>
-          <label
-            htmlFor="deductible"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Deducible Anual Familiar ($)
-          </label>
-          <input
-            type="number"
-            id="deductible"
-            name="deductible"
-            value={formData.deductible}
-            onChange={handleChange}
-            required
-            min={1500}
-            max={3000}
-            step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Rango permitido: $1,500 – $3,000.
-          </p>
-        </div>
+        <FormField
+          id="deductible"
+          name="deductible"
+          label="Deducible Anual Familiar ($)"
+          type="number"
+          value={formData.deductible}
+          onChange={handleChange}
+          required
+          min={1500}
+          max={3000}
+          step="1"
+          infoText="Rango permitido: $1,500 – $3,000."
+        />
 
         {/* Coaseguro (20%) */}
-        <div>
-          <label
-            htmlFor="coinsurance"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Coaseguro (%)
-          </label>
-          <input
-            type="number"
-            id="coinsurance"
-            name="coinsurance"
-            value={formData.coinsurance}
-            readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Para el Plan Familiar, el coaseguro está fijado en 20 %.
-          </p>
-        </div>
+        <FormField
+          id="coinsurance"
+          name="coinsurance"
+          label="Coaseguro (%)"
+          type="number"
+          value={formData.coinsurance}
+          readOnly // Esto hará que el onChange sea opcional
+          infoText="Para el Plan Familiar, el coaseguro está fijado en 20 %."
+        />
 
         {/* Máximo Desembolsable Anual Familiar */}
-        <div>
-          <label
-            htmlFor="max_annual"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Máximo Desembolsable Anual Familiar ($)
-          </label>
-          <input
-            type="number"
-            id="max_annual"
-            name="max_annual"
-            value={formData.max_annual}
-            readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Límite: $80,000/año (familiar).
-          </p>
-        </div>
+        <FormField
+          id="max_annual"
+          name="max_annual"
+          label="Máximo Desembolsable Anual Familiar ($)"
+          type="number"
+          value={formData.max_annual}
+          readOnly // Esto hará que el onChange sea opcional
+          infoText="Límite: $80,000/año (familiar)."
+        />
 
         {/* Cobertura Dental Básica (incluida) */}
         <div>
@@ -531,10 +589,7 @@ export default function PlanFamiliarForm() {
             onChange={handleChange}
             className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
-          <label
-            htmlFor="wants_dental_premium"
-            className="ml-2 block text-sm text-gray-700"
-          >
+          <label htmlFor="wants_dental_premium" className="ml-2 block text-sm text-gray-700">
             Quiero Cobertura Dental Premium (+$40/mes)
           </label>
         </div>
@@ -554,10 +609,7 @@ export default function PlanFamiliarForm() {
             onChange={handleChange}
             className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
           />
-          <label
-            htmlFor="wants_vision"
-            className="ml-2 block text-sm text-gray-700"
-          >
+          <label htmlFor="wants_vision" className="ml-2 block text-sm text-gray-700">
             Quiero Cobertura de Visión (+$20/mes)
           </label>
         </div>
@@ -567,7 +619,7 @@ export default function PlanFamiliarForm() {
           </p>
         )}
 
-        {/* Atención Domiciliaria */}
+        {/* Atención Domiciliaria (texto informativo) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Atención Domiciliaria
@@ -578,38 +630,27 @@ export default function PlanFamiliarForm() {
         </div>
 
         {/* Dependientes (0 – 4) */}
-        <div>
-          <label
-            htmlFor="num_dependents"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Número de Dependientes (0–4)
-          </label>
-          <input
-            type="number"
-            id="num_dependents"
-            name="num_dependents"
-            value={formData.num_dependents}
-            onChange={handleChange}
-            required
-            min={0}
-            max={4}
-            step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Cada dependiente extra +$100/mes.
-          </p>
-        </div>
+        <FormField
+          id="num_dependents"
+          name="num_dependents"
+          label="Número de Dependientes (0–4)"
+          type="number"
+          value={formData.num_dependents}
+          onChange={handleChange}
+          required
+          min={0}
+          max={4}
+          step="1"
+          infoText="Cada dependiente extra +$100/mes."
+        />
 
         {/* Campos dinámicos para cada dependiente */}
-        {/* Asegúrate de que dependents_details no es undefined antes de mapear */}
-        {(formData.num_dependents || 0) > 0 && formData.dependents_details && (
+        {formData.num_dependents > 0 && ( // Ya no necesitamos verificar dependents_details.length > 0 si siempre se inicializa
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">
               Detalles de Dependientes
             </h3>
-            {formData.dependents_details.map((dep, idx) => (
+            {Array.from({ length: formData.num_dependents }).map((_, idx) => (
               <div
                 key={idx}
                 className="p-4 border border-gray-200 rounded-lg space-y-3"
@@ -617,76 +658,39 @@ export default function PlanFamiliarForm() {
                 <p className="font-medium text-gray-800">
                   Dependiente #{idx + 1}
                 </p>
-                <div>
-                  <label
-                    htmlFor={`dep_name_${idx}`}
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Nombre Completo
-                  </label>
-                  <input
-                    type="text"
-                    id={`dep_name_${idx}`}
-                    name={`dep_name_${idx}`}
-                    value={dep.name}
-                    onChange={e =>
-                      // Asumiendo que handleDependentChange ya maneja la opcionalidad
-                      setFormData(prev => {
-                        const newDetails = [...(prev.dependents_details || [])];
-                        newDetails[idx] = {
-                          ...newDetails[idx],
-                          name: e.target.value,
-                        };
-                        return { ...prev, dependents_details: newDetails };
-                      })
-                    }
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor={`dep_birth_${idx}`}
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Fecha de Nacimiento
-                  </label>
-                  <input
-                    type="date"
-                    id={`dep_birth_${idx}`}
-                    name={`dep_birth_${idx}`}
-                    value={dep.birth_date}
-                    onChange={e =>
-                      handleDependentChange(idx, 'birth_date', e.target.value)
-                    }
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor={`dep_rel_${idx}`}
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Parentesco
-                  </label>
-                  <select
-                    id={`dep_rel_${idx}`}
-                    name={`dep_rel_${idx}`}
-                    value={dep.relationship}
-                    onChange={e =>
-                      handleDependentChange(idx, 'relationship', e.target.value)
-                    }
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  >
-                    <option value="">Selecciona parentesco</option>
-                    <option value="spouse">Cónyuge</option>
-                    <option value="child">Hijo(a)</option>
-                    <option value="parent">Padre/Madre</option>
-                    <option value="other">Otro</option>
-                  </select>
-                </div>
+                <FormField
+                  id={`dep_name_${idx}`}
+                  name={`dep_name_${idx}`}
+                  label="Nombre Completo"
+                  value={formData.dependents_details[idx]?.name || ''}
+                  onChange={e => handleDependentChange(idx, 'name', e.target.value)}
+                  required
+                />
+                <FormField
+                  id={`dep_birth_${idx}`}
+                  name={`dep_birth_${idx}`}
+                  label="Fecha de Nacimiento"
+                  type="date"
+                  value={formData.dependents_details[idx]?.birth_date || ''}
+                  onChange={e => handleDependentChange(idx, 'birth_date', e.target.value)}
+                  required
+                />
+                <FormField
+                  id={`dep_rel_${idx}`}
+                  name={`dep_rel_${idx}`}
+                  label="Parentesco"
+                  type="select"
+                  value={formData.dependents_details[idx]?.relationship || ''}
+                  onChange={e => handleDependentChange(idx, 'relationship', e.target.value)}
+                  required
+                  options={[
+                    { value: '', label: 'Selecciona parentesco' },
+                    { value: 'spouse', label: 'Cónyuge' },
+                    { value: 'child', label: 'Hijo(a)' },
+                    { value: 'parent', label: 'Padre/Madre' },
+                    { value: 'other', label: 'Otro' },
+                  ]}
+                />
               </div>
             ))}
           </div>

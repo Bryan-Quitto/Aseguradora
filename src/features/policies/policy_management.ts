@@ -16,6 +16,9 @@ export interface InsuranceProduct {
 }
 
 // Interfaces extendidas para “Policy” que incluyen los nuevos campos
+// Interfaz base para una Póliza, tal como podría estar en la base de datos.
+// Los campos específicos de cada tipo de seguro son opcionales aquí,
+// ya que una póliza genérica no los tendrá todos.
 export interface Policy {
   id: string;
   policy_number: string;
@@ -23,7 +26,7 @@ export interface Policy {
   agent_id: string | null;
   product_id: string;
   start_date: string; // Formato 'YYYY-MM-DD'
-  end_date: string;   // Formato 'YYYY-MM-DD'
+  end_date: string; // Formato 'YYYY-MM-DD'
   status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
   premium_amount: number;
   payment_frequency: 'monthly' | 'quarterly' | 'annually';
@@ -32,66 +35,69 @@ export interface Policy {
   // — Campos opcionales agregados para distintos tipos de seguro:
 
   // ▶︎ Seguros de Vida:
-  coverage_amount?: number;           // Monto de cobertura (vida o AD&D)
-  ad_d_included?: boolean;            // Si AD&D está incluido o no
-  ad_d_coverage?: number;             // Monto de cobertura AD&D
+  coverage_amount?: number; // Monto de cobertura (vida o AD&D)
+  ad_d_included?: boolean; // Si AD&D está incluido o no
+  ad_d_coverage?: number; // Monto de cobertura AD&D
   beneficiaries?: Array<{
     name: string;
     relationship: string;
     percentage: number;
-  }>;                                 // Lista de beneficiarios (JSONB)
-  age_at_inscription?: number;        // Edad al inscribirse (vida suplementaria, AD&D)
-  numBeneficiaries?: number; // Añadido también para actualización
+  }>; // Lista de beneficiarios (JSONB)
+  age_at_inscription?: number; // Edad al inscribirse (vida suplementaria, AD&D)
+  num_beneficiaries?: number; // Añadido para controlar el número de beneficiarios en el formulario
 
   // ▶︎ Vida Dependientes (común para algunos planes de vida y salud con dependientes):
-  num_dependents?: number;            // Número de dependientes
+  num_dependents?: number; // Número de dependientes
   dependents_details?: Array<{
     name: string;
     birth_date: string;
     relationship: string;
-  }>;                                 // Datos de cada dependiente (JSONB)
-  dependent_type_counts?: { spouse: number; children: number }; // Añadido para controlar el conteo de dependientes
-  
-  // ▶︎ Seguros de Salud:
-  // Estos campos ahora son **requeridos** en la interfaz CreatePolicyData
-  // si siempre se inicializan y usan en el Plan Básico.
-  deductible?: number;                // Deducible anual
-  coinsurance?: number;               // Porcentaje de coaseguro
-  max_annual?: number;                // Máximo desembolsable anual
-  has_dental?: boolean;               // Si hay cobertura dental (básica o premium)
-  has_vision?: boolean;               // Si hay cobertura de visión
+  }>; // Datos de cada dependiente (JSONB)
+  dependent_type_counts?: { spouse: number; children: number }; // Añadido para controlar el conteo de tipos de dependientes
 
-  // Los siguientes se mantienen opcionales, asumiendo que no son específicos del Plan Básico que estás manejando.
-  num_dependents_health?: number;     // Número de dependientes en plan salud
+  // ▶︎ Seguros de Salud:
+  deductible?: number; // Deducible anual
+  coinsurance?: number; // Porcentaje de coaseguro
+  max_annual?: number; // Máximo desembolsable anual
+  has_dental?: boolean; // Si hay cobertura dental (básica o premium)
+  has_vision?: boolean; // Si hay cobertura de visión
+
+  num_dependents_health?: number; // Número de dependientes en plan salud
   dependents_details_health?: Array<{
     name: string;
     birth_date: string;
     relationship: string;
-  }>;                                 // Datos de dependientes en plan salud (JSONB)
-  has_dental_basic?: boolean;         // Plan salud: dental básica incluida
-  wants_dental_premium?: boolean;     // Si solicitó dental premium
-  has_dental_premium?: boolean;       // Si dental premium está incluido
-  has_vision_basic?: boolean;         // Plan salud: visión básica incluida
-  wants_vision?: boolean;             // Si solicitó visión
-  has_vision_full?: boolean;          // Si visión completa está incluida
-  wellness_rebate?: number;           // Reembolso mensual por programa de bienestar
+  }>; // Datos de dependientes en plan salud (JSONB)
+  has_dental_basic?: boolean; // Plan salud: dental básica incluida
+  wants_dental_premium?: boolean; // Si solicitó dental premium
+  has_dental_premium?: boolean; // Si dental premium está incluido
+  has_vision_basic?: boolean; // Plan salud: visión básica incluida
+  wants_vision?: boolean; // Si solicitó visión
+  has_vision_full?: boolean; // Si visión completa está incluida
+  wellness_rebate?: number; // Reembolso mensual por programa de bienestar
 
   created_at: string;
   updated_at: string;
 }
 
-// Interfaz para la creación de una nueva póliza, con campos opcionales según tipo
+// Interfaz base para la CREACIÓN de una nueva póliza.
+// Define los campos que SIEMPRE son necesarios para crear CUALQUIER póliza.
+// Los campos específicos de cada tipo de seguro siguen siendo opcionales aquí.
 export interface CreatePolicyData {
   policy_number: string;
   client_id: string;
-  agent_id?: string | null;
+  agent_id?: string | null; // `agent_id` es opcional si el backend lo maneja o si el usuario no siempre lo proporciona
   product_id: string;
   start_date: string;
   end_date: string;
-  status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+  status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected'; // `status` podría tener un valor por defecto
   premium_amount: number;
   payment_frequency: 'monthly' | 'quarterly' | 'annually';
   contract_details?: string | null;
+
+  // Los campos específicos de cada tipo de seguro, como los de Vida, Salud, etc.,
+  // siguen siendo opcionales en esta interfaz base.
+  // Será la interfaz específica del tipo de seguro la que los haga obligatorios si es necesario.
 
   // ▶︎ Seguros de Vida:
   coverage_amount?: number;
@@ -103,26 +109,23 @@ export interface CreatePolicyData {
     percentage: number;
   }>;
   age_at_inscription?: number;
-  numBeneficiaries?: number; // Añadido también para actualización
+  num_beneficiaries?: number;
 
   // ▶︎ Vida Dependientes:
-  // Estos los hice obligatorios ya que tu formulario de Plan Básico siempre los inicializa.
-  num_dependents: number; // <-- Quité el '?'
-  dependents_details: Array<{ // <-- Quité el '?'
+  num_dependents?: number;
+  dependents_details?: Array<{
     name: string;
     birth_date: string;
     relationship: string;
   }>;
+  dependent_type_counts?: { spouse: number; children: number };
 
   // ▶︎ Seguros de Salud:
-  // Estos los hice obligatorios ya que tu formulario de Plan Básico siempre los inicializa.
-  deductible: number; // <-- Quité el '?'
-  coinsurance: number; // <-- Quité el '?'
-  max_annual: number; // <-- Quité el '?'
-  has_dental: boolean; // <-- Quité el '?'
-  has_vision: boolean; // <-- Quité el '?'
-
-  // Los siguientes se mantienen opcionales, asumiendo que no son específicos del Plan Básico.
+  deductible?: number;
+  coinsurance?: number;
+  max_annual?: number;
+  has_dental?: boolean;
+  has_vision?: boolean;
   num_dependents_health?: number;
   dependents_details_health?: Array<{
     name: string;
@@ -136,6 +139,41 @@ export interface CreatePolicyData {
   wants_vision?: boolean;
   has_vision_full?: boolean;
   wellness_rebate?: number;
+}
+
+
+// NUEVA INTERFAZ ESPECÍFICA para la creación de Pólizas de Vida Suplementaria.
+// Hereda de CreatePolicyData y hace OBLIGATORIOS los campos relevantes para este tipo de seguro.
+export interface CreateVidaSuplementariaPolicyData extends CreatePolicyData {
+  coverage_amount: number;
+  ad_d_included: boolean;
+  ad_d_coverage: number; // Aunque sea 0 si `ad_d_included` es false, el campo debe estar presente.
+  beneficiaries: Array<{
+    name: string;
+    relationship: string;
+    percentage: number;
+  }>;
+  age_at_inscription: number;
+  num_beneficiaries: number;
+}
+
+export interface CreatePlanPremierPolicyData extends CreatePolicyData {
+  deductible: number;
+  coinsurance: number;
+  max_annual: number;
+  has_dental: boolean; // Obligatorio para Premier
+  has_vision: boolean; // Obligatorio para Premier
+  has_dental_premium: boolean; // Obligatorio para Premier
+  has_vision_full: boolean; // Obligatorio para Premier
+  wellness_rebate: number;
+  num_dependents: number; // El número de dependientes es requerido para definir la estructura
+  // dependents_details: Array<{ // Si siempre hay detalles cuando num_dependents > 0
+  //   name: string;
+  //   birth_date: string;
+  //   relationship: string;
+  // }>;
+  // Nota: dependents_details se deja como opcional porque su obligatoriedad
+  // depende de si num_dependents es > 0, lo cual se maneja en la lógica del formulario.
 }
 
 // Interfaz para la actualización de una póliza (todos los campos opcionales)
@@ -161,6 +199,7 @@ export interface UpdatePolicyData {
     percentage: number;
   }>;
   age_at_inscription?: number;
+  num_beneficiaries?: number; // Añadido también para actualización
 
   // ▶︎ Vida Dependientes:
   num_dependents?: number;
@@ -169,8 +208,9 @@ export interface UpdatePolicyData {
     birth_date: string;
     relationship: string;
   }>;
+  dependent_type_counts?: { spouse: number; children: number }; // Añadido también para actualización
 
-  // ▶︎ Seguros de Salud:
+  // ▶︎ Seguros de Salud: (NO TOCADO SEGÚN SOLICITUD)
   deductible?: number;
   coinsurance?: number;
   max_annual?: number;

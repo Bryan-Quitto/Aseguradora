@@ -45,10 +45,11 @@ export default function PlanIntermedioForm() {
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]);
+  const [products, setProducts] = useState<InsuranceProduct[]>([]); // Aunque no se usa directamente en el render, se mantiene para la carga
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [planIntermedioProduct, setPlanIntermedioProduct] = useState<InsuranceProduct | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -64,14 +65,28 @@ export default function PlanIntermedioForm() {
         return;
       }
       if (productsData) {
-        setProducts(productsData);
+        setProducts(productsData); // Guardar todos los productos
+        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Plan Intermedio" ---
+        const foundPlanIntermedioProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Intermedio');
+        if (foundPlanIntermedioProduct) {
+          setPlanIntermedioProduct(foundPlanIntermedioProduct);
+          setFormData(prev => ({
+            ...prev,
+            product_id: foundPlanIntermedioProduct.id, // Establece el ID en el formData
+          }));
+        } else {
+          setError('Error: El producto "Seguro de Salud Plan Intermedio" no fue encontrado. Asegúrate de que existe en la base de datos.');
+          setLoading(false); // Detener la carga si el producto no se encuentra
+          return;
+        }
       }
 
       // Cargar clientes
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
       if (clientsError) {
         console.error('Error al cargar clientes:', clientsError);
-        setError(prev => (prev ? prev + ' Y clientes.' : 'Error al cargar los clientes.'));
+        // Concatenar el error si ya hay uno de productos, o establecer uno nuevo
+        setError(prev => (prev ? prev + ' Y error al cargar clientes.' : 'Error al cargar los clientes.'));
         setLoading(false);
         return;
       }
@@ -89,6 +104,7 @@ export default function PlanIntermedioForm() {
   // Helpers
   // -----------------------------------------------------
   const generatePolicyNumber = () => {
+    // Generación de número de póliza simple para frontend
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
@@ -96,24 +112,38 @@ export default function PlanIntermedioForm() {
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
+
     setFormData(prev => {
-      // Si es premium_amount
-      if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) };
+      // Si es premium_amount o deductible, asegúrate de que sea un número
+      if (name === 'premium_amount' || name === 'deductible' || name === 'coinsurance' || name === 'max_annual') {
+        const numValue = parseFloat(value);
+        return { ...prev, [name]: isNaN(numValue) ? 0 : numValue };
       }
-      // Si es número de dependientes
+      // Si es num_dependents, maneja la creación/actualización del array de dependientes
       if (name === 'num_dependents') {
-        const num = parseInt(value) || 0;
-        const newDependentsArray = new Array(num).fill(null).map(() => ({
-          name: '',
-          birth_date: '',
-          relationship: '',
-        }));
-        return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
+        const num = parseInt(value);
+        const newNumDependents = isNaN(num) || num < 0 ? 0 : Math.min(num, 3); // Límite de 3 dependientes
+
+        // Si el número de dependientes disminuye, trunca el array
+        // Si aumenta, añade nuevos objetos dependientes vacíos
+        const currentDependents = prev.dependents_details || [];
+        const newDependentsArray = Array.from({ length: newNumDependents }, (_, i) =>
+          currentDependents[i] || { name: '', birth_date: '', relationship: '' }
+        );
+
+        return { ...prev, num_dependents: newNumDependents, dependents_details: newDependentsArray };
       }
-      // Booleanos
+      // Booleanos (checkboxes)
       if (type === 'checkbox') {
-        return { ...prev, [name]: (e.target as HTMLInputElement).checked };
+        // Asegura que has_dental y has_vision se actualicen según wants_dental_premium y wants_vision
+        const checked = (e.target as HTMLInputElement).checked;
+        if (name === 'wants_dental_premium') {
+            return { ...prev, wants_dental_premium: checked, has_dental: checked || prev.has_dental_basic };
+        }
+        if (name === 'wants_vision') {
+            return { ...prev, wants_vision: checked, has_vision: checked };
+        }
+        return { ...prev, [name]: checked };
       }
       // Resto de inputs
       return { ...prev, [name]: value };
@@ -127,10 +157,15 @@ export default function PlanIntermedioForm() {
   ) => {
     setFormData(prev => {
       const newDetails = [...(prev.dependents_details || [])];
-      newDetails[idx] = {
-        ...newDetails[idx],
-        [field]: value,
-      };
+      if (newDetails[idx]) {
+        newDetails[idx] = {
+          ...newDetails[idx],
+          [field]: value,
+        };
+      } else {
+        // En caso de que el índice no exista, lo cual no debería pasar si num_dependents se maneja correctamente
+        console.warn(`Attempted to update non-existent dependent at index ${idx}.`);
+      }
       return { ...prev, dependents_details: newDetails };
     });
   };
@@ -140,42 +175,98 @@ export default function PlanIntermedioForm() {
     setError(null);
     setSuccessMessage(null);
 
+    // -----------------------------------------------------
+    // Validaciones de Formulario
+    // -----------------------------------------------------
     if (!user?.id) {
-      setError('No se pudo obtener el ID del agente para asignar la póliza.');
+      setError('No se pudo obtener el ID del agente para asignar la póliza. Por favor, vuelve a iniciar sesión.');
       return;
     }
 
-    // Validaciones Plan Intermedio
-    // 1) Deducible entre 1000 y 2500
-    if (formData.deductible! < 1500 || formData.deductible! > 3000) { // Añadir '!'
-      setError('El deducible debe estar entre $1,500 y $3,000.');
-      return;
-    }
-    // 2) coinsurance = 20
-    if (formData.coinsurance! !== 20) { // Añadir '!'
-      setError('El coaseguro para Plan Familiar debe ser 20 %.');
-      return;
-    }
-    // 3) num_dependents <= 4
-    if ((formData.num_dependents || 0) < 0 || (formData.num_dependents || 0) > 4) { // Usar || 0
-      setError('El número de dependientes debe ser entre 0 y 4.');
-      return;
-    }
-    // 4) Si hay dependientes, todos deben tener datos
-    for (let i = 0; i < (formData.num_dependents || 0); i++) { // Usar || 0
-      const d = formData.dependents_details?.[i]; // Añadir '?'
-      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
-        setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
+    if (!formData.client_id) {
+        setError('Por favor, selecciona un cliente.');
         return;
+    }
+
+    if (!formData.product_id) {
+        setError('Error: El ID del producto no ha sido asignado. Recarga la página.');
+        return;
+    }
+
+    // Validación de fechas
+    if (!formData.start_date || !formData.end_date) {
+        setError('Las fechas de inicio y fin de la póliza son obligatorias.');
+        return;
+    }
+    const startDate = new Date(formData.start_date);
+    const endDate = new Date(formData.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Normalizar a inicio del día
+
+    if (startDate < today) {
+        setError('La fecha de inicio no puede ser anterior a la fecha actual.');
+        return;
+    }
+    if (endDate <= startDate) {
+        setError('La fecha de fin debe ser posterior a la fecha de inicio.');
+        return;
+    }
+
+    // 1) Deducible entre 1000 y 2500
+    if (formData.deductible === undefined || formData.deductible < 1000 || formData.deductible > 2500) {
+      setError('El deducible debe estar entre $1,000 y $2,500.');
+      return;
+    }
+    // 2) Coaseguro = 20%
+    if (formData.coinsurance === undefined || formData.coinsurance !== 20) {
+      setError('El coaseguro para Plan Intermedio debe ser 20%.');
+      return;
+    }
+    // 3) Máximo Desembolsable Anual = 50000
+    if (formData.max_annual === undefined || formData.max_annual !== 50000) {
+        setError('El máximo desembolsable anual para Plan Intermedio debe ser $50,000.');
+        return;
+    }
+    // 4) Prima entre $150 y $400
+    if (formData.premium_amount === undefined || formData.premium_amount < 150 || formData.premium_amount > 400) {
+      setError('El monto de la prima debe estar entre $150 y $400 mensuales.');
+      return;
+    }
+    // 5) num_dependents entre 0 y 3
+    if (formData.num_dependents === undefined || formData.num_dependents < 0 || formData.num_dependents > 3) {
+      setError('El número de dependientes debe ser entre 0 y 3.');
+      return;
+    }
+    // 6) Si hay dependientes, todos deben tener datos completos y válidos
+    if (formData.num_dependents > 0) {
+      if (!formData.dependents_details || formData.dependents_details.length !== formData.num_dependents) {
+        setError('Los detalles de los dependientes no coinciden con el número especificado.');
+        return;
+      }
+      for (let i = 0; i < formData.num_dependents; i++) {
+        const d = formData.dependents_details[i];
+        if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
+          setError(`Por favor, completa todos los campos del dependiente ${i + 1} (nombre, fecha de nacimiento y parentesco).`);
+          return;
+        }
+        // Validación de fecha de nacimiento del dependiente
+        const depBirthDate = new Date(d.birth_date);
+        if (depBirthDate > today) {
+            setError(`La fecha de nacimiento del dependiente ${i + 1} no puede ser en el futuro.`);
+            return;
+        }
       }
     }
 
     const policyNumber = generatePolicyNumber();
-    const policyToCreate: any = {
+
+    // Crear una copia del formData para enviar, asegurando los tipos correctos y campos específicos
+    const policyToCreate: CreatePolicyData = {
       ...formData,
       policy_number: policyNumber,
-      agent_id: user.id,
+      agent_id: user.id, // Asegurado por la validación inicial de user.id
       premium_amount: Number(formData.premium_amount),
+      // Campos específicos para Plan Intermedio, asegurando que se envíen
       deductible: formData.deductible,
       coinsurance: formData.coinsurance,
       max_annual: formData.max_annual,
@@ -185,20 +276,23 @@ export default function PlanIntermedioForm() {
       wants_vision: formData.wants_vision,
       num_dependents: formData.num_dependents,
       dependents_details: formData.dependents_details,
+      // Actualiza has_dental y has_vision basados en las selecciones
+      has_dental: formData.has_dental_basic || formData.wants_dental_premium,
+      has_vision: formData.wants_vision,
     };
 
     const { data, error: createError } = await createPolicy(policyToCreate);
 
     if (createError) {
       console.error('Error al crear póliza:', createError);
-      setError(`Error al crear la póliza: ${createError.message}`);
+      setError(`Error al crear la póliza: ${createError.message || 'Error desconocido'}`);
     } else if (data) {
       setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
-      setFormData(prev => ({
-        ...prev,
+      // Limpiar formulario y reiniciar estado después de un éxito
+      setFormData({
         policy_number: '',
         client_id: '',
-        product_id: '',
+        product_id: planIntermedioProduct?.id || '', // Restablecer product_id si el producto ya fue encontrado
         start_date: '',
         end_date: '',
         premium_amount: 0,
@@ -214,7 +308,9 @@ export default function PlanIntermedioForm() {
         wants_vision: false,
         num_dependents: 0,
         dependents_details: [],
-      }));
+        has_dental: true,
+        has_vision: false,
+      });
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -230,6 +326,24 @@ export default function PlanIntermedioForm() {
       </div>
     );
   }
+
+  // Si hay un error y no estamos cargando, y el producto no se encontró
+  if (error && !loading && !planIntermedioProduct) {
+    return (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 text-center">
+        <strong className="font-bold">¡Error crítico!</strong>
+        <span className="block sm:inline"> {error}</span>
+        <p className="mt-2 text-sm">No se puede cargar el formulario sin el producto "Plan Intermedio". Por favor, verifica la configuración de productos.</p>
+        <button
+            onClick={() => navigate('/agent/dashboard')}
+            className="mt-4 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+            Volver al Dashboard
+        </button>
+      </div>
+    );
+  }
+
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-blue-100">
@@ -289,28 +403,22 @@ export default function PlanIntermedioForm() {
         {/* Producto de Seguro */}
         <div>
           <label
-            htmlFor="product_id"
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
           </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {products
-              .filter(p => p.name === 'Plan Médico Intermedio')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – ${product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
+          <input
+            type="text"
+            id="product_name_display"
+            name="product_name_display"
+            value={planIntermedioProduct ? planIntermedioProduct.name : 'Cargando producto...'}
+            readOnly
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Este formulario es específicamente para el "Plan Intermedio".
+          </p>
         </div>
 
         {/* Fechas Inicio / Fin */}
@@ -483,9 +591,9 @@ export default function PlanIntermedioForm() {
             type="number"
             id="coinsurance"
             name="coinsurance"
-            value={formData.coinsurance}
+            value={20} // Valor fijo
             readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
+            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
           />
           <p className="mt-1 text-xs text-gray-500">
             Para el Plan Intermedio, el coaseguro está fijado en 20 %.
@@ -504,9 +612,9 @@ export default function PlanIntermedioForm() {
             type="number"
             id="max_annual"
             name="max_annual"
-            value={formData.max_annual}
+            value={50000} // Valor fijo
             readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
+            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
           />
           <p className="mt-1 text-xs text-gray-500">
             Límite: $50,000/año (fijo para Plan Intermedio).
@@ -585,7 +693,7 @@ export default function PlanIntermedioForm() {
             onChange={handleChange}
             required
             min={0}
-            max={3}
+            max={3} // Actualizado a 3 según la descripción
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
@@ -595,8 +703,7 @@ export default function PlanIntermedioForm() {
         </div>
 
         {/* Campos dinámicos para cada dependiente */}
-        {/* Asegúrate de que dependents_details no es undefined antes de mapear */}
-        {(formData.num_dependents || 0) > 0 && formData.dependents_details && (
+        {formData.num_dependents! > 0 && formData.dependents_details && (
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">
               Detalles de Dependientes
@@ -621,17 +728,7 @@ export default function PlanIntermedioForm() {
                     id={`dep_name_${idx}`}
                     name={`dep_name_${idx}`}
                     value={dep.name}
-                    onChange={e =>
-                      // Asumiendo que handleDependentChange ya maneja la opcionalidad
-                      setFormData(prev => {
-                        const newDetails = [...(prev.dependents_details || [])];
-                        newDetails[idx] = {
-                          ...newDetails[idx],
-                          name: e.target.value,
-                        };
-                        return { ...prev, dependents_details: newDetails };
-                      })
-                    }
+                    onChange={e => handleDependentChange(idx, 'name', e.target.value)}
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
@@ -648,9 +745,7 @@ export default function PlanIntermedioForm() {
                     id={`dep_birth_${idx}`}
                     name={`dep_birth_${idx}`}
                     value={dep.birth_date}
-                    onChange={e =>
-                      handleDependentChange(idx, 'birth_date', e.target.value)
-                    }
+                    onChange={e => handleDependentChange(idx, 'birth_date', e.target.value)}
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
@@ -666,9 +761,7 @@ export default function PlanIntermedioForm() {
                     id={`dep_rel_${idx}`}
                     name={`dep_rel_${idx}`}
                     value={dep.relationship}
-                    onChange={e =>
-                      handleDependentChange(idx, 'relationship', e.target.value)
-                    }
+                    onChange={e => handleDependentChange(idx, 'relationship', e.target.value)}
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   >

@@ -14,10 +14,10 @@ import { ClientProfile, getAllClientProfiles } from '../../../clients/hooks/clie
  */
 export default function PlanBasicoForm() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useAuth(); // Obtiene el usuario autenticado del contexto de autenticación
 
   // -----------------------------------------------------
-  // Estado base (todos los campos que vienen en CreatePolicyData)
+  // Estado base para los datos del formulario de la póliza
   // -----------------------------------------------------
   const [formData, setFormData] = useState<CreatePolicyData>({
     policy_number: '',
@@ -29,155 +29,214 @@ export default function PlanBasicoForm() {
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
-    // A continuación: campos específicos para Plan Básico (ahora son requeridos en CreatePolicyData)
-    deductible: 2000,       // valor por defecto dentro del rango [2000‒5000]
-    coinsurance: 30,        // 30 % fijo
-    max_annual: 20000,      // máximo desembolsable anual
-    num_dependents: 0,      // número de dependientes incluidos (0–2)
-    dependents_details: [] as { name: string; birth_date: string; relationship: string }[],
-    has_dental: false,      // Plan Básico no incluye dental premium, se guarda false
-    has_vision: false,      // Plan Básico no incluye visión (se deja hardcodeado)
+    // Campos específicos para Plan Básico, ahora requeridos en CreatePolicyData
+    deductible: 2000, // Valor por defecto dentro del rango [2000‒5000]
+    coinsurance: 30, // 30 % fijo
+    max_annual: 20000, // Máximo desembolsable anual
+    num_dependents: 0, // Número de dependientes incluidos (0–2)
+    dependents_details: [], // Inicializado como un array vacío de dependientes
+    has_dental: false, // Plan Básico no incluye dental premium, se guarda false
+    has_vision: false, // Plan Básico no incluye visión (se deja hardcodeado)
   });
 
-  // Listas para dropdowns
-  const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // -----------------------------------------------------
+  // Estados para manejar la UI (listas, carga, errores, mensajes de éxito)
+  // -----------------------------------------------------
+  const [clients, setClients] = useState<ClientProfile[]>([]); // Lista de perfiles de clientes
+  const [loading, setLoading] = useState<boolean>(true); // Indicador de estado de carga
+  const [error, setError] = useState<string | null>(null); // Mensaje de error
+  const [successMessage, setSuccessMessage] = useState<string | null>(null); // Mensaje de éxito
+  const [planBasicoProduct, setPlanBasicoProduct] = useState<InsuranceProduct | null>(null); // Producto específico "Plan Básico"
 
+  // -----------------------------------------------------
+  // useEffect para la carga inicial de datos (clientes y producto específico)
+  // -----------------------------------------------------
   useEffect(() => {
     const fetchInitialData = async () => {
-      setLoading(true);
-      setError(null);
+      setLoading(true); // Inicia el estado de carga
+      setError(null); // Limpia cualquier error previo
 
-      // Cargar productos (solo se muestran los activos)
+      // Cargar productos de seguro activos
       const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
       if (productsError) {
         console.error('Error al cargar productos de seguro:', productsError);
         setError('Error al cargar los productos de seguro.');
-        setLoading(false);
+        setLoading(false); // Detiene el estado de carga en caso de error
         return;
       }
       if (productsData) {
-        setProducts(productsData);
+        // Encuentra y establece el producto específico "Seguro de Salud Plan Básico"
+        const foundPlanBasicoProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Básico');
+        if (foundPlanBasicoProduct) {
+          setPlanBasicoProduct(foundPlanBasicoProduct);
+          // Establece el ID del producto encontrado en el formData
+          setFormData(prev => ({
+            ...prev,
+            product_id: foundPlanBasicoProduct.id,
+          }));
+        } else {
+          // Muestra un error si el producto específico no se encuentra
+          setError('Error: El producto "Seguro de Salud Plan Básico" no fue encontrado. Asegúrate de que existe en la base de datos.');
+          setLoading(false); // Detiene la carga si el producto no se encuentra
+          return;
+        }
       }
 
-      // Cargar clientes
+      // Cargar perfiles de clientes
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
       if (clientsError) {
         console.error('Error al cargar clientes:', clientsError);
-        setError(prev => (prev ? prev + ' Y clientes.' : 'Error al cargar los clientes.'));
-        setLoading(false);
+        // Concatena el mensaje de error si ya existía uno
+        setError(prev => (prev ? prev + ' Y error al cargar clientes.' : 'Error al cargar los clientes.'));
+        setLoading(false); // Detiene la carga en caso de error de clientes
         return;
       }
       if (clientsData) {
-        setClients(clientsData);
+        setClients(clientsData); // Establece la lista de clientes
       }
 
-      setLoading(false);
+      setLoading(false); // Finaliza el estado de carga
     };
 
-    fetchInitialData();
-  }, []);
+    fetchInitialData(); // Ejecuta la función de carga inicial
+  }, []); // El array vacío asegura que este efecto se ejecuta solo una vez al montar el componente
 
   // -----------------------------------------------------
-  // Helpers
+  // Funciones de utilidad (Helpers)
   // -----------------------------------------------------
-  const generatePolicyNumber = () => {
+
+  /**
+   * Genera un número de póliza único.
+   * @returns {string} El número de póliza generado.
+   */
+  const generatePolicyNumber = (): string => {
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
+  /**
+   * Maneja los cambios en los campos del formulario.
+   * @param {ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>} e Evento de cambio.
+   */
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
+
     setFormData(prev => {
-      // Si es premium_amount, lo parseamos a float
+      // Manejo específico para 'premium_amount' (parsear a float)
       if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) };
+        return { ...prev, [name]: parseFloat(value) || 0 }; // Asegura que sea un número, por defecto 0
       }
-      // Si es número de dependientes, inicializamos el array de dependents_details al cambiar
+
+      // Manejo específico para 'num_dependents'
       if (name === 'num_dependents') {
-        const num = parseInt(value) || 0;
-        const newDependentsArray = new Array(num).fill(null).map(() => ({
-          name: '',
-          birth_date: '',
-          relationship: '',
-        }));
+        const num = parseInt(value, 10) || 0; // Parsear a entero, por defecto 0
+        // Crea un nuevo array de `dependents_details` con el número correcto de elementos
+        // Cada nuevo elemento se inicializa con campos vacíos
+        const newDependentsArray = Array.from({ length: num }, (_, i) => {
+          // Reutiliza los datos existentes si la posición ya tiene datos
+          return prev.dependents_details && prev.dependents_details[i]
+            ? prev.dependents_details[i]
+            : { name: '', birth_date: '', relationship: '' };
+        });
         return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
       }
-      // Campos booleanos (checkbox)
+
+      // Manejo para campos booleanos (checkbox)
       if (type === 'checkbox') {
         return { ...prev, [name]: (e.target as HTMLInputElement).checked };
       }
-      // Resto de inputs text/select/textarea
+
+      // Manejo general para otros inputs (texto, select, textarea)
       return { ...prev, [name]: value };
     });
   };
 
-  // Manejador para los campos de cada dependiente (dinámico)
+  /**
+   * Maneja los cambios en los campos de un dependiente específico.
+   * @param {number} idx Índice del dependiente en el array.
+   * @param {'name' | 'birth_date' | 'relationship'} field Campo del dependiente a actualizar.
+   * @param {string} value Nuevo valor del campo.
+   */
   const handleDependentChange = (
     idx: number,
     field: 'name' | 'birth_date' | 'relationship',
     value: string
   ) => {
     setFormData(prev => {
-      // Asegúrate de que dependents_details existe antes de intentar copiarlo
-      const newDetails = [...(prev.dependents_details || [])];
+      // Crea una copia del array `dependents_details` para evitar mutación directa del estado
+      const newDetails = [...prev.dependents_details!];
+      // Actualiza el campo específico del dependiente en la posición `idx`
       newDetails[idx] = {
-        ...newDetails[idx],
-        [field]: value,
+        ...newDetails[idx], // Copia los datos existentes del dependiente
+        [field]: value, // Actualiza el campo específico
       };
-      return { ...prev, dependents_details: newDetails };
+      return { ...prev, dependents_details: newDetails }; // Actualiza el estado con el nuevo array
     });
   };
 
+  /**
+   * Maneja el envío del formulario.
+   * @param {FormEvent} e Evento de envío del formulario.
+   */
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+    e.preventDefault(); // Previene el comportamiento por defecto del formulario (recarga de página)
+    setError(null); // Limpia errores anteriores
+    setSuccessMessage(null); // Limpia mensajes de éxito anteriores
 
+    // Validación: Asegurarse de que el ID del agente esté disponible
     if (!user?.id) {
       setError('No se pudo obtener el ID del agente para asignar la póliza.');
       return;
     }
 
-    // Validaciones específicas de Plan Básico
-    // 1) La póliza básica debe tener deducible entre 2000 y 5000
-    if (formData.deductible! < 2000 || formData.deductible! > 5000) { // Añadir '!' si sabes que siempre estará presente en el formulario
+    // --- Validaciones específicas del "Plan Básico" ---
+
+    // 1) Deducible debe estar entre $2,000 y $5,000
+    if (formData.deductible! < 2000 || formData.deductible! > 5000) {
       setError('El deducible debe estar entre $2,000 y $5,000.');
       return;
     }
-    // 2) coinsurance debe ser 30 (fijo)
-    if (formData.coinsurance! !== 30) { // Añadir '!'
-      setError('El coaseguro para Plan Básico debe ser 30 %.');
+
+    // 2) Coaseguro debe ser 30% (fijo)
+    if (formData.coinsurance !== 30) {
+      setError('El coaseguro para Plan Básico debe ser 30%.');
       return;
     }
-    // 3) num_dependents <= 2
-    if ((formData.num_dependents || 0) < 0 || (formData.num_dependents || 0) > 2) { // Usar || 0 para manejar undefined
+
+    // 3) Número de dependientes debe ser entre 0 y 2
+    // Se usa '|| 0' para asegurar que `num_dependents` sea tratado como un número si fuera undefined
+    if (formData.num_dependents! < 0 || formData.num_dependents! > 2) {
       setError('El número de dependientes debe ser entre 0 y 2.');
       return;
     }
-    // 4) Si hay dependientes, todos deben tener datos (name, birth_date, relationship)
-    // Como dependents_details ahora es requerido en CreatePolicyData, ya no necesitamos la comprobación '?'
-    for (let i = 0; i < (formData.num_dependents || 0); i++) { // Usar || 0
-      const d = formData.dependents_details?.[i]; // Añadir '?'
-      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
+
+    // 4) Si hay dependientes, todos deben tener datos completos
+    // Se itera hasta `formData.num_dependents` y se accede al array `dependents_details`
+    for (let i = 0; i < formData.num_dependents!; i++) {
+      const dependent = formData.dependents_details![i];
+      // Verifica que el dependiente exista y que sus campos `name`, `birth_date` y `relationship` no estén vacíos.
+      if (!dependent || !dependent.name.trim() || !dependent.birth_date || !dependent.relationship.trim()) {
         setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
         return;
       }
     }
 
+    // Generar número de póliza
     const policyNumber = generatePolicyNumber();
-    // Ya no necesitas 'any' y los campos adicionales son parte de formData
+
+    // Crear el objeto de datos de la póliza para enviar
+    // Ya que `CreatePolicyData` ahora incluye todos los campos específicos,
+    // podemos simplemente desestructurar `formData` y añadir `agent_id` y `policy_number`.
     const policyToCreate: CreatePolicyData = {
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
+      // Asegurarse de que premium_amount sea un número (ya lo hace handleChange, pero es buena práctica confirmarlo)
       premium_amount: Number(formData.premium_amount),
     };
 
+    // Llamada a la API para crear la póliza
     const { data, error: createError } = await createPolicy(policyToCreate);
 
     if (createError) {
@@ -185,11 +244,11 @@ export default function PlanBasicoForm() {
       setError(`Error al crear la póliza: ${createError.message}`);
     } else if (data) {
       setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
-      setFormData(prev => ({
-        ...prev,
+      // Limpiar el formulario después del éxito
+      setFormData({
         policy_number: '',
         client_id: '',
-        product_id: '',
+        product_id: planBasicoProduct?.id || '', // Reinicia con el ID del producto básico si está disponible
         start_date: '',
         end_date: '',
         premium_amount: 0,
@@ -203,13 +262,19 @@ export default function PlanBasicoForm() {
         dependents_details: [],
         has_dental: false,
         has_vision: false,
-      }));
+      });
+      // Redirigir al usuario después de un breve retraso para que vea el mensaje de éxito
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
     }
   };
 
+  // -----------------------------------------------------
+  // Renderizado del componente
+  // -----------------------------------------------------
+
+  // Mostrar un mensaje de carga mientras se obtienen los datos iniciales
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -224,6 +289,7 @@ export default function PlanBasicoForm() {
         Crear Póliza – Plan Médico Básico
       </h2>
 
+      {/* Área para mostrar mensajes de error */}
       {error && (
         <div
           className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
@@ -233,6 +299,7 @@ export default function PlanBasicoForm() {
           <span className="block sm:inline"> {error}</span>
         </div>
       )}
+      {/* Área para mostrar mensajes de éxito */}
       {successMessage && (
         <div
           className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4"
@@ -244,9 +311,9 @@ export default function PlanBasicoForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* ———————————— Campos Comunes ———————————— */}
+        {/* ———————————— Campos Comunes de la Póliza ———————————— */}
 
-        {/* Cliente */}
+        {/* Campo de selección de Cliente */}
         <div>
           <label
             htmlFor="client_id"
@@ -273,37 +340,28 @@ export default function PlanBasicoForm() {
           </select>
         </div>
 
-        {/* Producto de Seguro */}
+        {/* Campo de visualización del Producto de Seguro (solo lectura) */}
         <div>
           <label
-            htmlFor="product_id"
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
           </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {/* Filtramos solo el Plan Básico (por ejemplo por un campo llamado “code” o “name”):
-                Aquí asumimos que el producto viene con `product.name === 'Plan Médico Básico'`
-            */}
-            {products
-              .filter(p => p.name === 'Plan Médico Básico')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – ${product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
+          <input
+            type="text"
+            id="product_name_display"
+            name="product_name_display"
+            value={planBasicoProduct ? planBasicoProduct.name : 'Cargando producto...'}
+            readOnly // Este campo es de solo lectura ya que es específico para el Plan Básico
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Este formulario es específicamente para el "Plan Básico".
+          </p>
         </div>
 
-        {/* Fechas Inicio / Fin */}
+        {/* Campos de Fechas de Inicio y Fin */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label
@@ -341,7 +399,7 @@ export default function PlanBasicoForm() {
           </div>
         </div>
 
-        {/* Prima y Frecuencia */}
+        {/* Campos de Monto de la Prima y Frecuencia de Pago */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label
@@ -357,8 +415,8 @@ export default function PlanBasicoForm() {
               value={formData.premium_amount}
               onChange={handleChange}
               required
-              min="50"
-              max="150"
+              min="50" // Validación de rango
+              max="150" // Validación de rango
               step="0.01"
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
@@ -388,7 +446,7 @@ export default function PlanBasicoForm() {
           </div>
         </div>
 
-        {/* Estado de la Póliza */}
+        {/* Campo de Estado de la Póliza */}
         <div>
           <label
             htmlFor="status"
@@ -412,7 +470,7 @@ export default function PlanBasicoForm() {
           </select>
         </div>
 
-        {/* Detalles del Contrato */}
+        {/* Campo de Detalles del Contrato (opcional) */}
         <div>
           <label
             htmlFor="contract_details"
@@ -423,7 +481,7 @@ export default function PlanBasicoForm() {
           <textarea
             id="contract_details"
             name="contract_details"
-            value={formData.contract_details || ''}
+            value={formData.contract_details || ''} // Asegura que no sea undefined para el textarea
             onChange={handleChange}
             rows={4}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono"
@@ -436,7 +494,7 @@ export default function PlanBasicoForm() {
 
         {/* ———————————— Campos Específicos: Plan Médico Básico ———————————— */}
 
-        {/* Deducible Anual */}
+        {/* Campo de Deducible Anual */}
         <div>
           <label
             htmlFor="deductible"
@@ -451,8 +509,8 @@ export default function PlanBasicoForm() {
             value={formData.deductible}
             onChange={handleChange}
             required
-            min={2000}
-            max={5000}
+            min={2000} // Límites específicos para el plan básico
+            max={5000} // Límites específicos para el plan básico
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
@@ -461,7 +519,7 @@ export default function PlanBasicoForm() {
           </p>
         </div>
 
-        {/* Coaseguro (fijo 30%) */}
+        {/* Campo de Coaseguro (fijo en 30%) */}
         <div>
           <label
             htmlFor="coinsurance"
@@ -474,7 +532,7 @@ export default function PlanBasicoForm() {
             id="coinsurance"
             name="coinsurance"
             value={formData.coinsurance}
-            readOnly
+            readOnly // Este campo es de solo lectura
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -482,7 +540,7 @@ export default function PlanBasicoForm() {
           </p>
         </div>
 
-        {/* Máximo Desembolsable Anual */}
+        {/* Campo de Máximo Desembolsable Anual (fijo en $20,000) */}
         <div>
           <label
             htmlFor="max_annual"
@@ -495,7 +553,7 @@ export default function PlanBasicoForm() {
             id="max_annual"
             name="max_annual"
             value={formData.max_annual}
-            readOnly
+            readOnly // Este campo es de solo lectura
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -503,7 +561,7 @@ export default function PlanBasicoForm() {
           </p>
         </div>
 
-        {/* Dependientes (0 – 2) */}
+        {/* Campo de Número de Dependientes (0 – 2) */}
         <div>
           <label
             htmlFor="num_dependents"
@@ -518,8 +576,8 @@ export default function PlanBasicoForm() {
             value={formData.num_dependents}
             onChange={handleChange}
             required
-            min={0}
-            max={2}
+            min={0} // Rango permitido
+            max={2} // Rango permitido
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
@@ -528,16 +586,16 @@ export default function PlanBasicoForm() {
           </p>
         </div>
 
-        /* Campos dinámicos para cada dependiente */
-        {/* Asegúrate de que dependents_details no es undefined antes de mapear */}
-        {(formData.num_dependents || 0) > 0 && formData.dependents_details && (
+        {/* Campos dinámicos para cada beneficiario (dependiente) */}
+        {/* Se renderizan solo si `num_dependents` es mayor que 0 y `dependents_details` está definido */}
+        {formData.num_dependents! > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">
               Detalles de Dependientes
             </h3>
-            {formData.dependents_details.map((dep, idx) => (
+            {formData.dependents_details!.map((dep, idx) => (
               <div
-                key={idx}
+                key={idx} // `idx` puede ser usado como key aquí ya que el orden no cambia y no se eliminan elementos individualmente
                 className="p-4 border border-gray-200 rounded-lg space-y-3"
               >
                 <p className="font-medium text-gray-800">
@@ -610,7 +668,7 @@ export default function PlanBasicoForm() {
           </div>
         )}
 
-        {/* Dental y Visión (Plan Básico no las ofrece) */}
+        {/* Nota sobre Cobertura Dental y Visión */}
         <div>
           <p className="text-sm text-gray-700">
             <strong>Nota:</strong> Este plan no incluye cobertura dental ni

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
   CreatePolicyData,
+  CreatePlanPremierPolicyData, // <--- Importamos la nueva interfaz
   InsuranceProduct,
   getActiveInsuranceProducts,
   createPolicy,
@@ -19,7 +20,8 @@ export default function PlanPremierForm() {
   // -----------------------------------------------------
   // Estado base + campos propios de Plan Premier
   // -----------------------------------------------------
-  const [formData, setFormData] = useState<CreatePolicyData>({
+  // Usamos la nueva interfaz específica aquí
+  const [formData, setFormData] = useState<CreatePlanPremierPolicyData>({ // <--- CAMBIO CLAVE AQUÍ
     policy_number: '',
     client_id: '',
     product_id: '',
@@ -29,16 +31,16 @@ export default function PlanPremierForm() {
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
-    // ↓ Campos específicos Plan Premier
-    deductible: 500,            // rango [500‒1000]
-    coinsurance: 10,            // 10 % fijo
-    max_annual: 100000,         // máximo desembolsable anual
-    has_dental_premium: true,   // Premium incluida
-    has_vision_full: true,      // Visión completa incluida
-    wellness_rebate: 50,        // $50/mes reembolso gym (info solo explicativa)
+    // ↓ Campos específicos Plan Premier (ahora son obligatorios por el tipo)
+    deductible: 500, // rango [500‒1000]
+    coinsurance: 10, // 10 % fijo
+    max_annual: 100000, // máximo desembolsable anual
+    has_dental_premium: true, // Premium incluida
+    has_vision_full: true, // Visión completa incluida
+    wellness_rebate: 50, // $50/mes reembolso gym (info solo explicativa)
     num_dependents: 0,
-    dependents_details: [] as { name: string; birth_date: string; relationship: string }[],
-    // Campos genéricos de salud que deben estar en CreatePolicyData como opcionales o ser inferidos
+    dependents_details: [], // Inicializamos como array vacío, no como 'any'
+    // Campos genéricos de salud que son obligatorios para este plan
     has_dental: true, // Se asume que siempre tendrá dental premium
     has_vision: true, // Se asume que siempre tendrá visión completa
   });
@@ -48,6 +50,7 @@ export default function PlanPremierForm() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [planPremierProduct, setPlanPremierProduct] = useState<InsuranceProduct | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -63,7 +66,17 @@ export default function PlanPremierForm() {
         return;
       }
       if (productsData) {
-        setProducts(productsData);
+        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Plan Premier" ---
+        const foundPlanPremierProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Premier');
+        if (foundPlanPremierProduct) {
+          setPlanPremierProduct(foundPlanPremierProduct);
+          setFormData(prev => ({
+            ...prev,
+            product_id: foundPlanPremierProduct.id, // Establece el ID en el formData
+          }));
+        } else {
+          setError('Error: El producto "Plan Premier" no fue encontrado. Asegúrate de que existe en la base de datos.');
+        }
       }
 
       // Cargar clientes
@@ -103,15 +116,17 @@ export default function PlanPremierForm() {
       // Si es número de dependientes
       if (name === 'num_dependents') {
         const num = parseInt(value) || 0;
-        const newDependentsArray = new Array(num).fill(null).map(() => ({
-          name: '',
-          birth_date: '',
-          relationship: '',
-        }));
+        // Aseguramos que dependents_details siempre sea un array.
+        const newDependentsArray = new Array(num).fill(null).map((_, i) => (
+          (prev.dependents_details && prev.dependents_details[i]) || {
+            name: '',
+            birth_date: '',
+            relationship: '',
+          }
+        ));
         return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
       }
-      // Booleanos
-      // Para este plan, dental y visión están fijos en true, así que no hay checkbox. Omitimos tipo=checkbox.
+      // Booleanos (para este plan, dental y visión están fijos en true, así que no hay checkbox. Omitimos tipo=checkbox.)
       return { ...prev, [name]: value };
     });
   };
@@ -122,7 +137,8 @@ export default function PlanPremierForm() {
     value: string
   ) => {
     setFormData(prev => {
-      const newDetails = [...(prev.dependents_details || [])];
+      // dependents_details es obligatorio en CreatePlanPremierPolicyData, así que no necesitamos '|| []'
+      const newDetails = [...prev.dependents_details!]; // <--- ¡SIN `|| []`!
       newDetails[idx] = {
         ...newDetails[idx],
         [field]: value,
@@ -142,24 +158,27 @@ export default function PlanPremierForm() {
     }
 
     // Validaciones Plan Premier
-    // 1) Deducible entre 500 y 1000
-    if (formData.deductible! < 500 || formData.deductible! > 1000) { // Añadir '!'
+    // Con `formData` tipado como `CreatePlanPremierPolicyData`, ¡ya no necesitas `!` en estos campos!
+    // TypeScript sabe que `deductible` y `coinsurance` son números.
+    if (formData.deductible < 500 || formData.deductible > 1000) {
       setError('El deducible debe estar entre $500 y $1,000.');
       return;
     }
-    // 2) coinsurance = 10
-    if (formData.coinsurance! !== 10) {
+    if (formData.coinsurance !== 10) {
       setError('El coaseguro para Plan Premier debe ser 10 %.');
       return;
     }
-    // 3) num_dependents <= 4
-    if ((formData.num_dependents || 0) < 0 || (formData.num_dependents || 0) > 4) { // Usar || 0
+    // `num_dependents` también es obligatorio, así que no necesitas `|| 0` para su valor base.
+    if (formData.num_dependents < 0 || formData.num_dependents > 4) {
       setError('El número de dependientes debe ser entre 0 y 4.');
       return;
     }
-    // 4) Si hay dependientes, todos deben tener datos
-    for (let i = 0; i < (formData.num_dependents || 0); i++) { // Usar || 0
-      const d = formData.dependents_details?.[i]; // Añadir '?'
+
+    // Si hay dependientes, todos deben tener datos
+    // Aquí sí necesitas el `|| []` en `dependents_details` porque aunque `num_dependents` sea 0,
+    // `dependents_details` puede estar vacío, y si es 0, no quieres intentar iterar.
+    for (let i = 0; i < formData.num_dependents; i++) { // <-- NO `|| 0` aquí, ya es `number`
+      const d = formData.dependents_details?.[i]; // <--- El `?` en `dependents_details?.[i]` es correcto porque el elemento en sí puede ser `undefined` si el array es más corto de lo esperado.
       if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
         setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
         return;
@@ -167,11 +186,13 @@ export default function PlanPremierForm() {
     }
 
     const policyNumber = generatePolicyNumber();
-    const policyToCreate: any = {
+    // El payload ahora es del tipo CreatePlanPremierPolicyData
+    const policyToCreate: CreatePlanPremierPolicyData = { // <--- CAMBIO CLAVE AQUÍ
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
       premium_amount: Number(formData.premium_amount),
+      // Los siguientes campos ya están tipados correctamente gracias a CreatePlanPremierPolicyData
       deductible: formData.deductible,
       coinsurance: formData.coinsurance,
       max_annual: formData.max_annual,
@@ -281,28 +302,22 @@ export default function PlanPremierForm() {
         {/* Producto de Seguro */}
         <div>
           <label
-            htmlFor="product_id"
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
           </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {products
-              .filter(p => p.name === 'Plan Médico Premier')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – ${product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
+          <input
+            type="text"
+            id="product_name_display"
+            name="product_name_display"
+            value={planPremierProduct ? planPremierProduct.name : 'Cargando producto...'}
+            readOnly
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Este formulario es específicamente para el "Plan Premier".
+          </p>
         </div>
 
         {/* Fechas Inicio / Fin */}
@@ -562,11 +577,12 @@ export default function PlanPremierForm() {
         </div>
 
         {/* Campos dinámicos para cada dependiente */}
-        {(formData.num_dependents || 0) > 0 && formData.dependents_details && (
+        {formData.num_dependents > 0 && formData.dependents_details && ( // <--- `num_dependents` ya es `number`
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">
               Detalles de Dependientes
             </h3>
+            {/* Dependents_details es obligatorio, así que no necesitamos `|| []` */}
             {formData.dependents_details.map((dep, idx) => (
               <div
                 key={idx}

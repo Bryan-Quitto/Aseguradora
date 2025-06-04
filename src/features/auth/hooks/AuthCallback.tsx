@@ -58,7 +58,7 @@ const AuthCallback: React.FC = () => {
     }
   
     setSaving(false);
-    navigate("/dashboard");
+    navigate("/");
   };
 
   if (loading) {

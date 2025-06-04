@@ -31,22 +31,22 @@ export default function VidaDependientesForm() {
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 0,     // Se calcula según dependientes (backend)
+    premium_amount: 0, // Se calcula según dependientes (backend)
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
     // ↓ Campos propios Vida Dependientes
-    num_dependents: 0,     // Hasta 4: 1 cónyuge + hasta 3 hijos
-    dependents_details: [] as Dependent[], 
-    ad_d_included: false,  // AD&D opcional (por dependiente)
+    num_dependents: 0, // Hasta 4: 1 cónyuge + hasta 3 hijos
+    dependents_details: [] as Dependent[],
+    ad_d_included: false, // AD&D opcional (por dependiente)
     dependent_type_counts: { spouse: 0, children: 0 },
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [vidaDependientesProduct, setVidaDependientesProduct] = useState<InsuranceProduct | null>(null);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -62,7 +62,20 @@ export default function VidaDependientesForm() {
         return;
       }
       if (productsData) {
-        setProducts(productsData);
+        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Seguro de Vida con Dependientes" ---
+        const foundVidaDependientesProduct = productsData.find(p => p.name === 'Seguro de Vida con Dependientes'); // <-- Asegúrate de que el nombre sea EXACTO
+        if (foundVidaDependientesProduct) {
+          setVidaDependientesProduct(foundVidaDependientesProduct);
+          setFormData(prev => ({
+            ...prev,
+            product_id: foundVidaDependientesProduct.id, // Establece el ID en el formData
+          }));
+        } else {
+          setError('Error: El producto "Seguro de Vida con Dependientes" no fue encontrado. Asegúrate de que existe en la base de datos.');
+          setLoading(false);
+          return; // Detener la carga si el producto no se encuentra
+        }
+        // -------------------------------------------------------------------------------------
       }
 
       // Cargar clientes
@@ -77,12 +90,13 @@ export default function VidaDependientesForm() {
         setClients(clientsData);
       }
 
-      // Inicializa sin dependientes
+      // Inicializa sin dependientes (esto se manejará más dinámicamente con el nuevo useEffect)
       setFormData(prev => ({
         ...prev,
         num_dependents: 0,
         dependents_details: [],
         ad_d_included: false,
+        dependent_type_counts: { spouse: 0, children: 0 },
       }));
 
       setLoading(false);
@@ -90,6 +104,35 @@ export default function VidaDependientesForm() {
 
     fetchInitialData();
   }, []);
+
+  // --- Nuevo useEffect para sincronizar num_dependents y dependents_details ---
+  useEffect(() => {
+    // Asegura que dependents_details tiene la cantidad correcta de objetos vacíos
+    setFormData(prev => {
+      const currentNum = prev.num_dependents || 0;
+      const currentDetails = prev.dependents_details || [];
+      const newDetails: Dependent[] = [];
+
+      for (let i = 0; i < currentNum; i++) {
+        // Si ya existe un dependiente en esta posición, reutilízalo. De lo contrario, crea uno nuevo.
+        newDetails.push(currentDetails[i] || { name: '', birth_date: '', relationship: '' });
+      }
+
+      // Recalcular conteos de tipos de dependientes
+      let spouseCount = 0;
+      let childrenCount = 0;
+      newDetails.forEach(dep => {
+        if (dep.relationship === 'spouse') spouseCount++;
+        if (dep.relationship === 'child') childrenCount++;
+      });
+
+      return {
+        ...prev,
+        dependents_details: newDetails,
+        dependent_type_counts: { spouse: spouseCount, children: childrenCount },
+      };
+    });
+  }, [formData.num_dependents]); // Se ejecuta cada vez que num_dependents cambia
 
   // -----------------------------------------------------
   // Helpers
@@ -101,25 +144,19 @@ export default function VidaDependientesForm() {
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, type } = e.target; // 'checked' se elimina de aquí
+    const { name, value } = e.target; // 'type' y 'checked' pueden ser inferidos o manejados por separado
 
     setFormData(prev => {
       // Número de dependientes (0–4)
       if (name === 'num_dependents') {
         const num = parseInt(value) || 0;
-        if (num < 0 || num > 4) return prev;
-        const arr: Dependent[] = [];
-        const existingDependentDetails = prev.dependents_details || [];
-        for (let i = 0; i < num; i++) {
-          arr.push(existingDependentDetails[i] || { name: '', birth_date: '', relationship: '' });
-        }
-        return { ...prev, num_dependents: num, dependents_details: arr };
+        // Validar rango directamente en la UI para una mejor UX
+        if (num < 0 || num > 4) return prev; // No actualiza si está fuera de rango
+        return { ...prev, num_dependents: num }; // Deja que el useEffect posterior ajuste dependents_details
       }
-      // Checkbox AD&D (por cada dependiente, se cobrará +$2/mes si se incluye)
+      // Checkbox AD&D
       if (name === 'ad_d_included') {
-        // *** CORRECCIÓN AQUÍ ***
-        // Usamos una protección de tipo para asegurar que e.target es un HTMLInputElement
-        // y que es un checkbox para acceder a 'checked'.
+        // Casting seguro para HTMLInputElement
         const isCheckbox = (target: EventTarget): target is HTMLInputElement =>
           (target as HTMLInputElement).type === 'checkbox';
 
@@ -140,30 +177,28 @@ export default function VidaDependientesForm() {
     value: string
   ) => {
     setFormData(prev => {
-      // Asegúrate de que prev.dependents_details existe antes de copiarlo
       const newDeps = [...(prev.dependents_details || [])];
+      // Asegúrate de que el objeto en newDeps[idx] exista y sea de tipo Dependent
       if (!newDeps[idx]) {
         newDeps[idx] = { name: '', birth_date: '', relationship: '' };
       }
+
       newDeps[idx] = {
         ...newDeps[idx],
         [field]: value,
       };
 
-      // Actualizar conteo de spouse vs children
+      // Recalcular conteo de spouse vs children para validaciones inmediatas
       let spouseCount = 0;
       let childrenCount = 0;
-      // Asegúrate de que newDeps existe antes de iterar
-      for (let i = 0; i < newDeps.length; i++) {
-        // Accede a las propiedades con encadenamiento opcional o aserción no nula si sabes que existen
-        if (newDeps[i]?.relationship === 'spouse') spouseCount++;
-        if (newDeps[i]?.relationship === 'child') childrenCount++;
-      }
+      newDeps.forEach(dep => {
+        if (dep.relationship === 'spouse') spouseCount++;
+        if (dep.relationship === 'child') childrenCount++;
+      });
 
       return {
         ...prev,
         dependents_details: newDeps,
-        // Asegúrate de que dependent_type_counts se inicializa si es undefined
         dependent_type_counts: { spouse: spouseCount, children: childrenCount },
       };
     });
@@ -175,45 +210,56 @@ export default function VidaDependientesForm() {
     setSuccessMessage(null);
 
     if (!user?.id) {
-      setError('No se pudo obtener el ID del agente.');
+      setError('No se pudo obtener el ID del agente. Por favor, intente iniciar sesión nuevamente.');
       return;
     }
 
     // Validaciones Vida Dependientes
+    const currentNumDependents = formData.num_dependents || 0;
+    const currentDependentDetails = formData.dependents_details || [];
+    const currentDependentTypeCounts = formData.dependent_type_counts || { spouse: 0, children: 0 };
+
     // 1) num_dependents entre 1 y 4
-    if ((formData.num_dependents || 0) < 1 || (formData.num_dependents || 0) > 4) { // Usar || 0
+    if (currentNumDependents < 1 || currentNumDependents > 4) {
       setError('Debe haber entre 1 y 4 dependientes.');
       return;
     }
+
     // 2) Solo 1 cónyuge permitido
-    if (formData.dependent_type_counts?.spouse! > 1) { // Usar '?.!'
+    if (currentDependentTypeCounts.spouse > 1) {
       setError('Solo se permite 1 cónyuge.');
       return;
     }
+
     // 3) Hijos máximo 3
-    if (formData.dependent_type_counts?.children! > 3) { // Usar '?.!'
+    if (currentDependentTypeCounts.children > 3) {
       setError('Solo se permiten hasta 3 hijos.');
       return;
     }
+
     // 4) Todos los dependientes deben tener datos completos
-    // Asegúrate de que formData.dependents_details existe antes de iterar
-    if (!formData.dependents_details) {
-      setError('Debe haber detalles de dependientes.');
-      return;
+    if (currentDependentDetails.length !== currentNumDependents) {
+        setError('El número de dependientes no coincide con los detalles ingresados. Por favor, verifique.');
+        return;
     }
-    for (let i = 0; i < formData.dependents_details.length; i++) {
-      const d = formData.dependents_details[i]; // Aquí 'd' ya es seguro que existe
+
+    for (let i = 0; i < currentDependentDetails.length; i++) {
+      const d = currentDependentDetails[i];
       if (!d.name.trim() || !d.birth_date || !d.relationship) {
         setError(`Completa todos los datos del dependiente ${i + 1}.`);
         return;
       }
-      // Si es hijo, validar edad ≤ 25 (se asume que la fecha de nacimiento se valida backend)
+      // Si es hijo, validar edad ≤ 25
       if (d.relationship === 'child') {
         const birth = new Date(d.birth_date);
         const today = new Date();
-        const age = today.getFullYear() - birth.getFullYear();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+            age--; // Si no ha cumplido años este año
+        }
         if (age > 25) {
-          setError(`El hijo ${d.name} excede la edad máxima de 25 años.`);
+          setError(`El hijo(a) "${d.name}" excede la edad máxima de 25 años.`);
           return;
         }
       }
@@ -223,27 +269,25 @@ export default function VidaDependientesForm() {
     // Cónyuge = $10, Hijo = $3 cada uno, AD&D opcional +$2 por dependiente si se marca.
     // Aquí dejamos premium_amount en 0 y backend calculará.
     const policyNumber = generatePolicyNumber();
-    const payload: any = {
+    const payload: CreatePolicyData = { // Tipado como CreatePolicyData
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
       premium_amount: 0,  // lo calcula backend
-      dependents_details: formData.dependents_details,
-      ad_d_included: formData.ad_d_included,
+      // dependents_details y ad_d_included ya están en formData, no es necesario re-añadirlos explícitamente aquí
     };
 
     const { data, error: createError } = await createPolicy(payload);
     if (createError) {
       console.error('Error al crear póliza:', createError);
-      setError(`Error al crear la póliza: ${createError.message}`);
+      setError(`Error al crear la póliza: ${createError.message || 'Error desconocido'}`);
     } else if (data) {
       setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
       // Resetear formulario
-      setFormData(prev => ({
-        ...prev,
+      setFormData({
         policy_number: '',
         client_id: '',
-        product_id: '',
+        product_id: vidaDependientesProduct?.id || '', // Vuelve a establecer el product_id si existe
         start_date: '',
         end_date: '',
         premium_amount: 0,
@@ -254,7 +298,7 @@ export default function VidaDependientesForm() {
         dependents_details: [],
         ad_d_included: false,
         dependent_type_counts: { spouse: 0, children: 0 },
-      }));
+      });
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -327,29 +371,23 @@ export default function VidaDependientesForm() {
         {/* Producto de Seguro */}
         <div>
           <label
-            htmlFor="product_id"
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
           </label>
-          <select
-            id="product_id"
-            name="product_id"
-            value={formData.product_id}
-            onChange={handleChange}
-            required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          >
-            <option value="">Selecciona un producto</option>
-            {products
-              .filter(p => p.name === 'Seguro de Vida Dependientes')
-              .map(product => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type}) – $
-                  {product.base_premium.toFixed(2)}
-                </option>
-              ))}
-          </select>
+          <input
+            type="text"
+            id="product_name_display"
+            name="product_name_display"
+            // Muestra el nombre del producto si ya se cargó, o un mensaje de carga
+            value={vidaDependientesProduct ? vidaDependientesProduct.name : 'Cargando producto...'}
+            readOnly // ¡Importante! Hace que el campo sea de solo lectura
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Este formulario es específicamente para el "Seguro de Vida con Dependientes".
+          </p>
         </div>
 
         {/* Fechas Inicio / Fin */}
@@ -453,13 +491,13 @@ export default function VidaDependientesForm() {
             value={formData.num_dependents}
             onChange={handleChange}
             required
-            min={1}
+            min={0} // Permitir 0 inicialmente para limpiar
             max={4}
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
-            1 cónyuge + hasta 3 hijos (cada hijo debe tener ≤ 25 años).
+            Máximo 1 cónyuge + hasta 3 hijos (cada hijo debe tener ≤ 25 años).
           </p>
         </div>
 
