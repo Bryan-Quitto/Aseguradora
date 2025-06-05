@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import { Policy, getPoliciesByClientId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
+// import { AgentProfile, getAgentProfileById } from '../../agents/hooks/agente_backend'; // REMOVED: Not needed in ClientPolicyList
 
 /**
  * Componente para listar las pólizas contratadas por un cliente.
@@ -12,6 +13,13 @@ export default function ClientPolicyList() {
   const [loading, setLoading] = useState<boolean>(true); // Estado de carga
   const [error, setError] = useState<string | null>(null); // Estado de error
   const [productNames, setProductNames] = useState<Map<string, string>>(new Map()); // Mapa para almacenar nombres de productos
+
+  // REMOVED UNUSED STATES FROM ClientPolicyDetail THAT WERE COPIED HERE
+  // const [policy, setPolicy] = useState<Policy | null>(null);
+  // const [product, setProduct] = useState<InsuranceProduct | null>(null);
+  // const [agent, setAgent] = useState<AgentProfile | null>(null);
+  // const [contractDetailsParsed, setContractDetailsParsed] = useState<Record<string, any> | null>(null);
+
 
   useEffect(() => {
     /**
@@ -44,7 +52,7 @@ export default function ClientPolicyList() {
         const uniqueProductIds = new Set(policiesData.map(p => p.product_id));
 
         // Cargar nombres de productos
-        const newProductNames = new Map<string, string>(productNames);
+        const newProductNames = new Map<string, string>(productNames); // Use the existing productNames state
         for (const productId of uniqueProductIds) {
           if (!newProductNames.has(productId)) { // Evitar recargar si ya está en el mapa
             const { data: productData, error: productError } = await getInsuranceProductById(productId);
@@ -119,7 +127,7 @@ export default function ClientPolicyList() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {policies.map((policy) => (
+              {policies.map((policy: Policy) => ( // Added explicit type annotation for 'policy'
                 <tr key={policy.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {policy.policy_number}

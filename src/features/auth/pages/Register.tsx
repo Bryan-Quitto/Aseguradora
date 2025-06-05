@@ -168,7 +168,7 @@ const Register = () => {
             peso: parseFloat(formData.peso) || null, // Convertir a número, o null si no es válido
             role: 'client', // Importante: Envía el rol desde el frontend
           },
-          emailRedirectTo: `${window.location.origin}/dashboard` // URL a la que redirigir después de la confirmación
+          emailRedirectTo: `${window.location.origin}/DashboardClient` // URL a la que redirigir después de la confirmación
         }
       });
 

@@ -18,6 +18,7 @@ export interface AgentProfile {
   estatura: number | null;
   peso: number | null;
   role: string; // Debería ser 'agent'
+  phone_number: string | null; // ¡Nuevo campo añadido!
   created_at: string;
   updated_at: string;
 }
@@ -43,7 +44,7 @@ export async function getAgentProfileById(user_id: string): Promise<{ data: Agen
   return { data: data as AgentProfile, error: null };
 }
 
-interface UpdateAgentProfileData {
+export interface UpdateAgentProfileData {
   primer_nombre?: string | null;
   segundo_nombre?: string | null;
   primer_apellido?: string | null;
@@ -59,6 +60,7 @@ interface UpdateAgentProfileData {
   estado_civil?: string | null;
   estatura?: number | null;
   peso?: number | null;
+  phone_number?: string | null; // ¡Nuevo campo añadido para actualización!
   // El rol no debería ser actualizable por el agente mismo
 }
 
