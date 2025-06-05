@@ -3,6 +3,7 @@ import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllUserProfiles, UserProfile, activateUserProfile, deactivateUserProfile } from 'src/features/admin/hooks/administrador_backend';
 import { useNavigate } from 'react-router-dom';
+import EditarUsuario from '../../features/admin/EditarUsuario'; // Asegúrate de que esté exportado correctamente
 
 // Componente de Modal Personalizado para reemplazar alert/confirm
 interface CustomModalProps {

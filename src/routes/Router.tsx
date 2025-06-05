@@ -3,6 +3,7 @@
 import { lazy } from 'react';
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
+import EditarUsuario from '../features/admin/EditarUsuario'; // Asegúrate de que esté exportado correctamente
 
 /* ***Layouts**** */
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
