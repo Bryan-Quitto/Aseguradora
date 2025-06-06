@@ -1,6 +1,7 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext'; // Asegúrate de que esta ruta sea correcta
+
 import {
   CreatePolicyData,
   InsuranceProduct,
@@ -46,6 +47,18 @@ interface Dependent {
   relationship: string; // 'spouse' o 'child'
 }
 
+// ===========================================================================
+// MODIFICACIÓN: Extender CreatePolicyData para incluir 'insured_amount'
+// Si CreatePolicyData ya se está utilizando en el backend para la creación
+// de pólizas, asegúrate de que el campo 'insured_amount' también se añada
+// a la tabla de Supabase correspondiente (ej. 'policies').
+// ===========================================================================
+interface CustomCreatePolicyData extends CreatePolicyData {
+  insured_amount: number; // Añadimos el monto asegurado
+  // Opcional: Si el 'tipo_de_seguro' fuera dinámico para este form, se agregaría aquí.
+  // Pero para este form, es fijo 'Seguro de Vida con Dependientes'.
+}
+
 /**
  * Formulario para el Seguro de Vida para Dependientes (para que un cliente lo solicite).
  */
@@ -56,7 +69,7 @@ export default function VidaDependientesForm() {
   // -----------------------------------------------------
   // Estado base + campos específicos Vida Dependientes
   // -----------------------------------------------------
-  const [formData, setFormData] = useState<CreatePolicyData>({
+  const [formData, setFormData] = useState<CustomCreatePolicyData>({
     policy_number: '',
     client_id: user?.id || '', // El ID del cliente es el usuario autenticado
     agent_id: '', // Ahora el cliente seleccionará un agente
@@ -72,6 +85,8 @@ export default function VidaDependientesForm() {
     dependents_details: [] as Dependent[],
     ad_d_included: false, // AD&D opcional (por dependiente)
     dependent_type_counts: { spouse: 0, children: 0 },
+    // ↓ Nuevo campo
+    insured_amount: 50000, // MODIFICACIÓN: Valor inicial para el monto asegurado (ej. 50,000)
   });
 
   const [agents, setAgents] = useState<AgentProfile[]>([]); // Nuevo estado para agentes
@@ -79,6 +94,47 @@ export default function VidaDependientesForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [vidaDependientesProduct, setVidaDependientesProduct] = useState<InsuranceProduct | null>(null);
+
+  // ===========================================================================
+  // NUEVOS ESTADOS para Prima Estimada y Errores de Validación (si los hubiera en el frontend)
+  // ===========================================================================
+  const [calculatedPremium, setCalculatedPremium] = useState<number>(0);
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({}); // Para errores específicos en el frontend
+
+  // ===========================================================================
+  // FUNCIÓN PARA CALCULAR LA PRIMA ESTIMADA EN EL FRONTEND
+  // Esto es una estimación basada en la lógica que describiste.
+  // La prima FINAL y oficial debe ser calculada y confirmada por el backend/agente.
+  // ===========================================================================
+  const calculateEstimatedPremium = () => {
+    let basePremium = 0; // Podrías tener una base, ej. 50 para la póliza base sin dependientes.
+    const spouseCost = 10;
+    const childCost = 3;
+    const adDPerDependentCost = 2; // Costo AD&D por dependiente
+
+    const currentDependentDetails = formData.dependents_details || [];
+    const currentDependentTypeCounts = formData.dependent_type_counts || { spouse: 0, children: 0 };
+
+    if (currentDependentTypeCounts.spouse > 0) {
+      basePremium += spouseCost;
+    }
+    basePremium += currentDependentTypeCounts.children * childCost;
+
+    if (formData.ad_d_included) {
+      // AD&D se aplica por cada dependiente incluido
+      basePremium += currentDependentDetails.length * adDPerDependentCost;
+    }
+
+    // Aquí, puedes decidir cómo el `insured_amount` afecta la prima estimada.
+    // Sin una fórmula específica, una opción simple es añadir una pequeña cantidad
+    // o un porcentaje si el monto asegurado es muy alto.
+    // Para este ejemplo, no lo incluiré directamente en la fórmula de la prima de dependientes,
+    // ya que la descripción original solo ligaba la prima a los dependientes y AD&D.
+    // Si necesitas que el `monto_asegurado` influya en esta prima, por favor, proporciona la fórmula.
+    // Ejemplo (hipotético): basePremium += formData.insured_amount * 0.0001; // 0.01% del monto asegurado
+
+    setCalculatedPremium(basePremium);
+  };
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -138,6 +194,7 @@ export default function VidaDependientesForm() {
         dependents_details: [],
         ad_d_included: false,
         dependent_type_counts: { spouse: 0, children: 0 },
+        insured_amount: 50000, // Reinicia el monto asegurado
       }));
 
       setLoading(false);
@@ -147,8 +204,8 @@ export default function VidaDependientesForm() {
   }, [user?.id]); // Dependencia del ID del usuario para asegurar que se setea correctamente
 
   // --- Nuevo useEffect para sincronizar num_dependents y dependents_details ---
+  // También se encargará de recalcular la prima estimada.
   useEffect(() => {
-    // Asegura que dependents_details tiene la cantidad correcta de objetos vacíos
     setFormData(prev => {
       const currentNum = prev.num_dependents || 0;
       const currentDetails = prev.dependents_details || [];
@@ -173,7 +230,16 @@ export default function VidaDependientesForm() {
         dependent_type_counts: { spouse: spouseCount, children: childrenCount },
       };
     });
+    // Después de que formData se actualice, calculateEstimatedPremium se ejecutará
+    // debido a su dependencia en formData.dependents_details y ad_d_included.
   }, [formData.num_dependents]); // Se ejecuta cada vez que num_dependents cambia
+
+  // ===========================================================================
+  // useEffect para recalcular la prima cuando cambian los detalles de dependientes o AD&D
+  // ===========================================================================
+  useEffect(() => {
+    calculateEstimatedPremium();
+  }, [formData.dependents_details, formData.ad_d_included, formData.dependent_type_counts]); // Dependencias para recalcular
 
   // -----------------------------------------------------
   // Helpers
@@ -185,7 +251,7 @@ export default function VidaDependientesForm() {
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target; // 'type' y 'checked' pueden ser inferidos o manejados por separado
+    const { name, value } = e.target;
 
     setFormData(prev => {
       // Número de dependientes (0–4)
@@ -193,18 +259,26 @@ export default function VidaDependientesForm() {
         const num = parseInt(value) || 0;
         // Validar rango directamente en la UI para una mejor UX
         if (num < 0 || num > 4) return prev; // No actualiza si está fuera de rango
-        return { ...prev, num_dependents: num }; // Deja que el useEffect posterior ajuste dependents_details
+        return { ...prev, num_dependents: num };
       }
       // Checkbox AD&D
       if (name === 'ad_d_included') {
-        // Casting seguro para HTMLInputElement
         const isCheckbox = (target: EventTarget): target is HTMLInputElement =>
           (target as HTMLInputElement).type === 'checkbox';
 
         if (isCheckbox(e.target)) {
           return { ...prev, ad_d_included: e.target.checked };
         }
-        return prev; // Si no es un checkbox, no hacemos nada con esta propiedad
+        return prev;
+      }
+      // Para el nuevo campo 'insured_amount'
+      if (name === 'insured_amount') {
+        const numValue = parseFloat(value);
+        if (isNaN(numValue) || numValue < 0) {
+          // Opcional: setValidationErrors para este campo si el valor no es válido
+          return prev; // No actualiza si no es un número o es negativo
+        }
+        return { ...prev, [name]: numValue };
       }
       // Resto (agent_id, product_id, fechas, etc.)
       return { ...prev, [name]: value };
@@ -249,6 +323,7 @@ export default function VidaDependientesForm() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({}); // Limpiar errores de validación anteriores
 
     if (!user?.id) {
       setError('No se pudo obtener el ID del cliente. Por favor, intente iniciar sesión nuevamente.');
@@ -256,7 +331,7 @@ export default function VidaDependientesForm() {
     }
 
     if (!formData.agent_id) {
-      setError('Por favor, selecciona un agente.');
+      setValidationErrors(prev => ({ ...prev, agent_id: 'Por favor, selecciona un agente.' }));
       return;
     }
 
@@ -264,64 +339,80 @@ export default function VidaDependientesForm() {
     const currentNumDependents = formData.num_dependents || 0;
     const currentDependentDetails = formData.dependents_details || [];
     const currentDependentTypeCounts = formData.dependent_type_counts || { spouse: 0, children: 0 };
+    let hasValidationErrors = false;
+    const newValidationErrors: { [key: string]: string } = {};
 
     // 1) num_dependents entre 1 y 4
     if (currentNumDependents < 1 || currentNumDependents > 4) {
-      setError('Debe haber entre 1 y 4 dependientes.');
-      return;
+      newValidationErrors.num_dependents = 'Debe haber entre 1 y 4 dependientes.';
+      hasValidationErrors = true;
     }
 
     // 2) Solo 1 cónyuge permitido
     if (currentDependentTypeCounts.spouse > 1) {
-      setError('Solo se permite 1 cónyuge.');
-      return;
+      newValidationErrors.dependent_spouse = 'Solo se permite 1 cónyuge.';
+      hasValidationErrors = true;
     }
 
     // 3) Hijos máximo 3
     if (currentDependentTypeCounts.children > 3) {
-      setError('Solo se permiten hasta 3 hijos.');
-      return;
+      newValidationErrors.dependent_children = 'Solo se permiten hasta 3 hijos.';
+      hasValidationErrors = true;
     }
 
     // 4) Todos los dependientes deben tener datos completos
     if (currentDependentDetails.length !== currentNumDependents) {
-      setError('El número de dependientes no coincide con los detalles ingresados. Por favor, verifique.');
-      return;
+      newValidationErrors.dependents_details = 'El número de dependientes no coincide con los detalles ingresados. Por favor, verifique.';
+      hasValidationErrors = true;
+    } else {
+      for (let i = 0; i < currentDependentDetails.length; i++) {
+        const d = currentDependentDetails[i];
+        if (!d.name.trim() || !d.birth_date || !d.relationship) {
+          newValidationErrors[`dependent_${i}_data`] = `Completa todos los datos del dependiente ${i + 1}.`;
+          hasValidationErrors = true;
+        }
+        // Si es hijo, validar edad ≤ 25
+        if (d.relationship === 'child') {
+          const birth = new Date(d.birth_date);
+          const today = new Date();
+          let age = today.getFullYear() - birth.getFullYear();
+          const m = today.getMonth() - birth.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+            age--; // Si no ha cumplido años este año
+          }
+          if (age > 25) {
+            newValidationErrors[`dependent_${i}_age`] = `El hijo(a) "${d.name}" excede la edad máxima de 25 años.`;
+            hasValidationErrors = true;
+          }
+        }
+      }
     }
 
-    for (let i = 0; i < currentDependentDetails.length; i++) {
-      const d = currentDependentDetails[i];
-      if (!d.name.trim() || !d.birth_date || !d.relationship) {
-        setError(`Completa todos los datos del dependiente ${i + 1}.`);
-        return;
-      }
-      // Si es hijo, validar edad ≤ 25
-      if (d.relationship === 'child') {
-        const birth = new Date(d.birth_date);
-        const today = new Date();
-        let age = today.getFullYear() - birth.getFullYear();
-        const m = today.getMonth() - birth.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-          age--; // Si no ha cumplido años este año
-        }
-        if (age > 25) {
-          setError(`El hijo(a) "${d.name}" excede la edad máxima de 25 años.`);
-          return;
-        }
-      }
+    // Validación para el monto asegurado
+    if (formData.insured_amount <= 0) {
+      newValidationErrors.insured_amount = 'El monto asegurado debe ser mayor a 0.';
+      hasValidationErrors = true;
+    }
+
+    if (hasValidationErrors) {
+      setValidationErrors(newValidationErrors);
+      // Combinar errores generales con errores específicos de campos
+      setError('Por favor, corrige los errores en el formulario antes de enviar.');
+      return;
     }
 
     // El monto de la prima se calcula en backend según dependientes:
     // Cónyuge = $10, Hijo = $3 cada uno, AD&D opcional +$2 por dependiente si se marca.
     // Aquí dejamos premium_amount en 0 y backend calculará.
     const policyNumber = generatePolicyNumber();
-    const payload: CreatePolicyData = { // Tipado como CreatePolicyData
+    const payload: CreatePolicyData = { // Tipado como CreatePolicyData (usa el original para el backend)
       ...formData,
       policy_number: policyNumber,
       client_id: user.id, // Se asegura que el client_id sea el del usuario autenticado
-      premium_amount: 0,  // lo calcula backend
+      premium_amount: 0,  // lo calcula backend
       status: 'pending', // Aseguramos que el estado siempre sea 'pending' al enviar
       // dependents_details y ad_d_included ya están en formData, no es necesario re-añadirlos explícitamente aquí
+      // insured_amount también se envía en formData
     };
 
     const { data, error: createError } = await createPolicy(payload);
@@ -346,6 +437,7 @@ export default function VidaDependientesForm() {
         dependents_details: [],
         ad_d_included: false,
         dependent_type_counts: { spouse: 0, children: 0 },
+        insured_amount: 50000, // Restablece el monto asegurado
       });
       setTimeout(() => {
         navigate('/client/dashboard/policies'); // Redirige a la vista de pólizas del cliente
@@ -421,7 +513,7 @@ export default function VidaDependientesForm() {
           <select
             id="agent_id"
             name="agent_id"
-            value={formData.agent_id ?? ''} // <-- MODIFICACIÓN CLAVE AQUÍ
+            value={formData.agent_id ?? ''}
             onChange={handleChange}
             required
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -435,30 +527,59 @@ export default function VidaDependientesForm() {
               </option>
             ))}
           </select>
+          {validationErrors.agent_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.agent_id}</p>
+          )}
           <p className="mt-1 text-xs text-gray-500">
             Tu agente revisará y gestionará tu solicitud de póliza.
           </p>
         </div>
 
-        {/* Producto de Seguro (solo lectura) */}
+        {/* Producto de Seguro (solo lectura - Tipo de Seguro) */}
         <div>
           <label
             htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Producto de Seguro
+            Tipo de Seguro
           </label>
           <input
             type="text"
             id="product_name_display"
             name="product_name_display"
-            // Muestra el nombre del producto si ya se cargó, o un mensaje de carga
             value={vidaDependientesProduct ? vidaDependientesProduct.name : 'Cargando producto...'}
             readOnly // ¡Importante! Hace que el campo sea de solo lectura
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
             Este formulario es específicamente para el "Seguro de Vida con Dependientes".
+          </p>
+        </div>
+
+        {/* Campo de Monto Asegurado */}
+        <div>
+          <label
+            htmlFor="insured_amount"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Monto Asegurado Deseado ($)
+          </label>
+          <input
+            type="number"
+            id="insured_amount"
+            name="insured_amount"
+            value={formData.insured_amount}
+            onChange={handleChange}
+            required
+            min={1}
+            step="any" // Permite valores decimales
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          />
+          {validationErrors.insured_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.insured_amount}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500">
+            Ingresa el monto total que deseas asegurar. Este valor influirá en la prima final.
           </p>
         </div>
 
@@ -480,8 +601,11 @@ export default function VidaDependientesForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
-             <p className="mt-1 text-xs text-gray-500">
-             La fecha de inicio de la cobertura.
+            {validationErrors.start_date && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.start_date}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              La fecha de inicio de la cobertura.
             </p>
           </div>
           <div>
@@ -500,6 +624,9 @@ export default function VidaDependientesForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
+            {validationErrors.end_date && (
+                <p className="mt-1 text-sm text-red-600">{validationErrors.end_date}</p>
+            )}
             <p className="mt-1 text-xs text-gray-500">
               La fecha en que termina la cobertura.
             </p>
@@ -596,6 +723,15 @@ export default function VidaDependientesForm() {
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
+          {validationErrors.num_dependents && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.num_dependents}</p>
+          )}
+          {validationErrors.dependent_spouse && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.dependent_spouse}</p>
+          )}
+          {validationErrors.dependent_children && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.dependent_children}</p>
+          )}
           <p className="mt-1 text-xs text-gray-500">
             Puedes incluir un máximo de 1 cónyuge y hasta 3 hijos (cada hijo debe tener 25 años o menos).
           </p>
@@ -605,6 +741,9 @@ export default function VidaDependientesForm() {
         {(formData.num_dependents || 0) > 0 && formData.dependents_details && (
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">Detalles de Tus Dependientes</h3>
+            {validationErrors.dependents_details && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.dependents_details}</p>
+            )}
             {formData.dependents_details.map((dep, idx) => (
               <div
                 key={idx}
@@ -629,6 +768,9 @@ export default function VidaDependientesForm() {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
+                  {validationErrors[`dependent_${idx}_data`] && (
+                    <p className="mt-1 text-sm text-red-600">{validationErrors[`dependent_${idx}_data`]}</p>
+                  )}
                 </div>
                 <div>
                   <label
@@ -648,6 +790,9 @@ export default function VidaDependientesForm() {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
+                  {validationErrors[`dependent_${idx}_age`] && (
+                    <p className="mt-1 text-sm text-red-600">{validationErrors[`dependent_${idx}_age`]}</p>
+                  )}
                 </div>
                 <div>
                   <label
@@ -693,6 +838,22 @@ export default function VidaDependientesForm() {
             Incluir Cobertura AD&D para Dependientes (costo adicional)
           </label>
         </div>
+
+        {/* ===========================================================================
+            BLOQUE DE PRIMA ESTIMADA - AÑADIDO SEGÚN TU SOLICITUD
+            =========================================================================== */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada (mensual):</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-gray-600">
+            *Esta es una estimación basada en los dependientes y coberturas seleccionadas. La prima final será confirmada por tu agente.
+          </p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
+        </div>
+        {/* =========================================================================== */}
+
 
         {/* Botones de acción */}
         <div className="flex justify-end gap-4 mt-6">

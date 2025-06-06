@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
   CreatePolicyData,
-  CreatePlanPremierPolicyData, // <--- Importamos la nueva interfaz
+  CreatePlanPremierPolicyData,
   InsuranceProduct,
   getActiveInsuranceProducts,
   createPolicy,
@@ -20,29 +20,26 @@ export default function PlanPremierForm() {
   // -----------------------------------------------------
   // Estado base + campos propios de Plan Premier
   // -----------------------------------------------------
-  // Usamos la nueva interfaz específica aquí
-  const [formData, setFormData] = useState<CreatePlanPremierPolicyData>({ // <--- CAMBIO CLAVE AQUÍ
+  const [formData, setFormData] = useState<CreatePlanPremierPolicyData>({
     policy_number: '',
     client_id: '',
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 0,
+    premium_amount: 0, // Este valor se calculará
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
-    // ↓ Campos específicos Plan Premier (ahora son obligatorios por el tipo)
-    deductible: 500, // rango [500‒1000]
-    coinsurance: 10, // 10 % fijo
-    max_annual: 100000, // máximo desembolsable anual
-    has_dental_premium: true, // Premium incluida
-    has_vision_full: true, // Visión completa incluida
-    wellness_rebate: 50, // $50/mes reembolso gym (info solo explicativa)
+    deductible: 500,
+    coinsurance: 10,
+    max_annual: 100000,
+    has_dental_premium: true,
+    has_vision_full: true,
+    wellness_rebate: 50,
     num_dependents: 0,
-    dependents_details: [], // Inicializamos como array vacío, no como 'any'
-    // Campos genéricos de salud que son obligatorios para este plan
-    has_dental: true, // Se asume que siempre tendrá dental premium
-    has_vision: true, // Se asume que siempre tendrá visión completa
+    dependents_details: [],
+    has_dental: true,
+    has_vision: true,
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -52,6 +49,13 @@ export default function PlanPremierForm() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [planPremierProduct, setPlanPremierProduct] = useState<InsuranceProduct | null>(null);
 
+  // --- NUEVO ESTADO: Prima Calculada y Errores de Validación Específicos ---
+  const [calculatedPremium, setCalculatedPremium] = useState<number>(0);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string | null>>({});
+
+  // -----------------------------------------------------
+  // Efecto para cargar datos iniciales y calcular prima
+  // -----------------------------------------------------
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -66,13 +70,12 @@ export default function PlanPremierForm() {
         return;
       }
       if (productsData) {
-        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Plan Premier" ---
         const foundPlanPremierProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Premier');
         if (foundPlanPremierProduct) {
           setPlanPremierProduct(foundPlanPremierProduct);
           setFormData(prev => ({
             ...prev,
-            product_id: foundPlanPremierProduct.id, // Establece el ID en el formData
+            product_id: foundPlanPremierProduct.id,
           }));
         } else {
           setError('Error: El producto "Plan Premier" no fue encontrado. Asegúrate de que existe en la base de datos.');
@@ -97,6 +100,61 @@ export default function PlanPremierForm() {
     fetchInitialData();
   }, []);
 
+  // --- NUEVO EFECTO: Calcular la prima cuando cambian los campos relevantes ---
+  useEffect(() => {
+    const calculatePremium = () => {
+      let basePremium = 500; // Prima base inicial para el Plan Premier
+      let newValidationErrors: Record<string, string | null> = { ...validationErrors }; // Copiamos errores existentes
+
+      // Ajuste por deducible (ejemplo simple: mayor deducible, menor prima base)
+      // Puedes ajustar esta lógica según tus reglas de negocio
+      if (formData.deductible >= 500 && formData.deductible <= 1000) {
+        basePremium -= (formData.deductible - 500) * 0.1; // Resta $0.1 por cada dólar de deducible extra
+        newValidationErrors.deductible = null;
+      } else {
+        newValidationErrors.deductible = 'El deducible debe estar entre $500 y $1,000.';
+      }
+
+      // Ajuste por número de dependientes
+      if (formData.num_dependents >= 0 && formData.num_dependents <= 4) {
+        basePremium += formData.num_dependents * 100; // Cada dependiente extra +$100
+        newValidationErrors.num_dependents = null;
+      } else {
+        newValidationErrors.num_dependents = 'El número de dependientes debe ser entre 0 y 4.';
+      }
+
+      // Ajuste por frecuencia de pago (ejemplo: descuentos por pago anual)
+      switch (formData.payment_frequency) {
+        case 'quarterly':
+          basePremium *= 0.98; // 2% de descuento por pago trimestral
+          break;
+        case 'annually':
+          basePremium *= 0.95; // 5% de descuento por pago anual
+          break;
+        default:
+          // Mensual, no hay descuento extra
+          break;
+      }
+
+      // Validar que la prima calculada esté dentro del rango permitido (400-1500)
+      if (basePremium < 400 || basePremium > 1500) {
+        newValidationErrors.premium_amount = 'La prima calculada está fuera del rango permitido ($400 - $1,500). Ajusta los valores.';
+      } else {
+        newValidationErrors.premium_amount = null;
+      }
+
+      setCalculatedPremium(basePremium);
+      setFormData(prev => ({ ...prev, premium_amount: basePremium })); // Actualizamos formData con la prima calculada
+      setValidationErrors(newValidationErrors);
+    };
+
+    calculatePremium();
+  }, [
+    formData.deductible,
+    formData.num_dependents,
+    formData.payment_frequency,
+  ]); // Recalcular cuando estos campos cambian
+
   // -----------------------------------------------------
   // Helpers
   // -----------------------------------------------------
@@ -109,14 +167,13 @@ export default function PlanPremierForm() {
   ) => {
     const { name, value, type } = e.target;
     setFormData(prev => {
-      // Si es premium_amount
+      // Si es premium_amount, no lo actualizamos directamente ya que ahora se calcula
       if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) };
+        return prev; // No hacemos nada, el useEffect se encarga
       }
       // Si es número de dependientes
       if (name === 'num_dependents') {
         const num = parseInt(value) || 0;
-        // Aseguramos que dependents_details siempre sea un array.
         const newDependentsArray = new Array(num).fill(null).map((_, i) => (
           (prev.dependents_details && prev.dependents_details[i]) || {
             name: '',
@@ -126,7 +183,6 @@ export default function PlanPremierForm() {
         ));
         return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
       }
-      // Booleanos (para este plan, dental y visión están fijos en true, así que no hay checkbox. Omitimos tipo=checkbox.)
       return { ...prev, [name]: value };
     });
   };
@@ -147,6 +203,7 @@ export default function PlanPremierForm() {
     });
   };
 
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -157,50 +214,54 @@ export default function PlanPremierForm() {
       return;
     }
 
-    // Validaciones Plan Premier
-    // Con `formData` tipado como `CreatePlanPremierPolicyData`, ¡ya no necesitas `!` en estos campos!
-    // TypeScript sabe que `deductible` y `coinsurance` son números.
+    // Validaciones Plan Premier (algunas ya las maneja el cálculo de prima)
+    let hasErrors = false;
+    const currentValidationErrors: Record<string, string | null> = {};
+
     if (formData.deductible < 500 || formData.deductible > 1000) {
-      setError('El deducible debe estar entre $500 y $1,000.');
-      return;
+      currentValidationErrors.deductible = 'El deducible debe estar entre $500 y $1,000.';
+      hasErrors = true;
     }
     if (formData.coinsurance !== 10) {
-      setError('El coaseguro para Plan Premier debe ser 10 %.');
-      return;
+      currentValidationErrors.coinsurance = 'El coaseguro para Plan Premier debe ser 10 %.';
+      hasErrors = true;
     }
-    // `num_dependents` también es obligatorio, así que no necesitas `|| 0` para su valor base.
     if (formData.num_dependents < 0 || formData.num_dependents > 4) {
-      setError('El número de dependientes debe ser entre 0 y 4.');
-      return;
+      currentValidationErrors.num_dependents = 'El número de dependientes debe ser entre 0 y 4.';
+      hasErrors = true;
     }
 
-    // Si hay dependientes, todos deben tener datos
-    // Aquí sí necesitas el `|| []` en `dependents_details` porque aunque `num_dependents` sea 0,
-    // `dependents_details` puede estar vacío, y si es 0, no quieres intentar iterar.
-    for (let i = 0; i < formData.num_dependents; i++) { // <-- NO `|| 0` aquí, ya es `number`
-      const d = formData.dependents_details?.[i]; // <--- El `?` en `dependents_details?.[i]` es correcto porque el elemento en sí puede ser `undefined` si el array es más corto de lo esperado.
+    for (let i = 0; i < formData.num_dependents; i++) {
+      const d = formData.dependents_details?.[i];
       if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
         setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
-        return;
+        return; // Detener el envío si faltan datos de dependientes
       }
     }
 
+    // Si hay errores de validación en el cálculo de la prima, los mostramos
+    if (validationErrors.premium_amount) {
+      currentValidationErrors.premium_amount = validationErrors.premium_amount;
+      hasErrors = true;
+    }
+
+    setValidationErrors(currentValidationErrors);
+
+    if (hasErrors) {
+      // Combina todos los errores en un solo mensaje si es necesario o muestra individualmente
+      const generalErrorMessage = Object.values(currentValidationErrors).filter(Boolean).join(' | ');
+      if (generalErrorMessage) {
+        setError(generalErrorMessage);
+      }
+      return;
+    }
+
     const policyNumber = generatePolicyNumber();
-    // El payload ahora es del tipo CreatePlanPremierPolicyData
-    const policyToCreate: CreatePlanPremierPolicyData = { // <--- CAMBIO CLAVE AQUÍ
+    const policyToCreate: CreatePlanPremierPolicyData = {
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
-      premium_amount: Number(formData.premium_amount),
-      // Los siguientes campos ya están tipados correctamente gracias a CreatePlanPremierPolicyData
-      deductible: formData.deductible,
-      coinsurance: formData.coinsurance,
-      max_annual: formData.max_annual,
-      has_dental_premium: formData.has_dental_premium,
-      has_vision_full: formData.has_vision_full,
-      wellness_rebate: formData.wellness_rebate,
-      num_dependents: formData.num_dependents,
-      dependents_details: formData.dependents_details,
+      premium_amount: calculatedPremium, // Usamos la prima calculada
     };
 
     const { data, error: createError } = await createPolicy(policyToCreate);
@@ -217,7 +278,7 @@ export default function PlanPremierForm() {
         product_id: '',
         start_date: '',
         end_date: '',
-        premium_amount: 0,
+        premium_amount: 0, // Resetear la prima
         payment_frequency: 'monthly',
         status: 'pending',
         contract_details: '',
@@ -230,6 +291,7 @@ export default function PlanPremierForm() {
         num_dependents: 0,
         dependents_details: [],
       }));
+      setCalculatedPremium(0); // Resetear prima calculada
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -365,22 +427,22 @@ export default function PlanPremierForm() {
               htmlFor="premium_amount"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Monto de la Prima ($)
+              Monto de la Prima Calculado ($)
             </label>
+            {/* Input de la prima ahora es de solo lectura y muestra el valor calculado */}
             <input
               type="number"
               id="premium_amount"
               name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="400"
-              max="1500"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={calculatedPremium.toFixed(2)}
+              readOnly
+              className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
             />
+            {validationErrors.premium_amount && (
+              <p className="mt-1 text-xs text-red-600">{validationErrors.premium_amount}</p>
+            )}
             <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $400 – $1,500 mensuales.
+              La prima se calcula automáticamente en función de otros campos.
             </p>
           </div>
           <div>
@@ -404,6 +466,16 @@ export default function PlanPremierForm() {
             </select>
           </div>
         </div>
+
+        {/* --- Bloque de Prima Estimada (el que pediste integrar) --- */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
+        </div>
+        {/* --- FIN Bloque de Prima Estimada --- */}
 
         {/* Estado de la Póliza */}
         <div>
@@ -476,6 +548,9 @@ export default function PlanPremierForm() {
           <p className="mt-1 text-xs text-gray-500">
             Rango permitido: $500 – $1,000.
           </p>
+          {validationErrors.deductible && (
+            <p className="mt-1 text-xs text-red-600">{validationErrors.deductible}</p>
+          )}
         </div>
 
         {/* Coaseguro (10%) */}
@@ -497,6 +572,9 @@ export default function PlanPremierForm() {
           <p className="mt-1 text-xs text-gray-500">
             Para el Plan Premier, el coaseguro está fijado en 10 %.
           </p>
+          {validationErrors.coinsurance && (
+            <p className="mt-1 text-xs text-red-600">{validationErrors.coinsurance}</p>
+          )}
         </div>
 
         {/* Máximo Desembolsable Anual */}
@@ -574,15 +652,17 @@ export default function PlanPremierForm() {
           <p className="mt-1 text-xs text-gray-500">
             Cada dependiente extra +$100/mes.
           </p>
+          {validationErrors.num_dependents && (
+            <p className="mt-1 text-xs text-red-600">{validationErrors.num_dependents}</p>
+          )}
         </div>
 
         {/* Campos dinámicos para cada dependiente */}
-        {formData.num_dependents > 0 && formData.dependents_details && ( // <--- `num_dependents` ya es `number`
+        {formData.num_dependents > 0 && formData.dependents_details && (
           <div className="space-y-4">
             <h3 className="text-lg font-medium text-gray-700">
               Detalles de Dependientes
             </h3>
-            {/* Dependents_details es obligatorio, así que no necesitamos `|| []` */}
             {formData.dependents_details.map((dep, idx) => (
               <div
                 key={idx}
@@ -657,6 +737,7 @@ export default function PlanPremierForm() {
             ))}
           </div>
         )}
+
 
         {/* Botones de acción */}
         <div className="flex justify-end gap-4 mt-6">

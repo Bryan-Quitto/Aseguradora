@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
@@ -7,8 +7,7 @@ import {
   getActiveInsuranceProducts,
   createPolicy,
 } from '../../../policies/policy_management';
-// Importa la nueva interfaz y función para agentes
-import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend'; // Asegúrate que la ruta sea correcta
+import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend';
 
 interface Beneficiary {
   name: string;
@@ -28,9 +27,8 @@ export default function VidaBasicaForm() {
   // -----------------------------------------------------
   const [formData, setFormData] = useState<CreatePolicyData>({
     policy_number: '',
-    // 'agent_id' ahora contendrá el user_id del agente seleccionado por el cliente
     agent_id: '',
-    client_id: '', // Este campo ahora contendrá el ID del cliente logueado que crea la póliza
+    client_id: '',
     product_id: '',
     start_date: '',
     end_date: '',
@@ -42,14 +40,19 @@ export default function VidaBasicaForm() {
     coverage_amount: 0, // Monto de cobertura de vida
     ad_d_included: true, // AD&D está incluido al 100% de coverage_amount
     ad_d_coverage: 0, // Se iguala a coverage_amount automáticamente
-    beneficiaries: [{ name: '', relationship: '', percentage: 100 }] as Beneficiary[], // Array dinámico (1–5) - Inicializar con un beneficiario por defecto
+    beneficiaries: [{ name: '', relationship: '', percentage: 100 }], // Initialized as non-empty array
   });
 
   const [agents, setAgents] = useState<AgentProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]); // Aunque no se usa directamente en el select, es bueno mantenerlo si hay planes futuros.
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // --- NUEVOS ESTADOS PARA LA PRIMA ESTIMADA Y ERRORES DE VALIDACIÓN ESPECÍFICOS ---
+  const [validationErrors, setValidationErrors] = useState<{
+    [key: string]: string;
+  }>({});
+  // --------------------------------------------------------------------------------
 
   // Para controlar cuántos beneficiarios mostrar (1–5)
   const [numBeneficiaries, setNumBeneficiaries] = useState<number>(1);
@@ -102,6 +105,34 @@ export default function VidaBasicaForm() {
     fetchInitialData();
   }, []);
 
+  // --- EFECTO PARA CALCULAR LA PRIMA ESTIMADA con useMemo ---
+  const calculatedPremium = useMemo(() => {
+    let premium = 0;
+    const coverage = formData.coverage_amount || 0;
+
+    // EJEMPLO DE LÓGICA DE CÁLCULO (ADAPTA ESTO A TUS REGLAS DE NEGOCIO REALES)
+    // Por ejemplo, $0.001 por cada dólar de cobertura
+    if (coverage > 0) {
+      premium = coverage * 0.001;
+
+      // Ajuste por frecuencia de pago (ejemplo)
+      switch (formData.payment_frequency) {
+        case 'quarterly':
+          premium *= 3; // Si mensual es base, trimestral es 3 veces
+          break;
+        case 'annually':
+          premium *= 12; // Anual es 12 veces
+          break;
+        case 'monthly':
+        default:
+          // No hay ajuste si es mensual
+          break;
+      }
+    }
+    return premium;
+  }, [formData.coverage_amount, formData.payment_frequency]);
+  // -------------------------------------------------------------
+
   // -----------------------------------------------------
   // Helpers
   // -----------------------------------------------------
@@ -130,25 +161,28 @@ export default function VidaBasicaForm() {
       }
       return { ...prev, [name]: value };
     });
+
+    // Limpia el error de validación para el campo específico cuando el usuario cambia el valor
+    setValidationErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   // Cuando cambia el número de beneficiarios (1–5)
   const handleNumBeneficiariesChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const num = parseInt(e.target.value);
+    const num = parseInt(e.target.value, 10);
     // Asegurarse de que num sea un número válido y dentro del rango (1-5)
     const newNum = isNaN(num) ? 1 : Math.max(1, Math.min(5, num));
 
     setNumBeneficiaries(newNum);
 
     setFormData(prev => {
-      const existingBeneficiaries = prev.beneficiaries || [];
-      const newBeneficiaries: Beneficiary[] = [];
+      // Ensure prev.beneficiaries is an array before slicing
+      const existingBeneficiaries = prev.beneficiaries ? [...prev.beneficiaries] : [];
 
-      for (let i = 0; i < newNum; i++) {
-        // Conservamos datos anteriores si existían, o inicializamos vacíos con 0% por defecto
-        // La suma de porcentajes será validada al hacer submit
-        newBeneficiaries.push(existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 });
-      }
+      // Initialize array with existing beneficiaries up to newNum, or create new empty ones
+      const newBeneficiaries: Beneficiary[] = Array(newNum).fill(null).map((_, i) =>
+        existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 }
+      );
+
       return { ...prev, beneficiaries: newBeneficiaries };
     });
   };
@@ -160,8 +194,11 @@ export default function VidaBasicaForm() {
     value: string
   ) => {
     setFormData(prev => {
-      const newBens = [...(prev.beneficiaries || [])]; // Asegúrate de que es un array
-      // Si el índice no existe (ej. se añadió un nuevo campo de beneficiario), inicialízalo.
+      // Ensure beneficiaries array exists and is mutable
+      const newBens = prev.beneficiaries ? [...prev.beneficiaries] : [];
+
+      // If the index does not exist (e.g., a new beneficiary field was added), initialize it.
+      // This is crucial for correctly handling `newBens[idx]`.
       if (!newBens[idx]) {
         newBens[idx] = { name: '', relationship: '', percentage: 0 };
       }
@@ -178,6 +215,10 @@ export default function VidaBasicaForm() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({}); // Limpiar todos los errores de validación específicos al intentar enviar
+
+    // --- VALIDACIONES DE CAMPOS Y LÓGICA DE NEGOCIO ---
+    let newValidationErrors: { [key: string]: string } = {};
 
     // El ID del usuario logueado es el cliente que está creando la póliza
     if (!user?.id) {
@@ -187,48 +228,62 @@ export default function VidaBasicaForm() {
 
     // Validar que se haya seleccionado un agente para la póliza
     if (!formData.agent_id) { // formData.agent_id ahora contiene el ID del agente seleccionado
-      setError('Debes seleccionar un agente para esta póliza.');
-      return;
+      newValidationErrors.agent_id = 'Debes seleccionar un agente para esta póliza.';
     }
 
     // Validaciones Vida Básica
     // 1) coverage_amount > 0
     if (formData.coverage_amount! <= 0) {
-      setError('Debes indicar un monto de cobertura mayor que 0.');
-      return;
+      newValidationErrors.coverage_amount = 'Debes indicar un monto de cobertura mayor que 0.';
     }
     // 2) premium_amount >= 0 (se asume que backend valida tope máximo según salario)
     if (formData.premium_amount < 0) {
-      setError('La prima no puede ser negativa.');
-      return;
+      newValidationErrors.premium_amount = 'La prima no puede ser negativa.';
     }
+    // Opcional: Si quieres que la prima ingresada sea igual o muy cercana a la estimada
+    // Puedes ajustar la tolerancia (0.01) o la condición (ej. solo si calculatedPremium > 0)
+    if (Math.abs(formData.premium_amount - calculatedPremium) > 0.01 && calculatedPremium > 0) {
+      newValidationErrors.premium_amount = `La prima debe ser cercana a la estimada: $${calculatedPremium.toFixed(2)}`;
+    }
+
     // 3) Validar beneficiarios: al menos 1, máximo 5, suma de porcentajes = 100%
+    // Access formData.beneficiaries safely
     if (!formData.beneficiaries || formData.beneficiaries.length === 0) {
-      setError('Debe haber al menos un beneficiario.');
-      return;
+      newValidationErrors.beneficiaries = 'Debe haber al menos un beneficiario.';
+    } else {
+      let sumaPct = 0;
+      // Iterar sobre los beneficiarios mostrados actualmente (controlado por numBeneficiaries)
+      for (let i = 0; i < numBeneficiaries; i++) {
+        // Safely access beneficiary by index
+        const b = formData.beneficiaries[i];
+        if (!b) { // If for some reason the beneficiary doesn't exist in formData.beneficiaries, it's an error
+          newValidationErrors.beneficiaries = `Faltan datos para el beneficiario ${i + 1}.`;
+          break; // Exit the loop if a critical error is found
+        }
+        if (!b.name.trim() || !b.relationship.trim() || b.percentage <= 0) {
+          newValidationErrors.beneficiaries = `Completa todos los datos y asegúrate que el porcentaje sea mayor que 0 para el beneficiario ${i + 1}.`;
+          break;
+        }
+        sumaPct += b.percentage;
+      }
+
+      // Usar una tolerancia para la suma de porcentajes debido a la aritmética de punto flotante
+      if (Object.keys(newValidationErrors).length === 0 && Math.abs(sumaPct - 100) > 0.01) {
+        newValidationErrors.beneficiaries = 'La suma de porcentajes de todos los beneficiarios debe ser 100%.';
+      }
     }
 
-    let sumaPct = 0;
-    // Iterar sobre los beneficiarios mostrados actualmente (controlado por numBeneficiaries)
-    // Esto asegura que solo se validan los que el usuario ha especificado que quiere.
-    for (let i = 0; i < numBeneficiaries; i++) {
-      const b = formData.beneficiaries[i];
-      if (!b) { // Si por alguna razón el beneficiario no existe en formData.beneficiaries, es un error
-        setError(`Faltan datos para el beneficiario ${i + 1}.`);
-        return;
-      }
-      if (!b.name.trim() || !b.relationship.trim() || b.percentage <= 0) {
-        setError(`Completa todos los datos y asegúrate que el porcentaje sea mayor que 0 para el beneficiario ${i + 1}.`);
-        return;
-      }
-      sumaPct += b.percentage;
-    }
+    // Establecer todos los errores de validación encontrados
+    setValidationErrors(newValidationErrors);
 
-    // Usar una tolerancia para la suma de porcentajes debido a la aritmética de punto flotante
-    if (Math.abs(sumaPct - 100) > 0.01) {
-      setError('La suma de porcentajes de todos los beneficiarios debe ser 100%.');
+    // Si hay errores de validación, detener el envío del formulario
+    if (Object.keys(newValidationErrors).length > 0) {
+      setError('Por favor, corrige los errores en el formulario.');
+      // Opcional: Scroll to the first error
+      // document.querySelector('.text-red-600')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    // -------------------------------------------------------------
 
     const policyNumber = generatePolicyNumber();
     const payload: CreatePolicyData = {
@@ -244,11 +299,11 @@ export default function VidaBasicaForm() {
       ad_d_included: true, // Siempre true para Vida Básica
       ad_d_coverage: Number(formData.ad_d_coverage),
       status: 'pending', // El cliente solo puede enviar pólizas en estado pendiente
-      // Solo enviar los beneficiarios que realmente se están mostrando/usando
-      beneficiaries: formData.beneficiaries.slice(0, numBeneficiaries).map(b => ({
+      // Only send the beneficiaries that are actually displayed/used
+      beneficiaries: formData.beneficiaries?.slice(0, numBeneficiaries).map(b => ({ // Safely access beneficiaries
         ...b,
-        percentage: Number(b.percentage) // Asegurarse de que el porcentaje sea numérico
-      })),
+        percentage: Number(b.percentage)
+      })) || [], // Provide an empty array if beneficiaries is null/undefined
     };
 
     const { data, error: createError } = await createPolicy(payload);
@@ -275,6 +330,8 @@ export default function VidaBasicaForm() {
         beneficiaries: [{ name: '', relationship: '', percentage: 100 }], // Resetear a 1 beneficiario con 100%
       });
       setNumBeneficiaries(1); // Resetear el control de beneficiarios a 1
+      // setCalculatedPremium(0); // This is now a useMemo, no need to set state
+      setValidationErrors({}); // Limpiar errores de validación después de un envío exitoso
 
       setTimeout(() => {
         // Redirige al dashboard del cliente, o a una página de pólizas pendientes
@@ -322,7 +379,7 @@ export default function VidaBasicaForm() {
         {/* Agente Designado para la póliza */}
         <div>
           <label
-            htmlFor="agent_id" // Cambiado a agent_id para reflejar su propósito
+            htmlFor="agent_id" // Changed to agent_id to reflect its purpose
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Agente Designado para la Póliza
@@ -330,7 +387,7 @@ export default function VidaBasicaForm() {
           <select
             id="agent_id"
             name="agent_id"
-            value={formData.agent_id ?? ''} // <-- MODIFICACIÓN CLAVE AQUÍ
+            value={formData.agent_id ?? ''}
             onChange={handleChange}
             required
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -347,6 +404,9 @@ export default function VidaBasicaForm() {
           <p className="mt-1 text-xs text-gray-500">
             Selecciona el agente que quieres que gestione esta póliza.
           </p>
+          {validationErrors.agent_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.agent_id}</p>
+          )}
         </div>
 
         {/* Producto de Seguro (MODIFICADO) */}
@@ -431,6 +491,9 @@ export default function VidaBasicaForm() {
             <p className="mt-1 text-xs text-gray-500">
               Puede quedar en $0 (cubierto por la empresa) o más según la cobertura.
             </p>
+            {validationErrors.premium_amount && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+            )}
           </div>
           <div>
             <label
@@ -453,6 +516,16 @@ export default function VidaBasicaForm() {
             </select>
           </div>
         </div>
+
+        {/* --- NUEVO BLOQUE DE PRIMA ESTIMADA --- */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
+        </div>
+        {/* ------------------------------------- */}
 
         {/* Detalles del Contrato */}
         <div>
@@ -500,6 +573,9 @@ export default function VidaBasicaForm() {
           <p className="mt-1 text-xs text-gray-500">
             Ingresa el monto que deseas cubrir (mínimo $1). AD&D se iguala a este monto.
           </p>
+          {validationErrors.coverage_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.coverage_amount}</p>
+          )}
         </div>
 
         {/* Cobertura AD&D (incluida) */}
@@ -551,8 +627,8 @@ export default function VidaBasicaForm() {
         {/* Campos dinámicos para cada beneficiario */}
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-gray-700">Beneficiarios</h3>
-          {/* Mapear solo hasta numBeneficiaries para renderizar los campos */}
-          {formData.beneficiaries && formData.beneficiaries.slice(0, numBeneficiaries).map((ben, idx) => (
+          {/* Ensure formData.beneficiaries is an array before mapping */}
+          {formData.beneficiaries?.slice(0, numBeneficiaries).map((ben, idx) => (
             <div
               key={idx}
               className="p-4 border border-gray-200 rounded-lg space-y-3"
@@ -569,7 +645,7 @@ export default function VidaBasicaForm() {
                   type="text"
                   id={`ben_name_${idx}`}
                   name={`ben_name_${idx}`}
-                  value={ben.name}
+                  value={ben?.name || ''} // Safely access properties and provide fallback
                   onChange={e =>
                     handleBeneficiaryChange(idx, 'name', e.target.value)
                   }
@@ -587,7 +663,7 @@ export default function VidaBasicaForm() {
                 <select
                   id={`ben_rel_${idx}`}
                   name={`ben_rel_${idx}`}
-                  value={ben.relationship}
+                  value={ben?.relationship || ''} // Safely access properties and provide fallback
                   onChange={e =>
                     handleBeneficiaryChange(idx, 'relationship', e.target.value)
                   }
@@ -612,7 +688,7 @@ export default function VidaBasicaForm() {
                   type="number"
                   id={`ben_pct_${idx}`}
                   name={`ben_pct_${idx}`}
-                  value={ben.percentage}
+                  value={ben?.percentage || 0} // Safely access properties and provide fallback
                   onChange={e =>
                     handleBeneficiaryChange(idx, 'percentage', e.target.value)
                   }
@@ -628,6 +704,9 @@ export default function VidaBasicaForm() {
               </div>
             </div>
           ))}
+          {validationErrors.beneficiaries && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.beneficiaries}</p>
+          )}
         </div>
 
         {/* Botones de acción */}

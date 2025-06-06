@@ -25,11 +25,10 @@ export default function PlanBasicoForm() {
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 0,
+    premium_amount: 0, // Este será el premium_amount calculado
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
-    // Campos específicos para Plan Básico, ahora requeridos en CreatePolicyData
     deductible: 2000, // Valor por defecto dentro del rango [2000‒5000]
     coinsurance: 30, // 30 % fijo
     max_annual: 20000, // Máximo desembolsable anual
@@ -44,9 +43,11 @@ export default function PlanBasicoForm() {
   // -----------------------------------------------------
   const [clients, setClients] = useState<ClientProfile[]>([]); // Lista de perfiles de clientes
   const [loading, setLoading] = useState<boolean>(true); // Indicador de estado de carga
-  const [error, setError] = useState<string | null>(null); // Mensaje de error
+  const [error, setError] = useState<string | null>(null); // Mensaje de error general
   const [successMessage, setSuccessMessage] = useState<string | null>(null); // Mensaje de éxito
   const [planBasicoProduct, setPlanBasicoProduct] = useState<InsuranceProduct | null>(null); // Producto específico "Plan Básico"
+  const [calculatedPremium, setCalculatedPremium] = useState<number>(0); // Estado para la prima calculada
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string | null }>({}); // Errores de validación por campo
 
   // -----------------------------------------------------
   // useEffect para la carga inicial de datos (clientes y producto específico)
@@ -66,7 +67,9 @@ export default function PlanBasicoForm() {
       }
       if (productsData) {
         // Encuentra y establece el producto específico "Seguro de Salud Plan Básico"
-        const foundPlanBasicoProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Básico');
+        const foundPlanBasicoProduct = productsData.find(
+          p => p.name === 'Seguro de Salud Plan Básico'
+        );
         if (foundPlanBasicoProduct) {
           setPlanBasicoProduct(foundPlanBasicoProduct);
           // Establece el ID del producto encontrado en el formData
@@ -76,7 +79,9 @@ export default function PlanBasicoForm() {
           }));
         } else {
           // Muestra un error si el producto específico no se encuentra
-          setError('Error: El producto "Seguro de Salud Plan Básico" no fue encontrado. Asegúrate de que existe en la base de datos.');
+          setError(
+            'Error: El producto "Seguro de Salud Plan Básico" no fue encontrado. Asegúrate de que existe en la base de datos.'
+          );
           setLoading(false); // Detiene la carga si el producto no se encuentra
           return;
         }
@@ -87,7 +92,9 @@ export default function PlanBasicoForm() {
       if (clientsError) {
         console.error('Error al cargar clientes:', clientsError);
         // Concatena el mensaje de error si ya existía uno
-        setError(prev => (prev ? prev + ' Y error al cargar clientes.' : 'Error al cargar los clientes.'));
+        setError(prev =>
+          prev ? prev + ' Y error al cargar clientes.' : 'Error al cargar los clientes.'
+        );
         setLoading(false); // Detiene la carga en caso de error de clientes
         return;
       }
@@ -100,6 +107,40 @@ export default function PlanBasicoForm() {
 
     fetchInitialData(); // Ejecuta la función de carga inicial
   }, []); // El array vacío asegura que este efecto se ejecuta solo una vez al montar el componente
+
+  // -----------------------------------------------------
+  // useEffect para calcular la prima automáticamente
+  // -----------------------------------------------------
+  useEffect(() => {
+    // Definir las tarifas base
+    const BASE_PREMIUM_MONTHLY = 100; // Prima base mensual para el plan básico
+    const DEPENDENT_COST_MONTHLY = 20; // Costo adicional por dependiente al mes
+
+    let premium = BASE_PREMIUM_MONTHLY;
+    premium += (formData.num_dependents || 0) * DEPENDENT_COST_MONTHLY;
+
+    // Ajustar por frecuencia de pago si es necesario
+    switch (formData.payment_frequency) {
+      case 'quarterly':
+        premium *= 3; // 3 meses
+        break;
+      case 'annually':
+        premium *= 12; // 12 meses
+        break;
+      case 'monthly':
+      default:
+        // Ya es mensual, no se ajusta
+        break;
+    }
+
+    setCalculatedPremium(premium);
+
+    // Actualiza formData.premium_amount con la prima calculada
+    setFormData(prev => ({
+      ...prev,
+      premium_amount: premium,
+    }));
+  }, [formData.num_dependents, formData.payment_frequency]); // Recalcula cuando cambian el número de dependientes o la frecuencia
 
   // -----------------------------------------------------
   // Funciones de utilidad (Helpers)
@@ -123,23 +164,19 @@ export default function PlanBasicoForm() {
     const { name, value, type } = e.target;
 
     setFormData(prev => {
-      // Manejo específico para 'premium_amount' (parsear a float)
-      if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) || 0 }; // Asegura que sea un número, por defecto 0
-      }
-
       // Manejo específico para 'num_dependents'
       if (name === 'num_dependents') {
         const num = parseInt(value, 10) || 0; // Parsear a entero, por defecto 0
+        // Limitar a un máximo de 2 dependientes directamente en el estado
+        const safeNum = Math.min(Math.max(0, num), 2);
+
         // Crea un nuevo array de `dependents_details` con el número correcto de elementos
-        // Cada nuevo elemento se inicializa con campos vacíos
-        const newDependentsArray = Array.from({ length: num }, (_, i) => {
-          // Reutiliza los datos existentes si la posición ya tiene datos
+        const newDependentsArray = Array.from({ length: safeNum }, (_, i) => {
           return prev.dependents_details && prev.dependents_details[i]
             ? prev.dependents_details[i]
             : { name: '', birth_date: '', relationship: '' };
         });
-        return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
+        return { ...prev, num_dependents: safeNum, dependents_details: newDependentsArray };
       }
 
       // Manejo para campos booleanos (checkbox)
@@ -150,6 +187,10 @@ export default function PlanBasicoForm() {
       // Manejo general para otros inputs (texto, select, textarea)
       return { ...prev, [name]: value };
     });
+
+    // Limpiar el error de validación para el campo específico cuando el usuario comienza a escribir
+    setValidationErrors(prev => ({ ...prev, [name]: null }));
+    setError(null); // Limpiar el error general si el usuario interactúa
   };
 
   /**
@@ -173,6 +214,83 @@ export default function PlanBasicoForm() {
       };
       return { ...prev, dependents_details: newDetails }; // Actualiza el estado con el nuevo array
     });
+    // Limpiar errores específicos de dependientes
+    setValidationErrors(prev => ({ ...prev, [`dependent_${idx}_${field}`]: null }));
+    setError(null);
+  };
+
+  /**
+   * Realiza las validaciones del formulario.
+   * @returns {boolean} True si el formulario es válido, false en caso contrario.
+   */
+  const validateForm = (): boolean => {
+    const newErrors: { [key: string]: string | null } = {};
+    let isValid = true;
+
+    // Validación: Cliente seleccionado
+    if (!formData.client_id) {
+      newErrors.client_id = 'Debes seleccionar un cliente.';
+      isValid = false;
+    }
+
+    // Validación: Fechas de inicio y fin
+    if (!formData.start_date) {
+      newErrors.start_date = 'La fecha de inicio es requerida.';
+      isValid = false;
+    }
+    if (!formData.end_date) {
+      newErrors.end_date = 'La fecha de fin es requerida.';
+      isValid = false;
+    }
+    if (formData.start_date && formData.end_date && formData.start_date >= formData.end_date) {
+      newErrors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio.';
+      isValid = false;
+    }
+
+    // Validación: Deducible entre $2,000 y $5,000
+    if (formData.deductible! < 2000 || formData.deductible! > 5000) {
+      newErrors.deductible = 'El deducible debe estar entre $2,000 y $5,000.';
+      isValid = false;
+    }
+
+    // Validación: Coaseguro debe ser 30% (fijo)
+    if (formData.coinsurance !== 30) {
+      newErrors.coinsurance = 'El coaseguro para Plan Básico debe ser 30%.';
+      isValid = false;
+    }
+
+    // Validación: Número de dependientes entre 0 y 2
+    if (formData.num_dependents! < 0 || formData.num_dependents! > 2) {
+      newErrors.num_dependents = 'El número de dependientes debe ser entre 0 y 2.';
+      isValid = false;
+    }
+
+    // Validación: Si hay dependientes, todos deben tener datos completos
+    for (let i = 0; i < formData.num_dependents!; i++) {
+      const dependent = formData.dependents_details![i];
+      if (
+        !dependent ||
+        !dependent.name.trim() ||
+        !dependent.birth_date ||
+        !dependent.relationship.trim()
+      ) {
+        newErrors[
+          `dependent_${i}`
+        ] = `Por favor completa todos los campos del dependiente ${i + 1}.`;
+        isValid = false;
+      }
+    }
+
+    // Validación: Prima estimada (ya se calcula automáticamente, pero podemos validar si está dentro de un rango esperado)
+    // Aunque se calcula automáticamente, podrías querer un rango de validación si por alguna razón el cálculo es inusual
+    // Por ejemplo, si el plan tiene un costo base y no puede ser 0
+    if (calculatedPremium <= 0) {
+      newErrors.premium_amount = 'La prima estimada debe ser mayor que cero.';
+      isValid = false;
+    }
+
+    setValidationErrors(newErrors);
+    return isValid;
   };
 
   /**
@@ -184,56 +302,27 @@ export default function PlanBasicoForm() {
     setError(null); // Limpia errores anteriores
     setSuccessMessage(null); // Limpia mensajes de éxito anteriores
 
+    // Realizar validaciones antes de enviar
+    if (!validateForm()) {
+      setError('Por favor corrige los errores en el formulario.');
+      return;
+    }
+
     // Validación: Asegurarse de que el ID del agente esté disponible
     if (!user?.id) {
       setError('No se pudo obtener el ID del agente para asignar la póliza.');
       return;
     }
 
-    // --- Validaciones específicas del "Plan Básico" ---
-
-    // 1) Deducible debe estar entre $2,000 y $5,000
-    if (formData.deductible! < 2000 || formData.deductible! > 5000) {
-      setError('El deducible debe estar entre $2,000 y $5,000.');
-      return;
-    }
-
-    // 2) Coaseguro debe ser 30% (fijo)
-    if (formData.coinsurance !== 30) {
-      setError('El coaseguro para Plan Básico debe ser 30%.');
-      return;
-    }
-
-    // 3) Número de dependientes debe ser entre 0 y 2
-    // Se usa '|| 0' para asegurar que `num_dependents` sea tratado como un número si fuera undefined
-    if (formData.num_dependents! < 0 || formData.num_dependents! > 2) {
-      setError('El número de dependientes debe ser entre 0 y 2.');
-      return;
-    }
-
-    // 4) Si hay dependientes, todos deben tener datos completos
-    // Se itera hasta `formData.num_dependents` y se accede al array `dependents_details`
-    for (let i = 0; i < formData.num_dependents!; i++) {
-      const dependent = formData.dependents_details![i];
-      // Verifica que el dependiente exista y que sus campos `name`, `birth_date` y `relationship` no estén vacíos.
-      if (!dependent || !dependent.name.trim() || !dependent.birth_date || !dependent.relationship.trim()) {
-        setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
-        return;
-      }
-    }
-
     // Generar número de póliza
     const policyNumber = generatePolicyNumber();
 
     // Crear el objeto de datos de la póliza para enviar
-    // Ya que `CreatePolicyData` ahora incluye todos los campos específicos,
-    // podemos simplemente desestructurar `formData` y añadir `agent_id` y `policy_number`.
     const policyToCreate: CreatePolicyData = {
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
-      // Asegurarse de que premium_amount sea un número (ya lo hace handleChange, pero es buena práctica confirmarlo)
-      premium_amount: Number(formData.premium_amount),
+      premium_amount: calculatedPremium, // Usar la prima calculada
     };
 
     // Llamada a la API para crear la póliza
@@ -251,7 +340,7 @@ export default function PlanBasicoForm() {
         product_id: planBasicoProduct?.id || '', // Reinicia con el ID del producto básico si está disponible
         start_date: '',
         end_date: '',
-        premium_amount: 0,
+        premium_amount: 0, // Reiniciar a 0, el useEffect lo recalculará
         payment_frequency: 'monthly',
         status: 'pending',
         contract_details: '',
@@ -263,6 +352,8 @@ export default function PlanBasicoForm() {
         has_dental: false,
         has_vision: false,
       });
+      setCalculatedPremium(0); // Resetear la prima calculada
+      setValidationErrors({}); // Limpiar errores de validación
       // Redirigir al usuario después de un breve retraso para que vea el mensaje de éxito
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
@@ -289,7 +380,7 @@ export default function PlanBasicoForm() {
         Crear Póliza – Plan Médico Básico
       </h2>
 
-      {/* Área para mostrar mensajes de error */}
+      {/* Área para mostrar mensajes de error general */}
       {error && (
         <div
           className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
@@ -338,6 +429,9 @@ export default function PlanBasicoForm() {
               </option>
             ))}
           </select>
+          {validationErrors.client_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.client_id}</p>
+          )}
         </div>
 
         {/* Campo de visualización del Producto de Seguro (solo lectura) */}
@@ -379,6 +473,9 @@ export default function PlanBasicoForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
+            {validationErrors.start_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.start_date}</p>
+            )}
           </div>
           <div>
             <label
@@ -396,54 +493,43 @@ export default function PlanBasicoForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
+            {validationErrors.end_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.end_date}</p>
+            )}
           </div>
         </div>
 
-        {/* Campos de Monto de la Prima y Frecuencia de Pago */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="premium_amount"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Monto de la Prima ($)
-            </label>
-            <input
-              type="number"
-              id="premium_amount"
-              name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="50" // Validación de rango
-              max="150" // Validación de rango
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $50 – $150 mensuales.
-            </p>
-          </div>
-          <div>
-            <label
-              htmlFor="payment_frequency"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Frecuencia de Pago
-            </label>
-            <select
-              id="payment_frequency"
-              name="payment_frequency"
-              value={formData.payment_frequency}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="monthly">Mensual</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="annually">Anual</option>
-            </select>
-          </div>
+        {/* Campos de Frecuencia de Pago */}
+        <div>
+          <label
+            htmlFor="payment_frequency"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Frecuencia de Pago
+          </label>
+          <select
+            id="payment_frequency"
+            name="payment_frequency"
+            value={formData.payment_frequency}
+            onChange={handleChange}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="monthly">Mensual</option>
+            <option value="quarterly">Trimestral</option>
+            <option value="annually">Anual</option>
+          </select>
+        </div>
+
+        {/* Nuevo bloque de Prima Estimada */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">
+            ${calculatedPremium.toFixed(2)} / {formData.payment_frequency}
+          </p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
         </div>
 
         {/* Campo de Estado de la Póliza */}
@@ -517,6 +603,9 @@ export default function PlanBasicoForm() {
           <p className="mt-1 text-xs text-gray-500">
             Rango permitido: $2,000 – $5,000.
           </p>
+          {validationErrors.deductible && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.deductible}</p>
+          )}
         </div>
 
         {/* Campo de Coaseguro (fijo en 30%) */}
@@ -538,6 +627,9 @@ export default function PlanBasicoForm() {
           <p className="mt-1 text-xs text-gray-500">
             Para el Plan Básico, el coaseguro está fijado en 30 %.
           </p>
+          {validationErrors.coinsurance && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.coinsurance}</p>
+          )}
         </div>
 
         {/* Campo de Máximo Desembolsable Anual (fijo en $20,000) */}
@@ -584,6 +676,9 @@ export default function PlanBasicoForm() {
           <p className="mt-1 text-xs text-gray-500">
             Cada dependiente genera un costo adicional de $20/mes.
           </p>
+          {validationErrors.num_dependents && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.num_dependents}</p>
+          )}
         </div>
 
         {/* Campos dinámicos para cada beneficiario (dependiente) */}
@@ -619,6 +714,12 @@ export default function PlanBasicoForm() {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
+                  {validationErrors[`dependent_${idx}`] &&
+                    validationErrors[`dependent_${idx}`]!.includes('nombre') && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {validationErrors[`dependent_${idx}`]}
+                      </p>
+                    )}
                 </div>
                 <div>
                   <label
@@ -638,6 +739,12 @@ export default function PlanBasicoForm() {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   />
+                  {validationErrors[`dependent_${idx}`] &&
+                    validationErrors[`dependent_${idx}`]!.includes('fecha de nacimiento') && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {validationErrors[`dependent_${idx}`]}
+                      </p>
+                    )}
                 </div>
                 <div>
                   <label
@@ -662,6 +769,12 @@ export default function PlanBasicoForm() {
                     <option value="parent">Padre/Madre</option>
                     <option value="other">Otro</option>
                   </select>
+                  {validationErrors[`dependent_${idx}`] &&
+                    validationErrors[`dependent_${idx}`]!.includes('parentesco') && (
+                      <p className="mt-1 text-sm text-red-600">
+                        {validationErrors[`dependent_${idx}`]}
+                      </p>
+                    )}
                 </div>
               </div>
             ))}
@@ -671,8 +784,7 @@ export default function PlanBasicoForm() {
         {/* Nota sobre Cobertura Dental y Visión */}
         <div>
           <p className="text-sm text-gray-700">
-            <strong>Nota:</strong> Este plan no incluye cobertura dental ni
-            visión.
+            <strong>Nota:</strong> Este plan no incluye cobertura dental ni visión.
           </p>
         </div>
 

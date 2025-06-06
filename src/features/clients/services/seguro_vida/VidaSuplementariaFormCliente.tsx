@@ -1,14 +1,13 @@
 import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from 'src/contexts/AuthContext'; // Asumo que AuthContext proporciona el user.id
+import { useAuth } from 'src/contexts/AuthContext';
 import {
   CreatePolicyData,
   InsuranceProduct,
   createPolicy,
   getActiveInsuranceProducts,
-} from '../../../policies/policy_management'; // Asegúrate de que esta ruta sea correcta
-
-import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend'; // <--- MODIFICACIÓN CLAVE: Importa agentes
+} from '../../../policies/policy_management';
+import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend';
 
 interface Beneficiary {
   name: string;
@@ -21,7 +20,7 @@ interface Beneficiary {
  */
 export default function VidaSuplementariaForm() {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth(); // Obtén el usuario autenticado y el estado de carga de autenticación
+  const { user, loading: authLoading } = useAuth();
 
   // -----------------------------------------------------
   // Estado base + campos específicos Vida Suplementaria
@@ -47,11 +46,55 @@ export default function VidaSuplementariaForm() {
   });
 
   const [products, setProducts] = useState<InsuranceProduct[]>([]);
-  const [agents, setAgents] = useState<AgentProfile[]>([]); // <-- NUEVO: Estado para los agentes
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [vidaSuplementariaProduct, setVidaSuplementariaProduct] = useState<InsuranceProduct | null>(null);
+
+  // NUEVO: Estado para almacenar errores de validación de campos específicos
+  const [validationErrors, setValidationErrors] = useState<{
+    premium_amount?: string;
+    coverage_amount?: string;
+    ad_d_coverage?: string;
+    age_at_inscription?: string;
+    beneficiaries?: string;
+    agent_id?: string; // Nuevo para el agente
+  }>({});
+
+  // Lógica para calcular la prima estimada
+  const calculatePremium = () => {
+    // Estas son reglas de ejemplo, ajusta según la lógica de tu negocio.
+    // Podrías tener una tabla de primas por rango de edad, monto, etc.
+    let basePremium = 20; // Prima base para $10,000 de cobertura
+
+    // Ajuste por monto de cobertura (ejemplo: cada $10,000 adicionales, +$5)
+    if (formData.coverage_amount && formData.coverage_amount > 10000) {
+      basePremium += Math.floor((formData.coverage_amount - 10000) / 10000) * 5;
+    }
+
+    // Ajuste por AD&D (ejemplo: 0.05% del monto de AD&D)
+    if (formData.ad_d_included && formData.ad_d_coverage) {
+      basePremium += formData.ad_d_coverage * 0.0005;
+    }
+
+    // Ajuste por edad (ejemplo: +$1 por cada año mayor a 30)
+    if (formData.age_at_inscription && formData.age_at_inscription > 30) {
+      basePremium += (formData.age_at_inscription - 30) * 1;
+    }
+
+    // Convertir a frecuencia de pago (ejemplo: trimestral = mensual * 3, anual = mensual * 12)
+    let finalPremium = basePremium;
+    if (formData.payment_frequency === 'quarterly') {
+      finalPremium = basePremium * 3;
+    } else if (formData.payment_frequency === 'annually') {
+      finalPremium = basePremium * 12;
+    }
+
+    return finalPremium;
+  };
+
+  const [calculatedPremium, setCalculatedPremium] = useState<number>(0);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -120,6 +163,12 @@ export default function VidaSuplementariaForm() {
     fetchInitialData();
   }, [user, authLoading, navigate]);
 
+  // Efecto para recalcular la prima cuando cambian los campos relevantes
+  useEffect(() => {
+    setCalculatedPremium(calculatePremium());
+  }, [formData.coverage_amount, formData.ad_d_included, formData.ad_d_coverage, formData.age_at_inscription, formData.payment_frequency]);
+
+
   // -----------------------------------------------------
   // Helpers
   // -----------------------------------------------------
@@ -130,30 +179,24 @@ export default function VidaSuplementariaForm() {
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
 
     setFormData(prev => {
-      if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) };
-      }
-      if (name === 'coverage_amount') {
-        return { ...prev, coverage_amount: parseFloat(value) };
-      }
-      if (name === 'age_at_inscription') {
-        return { ...prev, age_at_inscription: parseInt(value) };
-      }
-      if (name === 'ad_d_included') {
-        const isCheckbox = (target: EventTarget): target is HTMLInputElement =>
-          (target as HTMLInputElement).type === 'checkbox';
+      let updatedValue: string | number | boolean = value;
 
-        if (isCheckbox(e.target)) {
-          return { ...prev, ad_d_included: e.target.checked, ad_d_coverage: e.target.checked ? (prev.ad_d_coverage || 0) : 0 };
+      if (name === 'premium_amount' || name === 'coverage_amount' || name === 'ad_d_coverage') {
+        updatedValue = parseFloat(value);
+      } else if (name === 'age_at_inscription' || name === 'num_beneficiaries') {
+        updatedValue = parseInt(value);
+      } else if (name === 'ad_d_included') {
+        updatedValue = (e.target as HTMLInputElement).checked;
+        if (!updatedValue) {
+          // Si desmarcas AD&D, reinicia la cobertura a 0
+          return { ...prev, ad_d_included: false, ad_d_coverage: 0 };
         }
-        return prev;
       }
-      if (name === 'ad_d_coverage') {
-        return { ...prev, ad_d_coverage: parseFloat(value) };
-      }
+
+      // Manejo específico para num_beneficiaries para asegurar que siempre haya al menos 1
       if (name === 'num_beneficiaries') {
         const num = parseInt(value);
         const validNum = isNaN(num) ? 1 : Math.max(1, Math.min(3, num));
@@ -166,10 +209,21 @@ export default function VidaSuplementariaForm() {
         }
         return { ...prev, num_beneficiaries: validNum, beneficiaries: arr };
       }
-      // Aseguramos que agent_id se actualice correctamente
-      return { ...prev, [name]: value };
+
+      // Limpia el error de validación para el campo que está siendo editado
+      setValidationErrors(prevErrors => ({
+        ...prevErrors,
+        [name]: undefined,
+        // Limpia el error de prima si se cambia un valor que la afecta
+        ...(name === 'coverage_amount' || name === 'ad_d_coverage' || name === 'age_at_inscription' || name === 'payment_frequency' ? { premium_amount: undefined } : {})
+      }));
+
+
+      // Aseguramos que agent_id se actualice correctamente, entre otros campos
+      return { ...prev, [name]: updatedValue };
     });
   };
+
 
   const handleBeneficiaryChange = (
     idx: number,
@@ -188,6 +242,13 @@ export default function VidaSuplementariaForm() {
         ...newBens[idx],
         [field]: parsedValue,
       };
+
+      // Limpia el error de beneficiarios cuando se editan
+      setValidationErrors(prevErrors => ({
+        ...prevErrors,
+        beneficiaries: undefined,
+      }));
+
       return { ...prev, beneficiaries: newBens };
     });
   };
@@ -196,60 +257,63 @@ export default function VidaSuplementariaForm() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({}); // Limpiar errores de validación al intentar enviar
 
     if (!user?.id) {
       setError('No se pudo obtener el ID del cliente. Por favor, inicia sesión.');
       return;
     }
 
-    // <-- NUEVA VALIDACIÓN: Agente seleccionado
+    let currentErrors: { [key: string]: string } = {};
+
+    // NUEVA VALIDACIÓN: Agente seleccionado
     if (!formData.agent_id) {
-      setError('Por favor, selecciona un agente para tu póliza.');
-      return;
+      currentErrors.agent_id = 'Por favor, selecciona un agente para tu póliza.';
     }
 
     // Validaciones existentes
     if (formData.age_at_inscription! < 18 || formData.age_at_inscription! > 60) {
-      setError('La edad de inscripción debe estar entre 18 y 60 años.');
-      return;
+      currentErrors.age_at_inscription = 'La edad de inscripción debe estar entre 18 y 60 años.';
     }
     if (formData.coverage_amount! < 10000) {
-      setError('La cobertura mínima es $10,000.');
-      return;
+      currentErrors.coverage_amount = 'La cobertura mínima es $10,000.';
     }
     if (formData.ad_d_included) {
       if (formData.ad_d_coverage === undefined || formData.ad_d_coverage < 1 || formData.ad_d_coverage > formData.coverage_amount! * 2) {
-        setError(
-          `Si incluye AD&D, su cobertura debe estar entre $1 y $${(formData.coverage_amount!) * 2}.`
-        );
-        return;
+        currentErrors.ad_d_coverage = `Si incluye AD&D, su cobertura debe estar entre $1 y $${(formData.coverage_amount!) * 2}.`;
       }
     }
-    if (formData.premium_amount < 20) {
-      setError('La prima mínima es $20.');
-      return;
+
+    // Validar que la prima calculada sea al menos la mínima
+    if (calculatedPremium < 20) {
+      currentErrors.premium_amount = 'La prima calculada debe ser al menos $20.';
     }
+
     if (!formData.beneficiaries || formData.beneficiaries.length === 0) {
-      setError('Debe haber al menos un beneficiario.');
-      return;
-    }
-
-    if (formData.beneficiaries.length !== formData.num_beneficiaries) {
-      setError('Hay un desajuste entre el número de beneficiarios ingresados y el número declarado.');
-      return;
-    }
-
-    let sumaPct = 0;
-    for (let i = 0; i < formData.beneficiaries.length; i++) {
-      const b = formData.beneficiaries[i];
-      if (!b.name.trim() || !b.relationship.trim() || b.percentage <= 0) {
-        setError(`Completa todos los datos del beneficiario ${i + 1}.`);
-        return;
+      currentErrors.beneficiaries = 'Debe haber al menos un beneficiario.';
+    } else {
+      if (formData.beneficiaries.length !== formData.num_beneficiaries) {
+        currentErrors.beneficiaries = 'Hay un desajuste entre el número de beneficiarios ingresados y el número declarado.';
       }
-      sumaPct += b.percentage;
+
+      let sumaPct = 0;
+      for (let i = 0; i < formData.beneficiaries.length; i++) {
+        const b = formData.beneficiaries[i];
+        if (!b.name.trim() || !b.relationship.trim() || b.percentage <= 0) {
+          currentErrors.beneficiaries = `Completa todos los datos del beneficiario ${i + 1}.`;
+          break;
+        }
+        sumaPct += b.percentage;
+      }
+      if (Object.keys(currentErrors).length === 0 && parseFloat(sumaPct.toFixed(2)) !== 100) {
+        currentErrors.beneficiaries = 'La suma de porcentajes de todos los beneficiarios debe ser 100%.';
+      }
     }
-    if (parseFloat(sumaPct.toFixed(2)) !== 100) {
-      setError('La suma de porcentajes de todos los beneficiarios debe ser 100%.');
+
+    // Si hay errores, actualiza el estado y detiene el envío
+    if (Object.keys(currentErrors).length > 0) {
+      setValidationErrors(currentErrors);
+      setError('Por favor, corrige los errores en el formulario.');
       return;
     }
 
@@ -260,13 +324,13 @@ export default function VidaSuplementariaForm() {
       policy_number: policyNumber,
       client_id: user.id,
       status: 'pending',
-      premium_amount: Number(formData.premium_amount),
+      premium_amount: Number(calculatedPremium.toFixed(2)), // Usa la prima calculada
       coverage_amount: formData.coverage_amount,
       ad_d_included: formData.ad_d_included,
       ad_d_coverage: formData.ad_d_included ? formData.ad_d_coverage : 0,
       beneficiaries: formData.beneficiaries,
       age_at_inscription: formData.age_at_inscription,
-      agent_id: formData.agent_id, // <-- ASEGURAMOS QUE EL agent_id ESTÉ EN EL PAYLOAD
+      agent_id: formData.agent_id,
     };
 
     const { data, error: createError } = await createPolicy(payload);
@@ -280,11 +344,11 @@ export default function VidaSuplementariaForm() {
         ...prev,
         policy_number: '',
         product_id: vidaSuplementariaProduct?.id || '',
-        client_id: user.id, // Vuelve a establecer el client_id para el siguiente formulario
-        agent_id: '', // <-- RESETEAMOS EL AGENT_ID
+        client_id: user.id,
+        agent_id: '',
         start_date: '',
         end_date: '',
-        premium_amount: 20,
+        premium_amount: 20, // Se restablece a la base, el cálculo se encargará
         payment_frequency: 'monthly',
         status: 'pending',
         contract_details: '',
@@ -404,7 +468,7 @@ export default function VidaSuplementariaForm() {
             value={formData.agent_id ?? ''}
             onChange={handleChange}
             required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.agent_id ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           >
             <option value="">Selecciona un agente</option>
             {agents.map(agent => (
@@ -415,6 +479,9 @@ export default function VidaSuplementariaForm() {
               </option>
             ))}
           </select>
+          {validationErrors.agent_id && (
+            <p className="mt-1 text-xs text-red-500">{validationErrors.agent_id}</p>
+          )}
           {agents.length === 0 && !loading && !error && (
             <p className="mt-1 text-xs text-red-500">
               No hay agentes disponibles para seleccionar. Contacta al soporte.
@@ -460,28 +527,17 @@ export default function VidaSuplementariaForm() {
           </div>
         </div>
 
-        {/* Monto de la Prima y Frecuencia */}
+        {/* Monto de la Prima y Frecuencia (Se muestra el calculado, el input se oculta o se usa para fines informativos) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="premium_amount"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Monto de la Prima ($)
-            </label>
-            <input
-              type="number"
-              id="premium_amount"
-              name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="20"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
+          {/* Bloque de Prima Estimada (NUEVO) */}
+          <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+            <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+            <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+            {validationErrors.premium_amount && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+            )}
             <p className="mt-1 text-xs text-gray-500">
-              La prima mínima es $20 (cobertura $10,000).
+              Este valor es una estimación. La prima final puede variar tras la revisión del agente.
             </p>
           </div>
           <div>
@@ -524,11 +580,14 @@ export default function VidaSuplementariaForm() {
             min={18}
             max={60}
             step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.age_at_inscription ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           />
           <p className="mt-1 text-xs text-gray-500">
             Rango válido para la inscripción: 18 – 60 años.
           </p>
+          {validationErrors.age_at_inscription && (
+            <p className="mt-1 text-xs text-red-500">{validationErrors.age_at_inscription}</p>
+          )}
         </div>
 
         {/* Detalles del Contrato */}
@@ -572,11 +631,14 @@ export default function VidaSuplementariaForm() {
             required
             min={10000}
             step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.coverage_amount ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           />
           <p className="mt-1 text-xs text-gray-500">
             Monto mínimo: $10,000 (prima mínima $20). El monto final puede depender de su salario y aprobación médica.
           </p>
+          {validationErrors.coverage_amount && (
+            <p className="mt-1 text-xs text-red-500">{validationErrors.coverage_amount}</p>
+          )}
         </div>
 
         {/* Checkbox AD&D opcional */}
@@ -616,11 +678,14 @@ export default function VidaSuplementariaForm() {
               min={1}
               max={formData.coverage_amount! * 2}
               step="1"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className={`mt-1 block w-full px-3 py-2 border ${validationErrors.ad_d_coverage ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
             />
             <p className="mt-1 text-xs text-gray-500">
               Si incluyes AD&D, su cobertura puede ascender hasta 2 veces tu monto de vida.
             </p>
+            {validationErrors.ad_d_coverage && (
+              <p className="mt-1 text-xs text-red-500">{validationErrors.ad_d_coverage}</p>
+            )}
           </div>
         )}
 
@@ -728,6 +793,9 @@ export default function VidaSuplementariaForm() {
               </div>
             </div>
           ))}
+          {validationErrors.beneficiaries && (
+            <p className="mt-1 text-xs text-red-500">{validationErrors.beneficiaries}</p>
+          )}
         </div>
 
         {/* Botones de acción */}

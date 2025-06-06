@@ -7,7 +7,7 @@ import {
   getActiveInsuranceProducts,
   createPolicy,
 } from '../../../policies/policy_management';
-import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend'; // Importa agentes
+import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend';
 
 interface Dependent {
   name: string;
@@ -54,148 +54,143 @@ export default function PlanBasicoFormCliente() {
   const [error, setError] = useState<string | null>(null); // Mensaje de error
   const [successMessage, setSuccessMessage] = useState<string | null>(null); // Mensaje de éxito
   const [planBasicoProduct, setPlanBasicoProduct] = useState<InsuranceProduct | null>(null); // Producto específico "Plan Básico"
+  // Nuevo estado para errores de validación específicos del campo (ej. prima)
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string | null }>({});
+
+  // -----------------------------------------------------
+  // Cálculo de la prima estimada
+  // -----------------------------------------------------
+  const BASE_PREMIUM = 50; // Prima base para 0 dependientes
+  const DEPENDENT_COST = 20; // Costo adicional por dependiente
+
+  const calculatePremium = (numDependents: number): number => {
+    return BASE_PREMIUM + numDependents * DEPENDENT_COST;
+  };
+
+  const calculatedPremium = calculatePremium(formData.num_dependents ?? 0);
 
   // -----------------------------------------------------
   // useEffect para la carga inicial de datos (agentes y producto específico)
   // -----------------------------------------------------
   useEffect(() => {
     const fetchInitialData = async () => {
-      setLoading(true); // Inicia el estado de carga
-      setError(null); // Limpia cualquier error previo
+      setLoading(true);
+      setError(null);
 
-      // Cargar productos de seguro activos
       const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
       if (productsError) {
         console.error('Error al cargar productos de seguro:', productsError);
         setError('Error al cargar los productos de seguro.');
-        setLoading(false); // Detiene el estado de carga en caso de error
+        setLoading(false);
         return;
       }
       if (productsData) {
-        // Encuentra y establece el producto específico "Seguro de Salud Plan Básico"
         const foundPlanBasicoProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Básico');
         if (foundPlanBasicoProduct) {
           setPlanBasicoProduct(foundPlanBasicoProduct);
-          // Establece el ID del producto encontrado en el formData
           setFormData(prev => ({
             ...prev,
             product_id: foundPlanBasicoProduct.id,
           }));
         } else {
-          // Muestra un error si el producto específico no se encuentra
           setError('Error: El producto "Seguro de Salud Plan Básico" no fue encontrado. Asegúrate de que existe en la base de datos.');
-          setLoading(false); // Detiene la carga si el producto no se encuentra
+          setLoading(false);
           return;
         }
       }
 
-      // Cargar perfiles de agentes
       const { data: agentsData, error: agentsError } = await getAllAgentProfiles();
       if (agentsError) {
         console.error('Error al cargar agentes:', agentsError);
-        // Concatena el mensaje de error si ya existía uno
         setError(prev => (prev ? prev + ' Y error al cargar agentes.' : 'Error al cargar los agentes.'));
-        setLoading(false); // Detiene la carga en caso de error de agentes
+        setLoading(false);
         return;
       }
       if (agentsData) {
-        setAgents(agentsData); // Establece la lista de agentes
+        setAgents(agentsData);
       }
 
-      setLoading(false); // Finaliza el estado de carga
+      setLoading(false);
     };
 
-    fetchInitialData(); // Ejecuta la función de carga inicial
-  }, []); // El array vacío asegura que este efecto se ejecuta solo una vez al montar el componente
+    fetchInitialData();
+  }, []);
 
   // -----------------------------------------------------
   // Funciones de utilidad (Helpers)
   // -----------------------------------------------------
 
-  /**
-   * Genera un número de póliza único (solo para referencia, el agente lo confirmará).
-   * @returns {string} El número de póliza generado.
-   */
   const generatePolicyNumber = (): string => {
     return `SOL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
-  /**
-   * Maneja los cambios en los campos del formulario.
-   * @param {ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>} e Evento de cambio.
-   */
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
 
     setFormData(prev => {
-      // Manejo específico para 'premium_amount' (parsear a float)
-      if (name === 'premium_amount') {
-        return { ...prev, [name]: parseFloat(value) || 0 }; // Asegura que sea un número, por defecto 0
-      }
+      let updatedFormData = { ...prev };
 
-      // Manejo específico para 'num_dependents'
-      if (name === 'num_dependents') {
-        const num = parseInt(value, 10) || 0; // Parsear a entero, por defecto 0
-        // Crea un nuevo array de `dependents_details` con el número correcto de elementos
-        // Cada nuevo elemento se inicializa con campos vacíos
+      if (name === 'premium_amount') {
+        updatedFormData = { ...updatedFormData, [name]: parseFloat(value) || 0 };
+      } else if (name === 'num_dependents') {
+        const num = parseInt(value, 10) || 0;
         const newDependentsArray = Array.from({ length: num }, (_, i) => {
-          // Reutiliza los datos existentes si la posición ya tiene datos
           return prev.dependents_details && prev.dependents_details[i]
             ? prev.dependents_details[i]
             : { name: '', birth_date: '', relationship: '' };
         });
-        return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
+        updatedFormData = { ...updatedFormData, num_dependents: num, dependents_details: newDependentsArray };
+        // Actualizar la prima estimada al cambiar el número de dependientes
+        updatedFormData.premium_amount = calculatePremium(num);
+      } else if (type === 'checkbox') {
+        updatedFormData = { ...updatedFormData, [name]: (e.target as HTMLInputElement).checked };
+      } else {
+        updatedFormData = { ...updatedFormData, [name]: value };
       }
 
-      // Manejo para campos booleanos (checkbox)
-      if (type === 'checkbox') {
-        return { ...prev, [name]: (e.target as HTMLInputElement).checked };
+      // Validar la prima estimada en tiempo real si el campo es 'premium_amount' o 'num_dependents'
+      if (name === 'premium_amount' || name === 'num_dependents') {
+        const currentPremium = updatedFormData.premium_amount ?? 0;
+        if (currentPremium < 50 || currentPremium > 150) {
+          setValidationErrors(prev => ({
+            ...prev,
+            premium_amount: 'La prima mensual debe estar entre $50 y $150.',
+          }));
+        } else {
+          setValidationErrors(prev => ({ ...prev, premium_amount: null }));
+        }
       }
 
-      // Manejo general para otros inputs (texto, select, textarea)
-      return { ...prev, [name]: value };
+      return updatedFormData;
     });
   };
 
-  /**
-   * Maneja los cambios en los campos de un dependiente específico.
-   * @param {number} idx Índice del dependiente en el array.
-   * @param {'name' | 'birth_date' | 'relationship'} field Campo del dependiente a actualizar.
-   * @param {string} value Nuevo valor del campo.
-   */
   const handleDependentChange = (
     idx: number,
     field: 'name' | 'birth_date' | 'relationship',
     value: string
   ) => {
     setFormData(prev => {
-      // Crea una copia del array `dependents_details` para evitar mutación directa del estado
       const newDetails = [...(prev.dependents_details || [])];
-      // Asegura que el objeto dependiente exista antes de intentar actualizar sus propiedades
       if (!newDetails[idx]) {
         newDetails[idx] = { name: '', birth_date: '', relationship: '' };
       }
-      // Actualiza el campo específico del dependiente en la posición `idx`
       newDetails[idx] = {
-        ...newDetails[idx], // Copia los datos existentes del dependiente
-        [field]: value, // Actualiza el campo específico
+        ...newDetails[idx],
+        [field]: value,
       };
-      return { ...prev, dependents_details: newDetails }; // Actualiza el estado con el nuevo array
+      return { ...prev, dependents_details: newDetails };
     });
   };
 
-  /**
-   * Maneja el envío del formulario.
-   * @param {FormEvent} e Evento de envío del formulario.
-   */
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault(); // Previene el comportamiento por defecto del formulario (recarga de página)
-    setError(null); // Limpia errores anteriores
-    setSuccessMessage(null); // Limpia mensajes de éxito anteriores
+    e.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setValidationErrors({}); // Limpiar errores de validación al intentar enviar
 
-    // El ID del usuario actualmente autenticado es el CLIENTE que crea la solicitud.
     const currentClientId = user?.id;
 
     if (!currentClientId) {
@@ -203,7 +198,6 @@ export default function PlanBasicoFormCliente() {
       return;
     }
 
-    // El cliente debe seleccionar un agente para la póliza.
     if (!formData.agent_id) {
       setError('Por favor, selecciona un agente para tu solicitud de póliza.');
       return;
@@ -216,39 +210,36 @@ export default function PlanBasicoFormCliente() {
 
     // --- Validaciones específicas del "Plan Básico" ---
 
-    // 1) Deducible debe estar entre $2,000 y $5,000
     if (formData.deductible! < 2000 || formData.deductible! > 5000) {
       setError('El deducible debe estar entre $2,000 y $5,000.');
       return;
     }
 
-    // 2) Coaseguro debe ser 30% (fijo)
-    // Este campo es de solo lectura, la validación es más una confirmación.
     if (formData.coinsurance !== 30) {
       setError('Error: El coaseguro para Plan Básico debe ser 30%. Contacta a soporte.');
       return;
     }
 
-    // 3) Máximo Desembolsable Anual debe ser $20,000 (fijo)
-    // Este campo es de solo lectura, la validación es más una confirmación.
     if (formData.max_annual !== 20000) {
       setError('Error: El máximo desembolsable anual para Plan Básico debe ser $20,000. Contacta a soporte.');
       return;
     }
 
-    // 4) Premium amount
-    if (formData.premium_amount! < 50 || formData.premium_amount! > 150) {
-      setError('La prima mensual debe estar entre $50 y $150.');
+    // Usar el `calculatedPremium` para la validación final
+    if (calculatedPremium < 50 || calculatedPremium > 150) {
+      setError('La prima mensual calculada debe estar entre $50 y $150.');
+      setValidationErrors(prev => ({
+        ...prev,
+        premium_amount: 'La prima mensual calculada debe estar entre $50 y $150.',
+      }));
       return;
     }
 
-    // 5) Número de dependientes debe ser entre 0 y 2
     if (formData.num_dependents! < 0 || formData.num_dependents! > 2) {
       setError('El número de dependientes debe ser entre 0 y 2.');
       return;
     }
 
-    // 6) Si hay dependientes, todos deben tener datos completos
     for (let i = 0; i < formData.num_dependents!; i++) {
       const dependent = formData.dependents_details![i];
       if (!dependent || !dependent.name.trim() || !dependent.birth_date || !dependent.relationship.trim()) {
@@ -257,23 +248,22 @@ export default function PlanBasicoFormCliente() {
       }
     }
 
-    const policyNumber = generatePolicyNumber(); // Esto es más un número de solicitud
+    const policyNumber = generatePolicyNumber();
 
     const payload: CreatePolicyData = {
       ...formData,
       policy_number: policyNumber,
-      client_id: currentClientId, // <-- El ID del CLIENTE que envía la solicitud
-      agent_id: formData.agent_id, // <-- El ID del AGENTE seleccionado por el cliente
-      status: 'pending', // <-- El estado siempre será 'pending' al ser enviado por el cliente
+      client_id: currentClientId,
+      agent_id: formData.agent_id,
+      status: 'pending',
       // Asegurarse de que los valores numéricos sean del tipo correcto
-      premium_amount: Number(formData.premium_amount),
+      premium_amount: calculatedPremium, // Usar la prima calculada
       deductible: Number(formData.deductible),
       coinsurance: Number(formData.coinsurance),
       max_annual: Number(formData.max_annual),
       num_dependents: Number(formData.num_dependents),
     };
 
-    // Llamada a la API para crear la póliza (que ahora es una solicitud pendiente)
     const { data, error: createError } = await createPolicy(payload);
 
     if (createError) {
@@ -281,17 +271,16 @@ export default function PlanBasicoFormCliente() {
       setError(`Error al enviar la solicitud de póliza: ${createError.message}`);
     } else if (data) {
       setSuccessMessage(`Solicitud de póliza ${data.policy_number} enviada exitosamente para revisión por su agente.`);
-      // Limpiar el formulario después del éxito
       setFormData(prev => ({
         ...prev,
         policy_number: '',
-        client_id: '', // Limpiar, aunque se llenará automáticamente con user?.id al siguiente submit
+        client_id: '',
         product_id: planBasicoProduct?.id || '',
         start_date: '',
         end_date: '',
         premium_amount: 50, // Resetear a valor inicial
         payment_frequency: 'monthly',
-        status: 'pending', // Volver a 'pending'
+        status: 'pending',
         contract_details: '',
         deductible: 2000,
         coinsurance: 30,
@@ -300,9 +289,8 @@ export default function PlanBasicoFormCliente() {
         dependents_details: [],
         has_dental: false,
         has_vision: false,
-        agent_id: '', // Limpiar el agente seleccionado
+        agent_id: '',
       }));
-      // Redirigir al dashboard del cliente
       setTimeout(() => {
         navigate('/client/dashboard/policies');
       }, 2000);
@@ -313,7 +301,6 @@ export default function PlanBasicoFormCliente() {
   // Renderizado del componente
   // -----------------------------------------------------
 
-  // Mostrar un mensaje de carga mientras se obtienen los datos iniciales
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -392,7 +379,7 @@ export default function PlanBasicoFormCliente() {
             id="product_name_display"
             name="product_name_display"
             value={planBasicoProduct ? planBasicoProduct.name : 'Cargando producto...'}
-            readOnly // Este campo es de solo lectura ya que es específico para el Plan Básico
+            readOnly
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -451,16 +438,12 @@ export default function PlanBasicoFormCliente() {
               type="number"
               id="premium_amount"
               name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="50" // Validación de rango
-              max="150" // Validación de rango
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              value={calculatedPremium} // Mostrar la prima calculada
+              readOnly // Hacer este campo de solo lectura
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $50 – $150 mensuales.
+              Este valor se calcula automáticamente en función del número de dependientes.
             </p>
           </div>
           <div>
@@ -524,8 +507,8 @@ export default function PlanBasicoFormCliente() {
             value={formData.deductible}
             onChange={handleChange}
             required
-            min={2000} // Límites específicos para el plan básico
-            max={5000} // Límites específicos para el plan básico
+            min={2000}
+            max={5000}
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
@@ -547,7 +530,7 @@ export default function PlanBasicoFormCliente() {
             id="coinsurance"
             name="coinsurance"
             value={formData.coinsurance}
-            readOnly // Este campo es de solo lectura
+            readOnly
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -568,7 +551,7 @@ export default function PlanBasicoFormCliente() {
             id="max_annual"
             name="max_annual"
             value={formData.max_annual}
-            readOnly // Este campo es de solo lectura
+            readOnly
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -591,14 +574,23 @@ export default function PlanBasicoFormCliente() {
             value={formData.num_dependents}
             onChange={handleChange}
             required
-            min={0} // Rango permitido
-            max={2} // Rango permitido
+            min={0}
+            max={2}
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
             Cada dependiente genera un costo adicional de $20/mes.
           </p>
+        </div>
+
+        {/* Nuevo bloque para mostrar la prima estimada (MOVED HERE) */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
         </div>
 
         {/* Campos dinámicos para cada dependiente */}

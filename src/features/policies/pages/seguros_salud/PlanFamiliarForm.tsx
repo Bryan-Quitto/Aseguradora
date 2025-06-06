@@ -51,6 +51,7 @@ interface FormFieldProps {
   rows?: number;
   infoText?: string;
   className?: string;
+  error?: string | null; // Añadimos la prop 'error'
 }
 
 const FormField: React.FC<FormFieldProps> = ({
@@ -70,8 +71,11 @@ const FormField: React.FC<FormFieldProps> = ({
   rows,
   infoText,
   className = '',
+  error = null, // Inicializamos 'error' como null
 }) => {
-  const inputClasses = `mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+  const inputClasses = `mt-1 block w-full px-3 py-2 border ${
+    error ? 'border-red-500' : 'border-gray-300'
+  } rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
     readOnly ? 'bg-gray-100 cursor-not-allowed border-gray-200' : ''
   } ${className}`;
 
@@ -98,6 +102,7 @@ const FormField: React.FC<FormFieldProps> = ({
           ))}
         </select>
         {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
       </div>
     );
   }
@@ -121,6 +126,7 @@ const FormField: React.FC<FormFieldProps> = ({
           readOnly={readOnly}
         />
         {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
       </div>
     );
   }
@@ -146,6 +152,7 @@ const FormField: React.FC<FormFieldProps> = ({
         className={inputClasses}
       />
       {infoText && <p className="mt-1 text-xs text-gray-500">{infoText}</p>}
+      {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
   );
 };
@@ -184,6 +191,7 @@ export default function PlanFamiliarForm() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [planFamiliarProduct, setPlanFamiliarProduct] = useState<InsuranceProduct | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string | null>>({}); // Nuevo estado para errores de validación por campo
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -227,6 +235,28 @@ export default function PlanFamiliarForm() {
     fetchInitialData();
   }, []);
 
+  // Función para calcular la prima estimada
+  const calculateEstimatedPremium = useCallback(() => {
+    let basePremium = 500; // Prima base sugerida para Plan Familiar
+
+    // Ajuste por dependientes
+    if (formData.num_dependents > 0) {
+      basePremium += formData.num_dependents * 100; // +$100 por cada dependiente
+    }
+
+    // Ajuste por coberturas adicionales
+    if (formData.wants_dental_premium) {
+      basePremium += 40; // +$40 por dental premium
+    }
+    if (formData.wants_vision) {
+      basePremium += 20; // +$20 por visión
+    }
+
+    return basePremium;
+  }, [formData.num_dependents, formData.wants_dental_premium, formData.wants_vision]);
+
+  const calculatedPremium = calculateEstimatedPremium();
+
   // Helpers
   const generatePolicyNumber = useCallback(() => {
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
@@ -237,6 +267,9 @@ export default function PlanFamiliarForm() {
       const { name, value, type } = e.target;
 
       setFormData(prev => {
+        // Remove error for the field being changed
+        setValidationErrors(currentErrors => ({ ...currentErrors, [name]: null }));
+
         if (name === 'premium_amount') {
           return { ...prev, [name]: parseFloat(value) };
         }
@@ -266,72 +299,112 @@ export default function PlanFamiliarForm() {
     (idx: number, field: keyof DependentDetail, value: string) => {
       setFormData(prev => {
         const newDetails = [...prev.dependents_details]; // Siempre será un array
-  
+
         // Siempre crea un nuevo objeto si el actual es undefined o null
         const currentDependent = newDetails[idx] || { name: '', birth_date: '', relationship: '' };
-  
+
         newDetails[idx] = {
           ...currentDependent, // Ahora currentDependent siempre es un objeto
           [field]: value,
         };
-  
+
         return { ...prev, dependents_details: newDetails };
+      });
+      // Clear specific dependent error if applicable (e.g., if a field is filled)
+      setValidationErrors(currentErrors => {
+        const newErrors = { ...currentErrors };
+        const dependentErrorKey = `dependent_${idx}_${field}`;
+        if (newErrors[dependentErrorKey]) {
+          newErrors[dependentErrorKey] = null;
+        }
+        return newErrors;
       });
     },
     []
   );
-  
+
   // Función de validación del formulario
-  const validateForm = useCallback((): string | null => {
+  const validateForm = useCallback((): boolean => {
+    let isValid = true;
+    const newErrors: Record<string, string | null> = {};
+
     if (!user?.id) {
-      return 'No se pudo obtener el ID del agente para asignar la póliza.';
+      newErrors.agent_id = 'No se pudo obtener el ID del agente para asignar la póliza.';
+      isValid = false;
     }
 
     if (!formData.client_id) {
-      return 'Por favor, selecciona un cliente.';
+      newErrors.client_id = 'Por favor, selecciona un cliente.';
+      isValid = false;
     }
 
-    if (!formData.start_date || !formData.end_date) {
-        return 'Las fechas de inicio y fin son obligatorias.';
+    if (!formData.start_date) {
+      newErrors.start_date = 'La fecha de inicio es obligatoria.';
+      isValid = false;
     }
 
-    if (new Date(formData.start_date) >= new Date(formData.end_date)) {
-        return 'La fecha de fin debe ser posterior a la fecha de inicio.';
+    if (!formData.end_date) {
+      newErrors.end_date = 'La fecha de fin es obligatoria.';
+      isValid = false;
     }
 
+    if (formData.start_date && formData.end_date && new Date(formData.start_date) >= new Date(formData.end_date)) {
+      newErrors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio.';
+      isValid = false;
+    }
+
+    // Validation for calculated premium (adjust based on actual input 'premium_amount' or just show info)
+    // For now, I'll keep the validation on formData.premium_amount as per original, but it could be based on calculatedPremium.
+    // If you want to *enforce* calculatedPremium, you'd set formData.premium_amount = calculatedPremium inside a useEffect or elsewhere.
+    // Given the form field for premium_amount allows manual input, we validate that.
     if (formData.premium_amount < 300 || formData.premium_amount > 1200) {
-        return 'El monto de la prima debe estar entre $300 y $1,200 mensuales.';
+      newErrors.premium_amount = 'El monto de la prima debe estar entre $300 y $1,200 mensuales.';
+      isValid = false;
     }
 
     // Validaciones Plan Familiar
     if (formData.deductible < 1500 || formData.deductible > 3000) {
-      return 'El deducible debe estar entre $1,500 y $3,000.';
+      newErrors.deductible = 'El deducible debe estar entre $1,500 y $3,000.';
+      isValid = false;
     }
     if (formData.coinsurance !== 20) {
-      return 'El coaseguro para Plan Familiar debe ser 20 %.';
+      newErrors.coinsurance = 'El coaseguro para Plan Familiar debe ser 20 %.';
+      isValid = false;
     }
     if (formData.num_dependents < 0 || formData.num_dependents > 4) {
-      return 'El número de dependientes debe ser entre 0 y 4.';
+      newErrors.num_dependents = 'El número de dependientes debe ser entre 0 y 4.';
+      isValid = false;
     }
 
     for (let i = 0; i < formData.num_dependents; i++) {
-      const d = formData.dependents_details[i]; // Ya es seguro que existe debido a la lógica en handleChange
-      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
-        return `Por favor completa todos los campos del dependiente ${i + 1}.`;
+      const d = formData.dependents_details[i];
+      if (!d || !d.name.trim()) {
+        newErrors[`dependent_${i}_name`] = `El nombre del dependiente ${i + 1} es obligatorio.`;
+        isValid = false;
+      }
+      if (!d || !d.birth_date) {
+        newErrors[`dependent_${i}_birth_date`] = `La fecha de nacimiento del dependiente ${i + 1} es obligatoria.`;
+        isValid = false;
+      }
+      if (!d || !d.relationship.trim()) {
+        newErrors[`dependent_${i}_relationship`] = `El parentesco del dependiente ${i + 1} es obligatorio.`;
+        isValid = false;
       }
     }
 
-    return null; // No hay errores
+    setValidationErrors(newErrors);
+    return isValid;
   }, [formData, user?.id]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({}); // Clear previous validation errors
 
-    const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
+    const isValid = validateForm();
+    if (!isValid) {
+      setError('Por favor, corrige los errores en el formulario.');
       return;
     }
 
@@ -434,6 +507,7 @@ export default function PlanFamiliarForm() {
               label: `${client.full_name || `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()} (${client.email})`,
             })),
           ]}
+          error={validationErrors.client_id}
         />
 
         {/* Producto de Seguro (solo lectura) */}
@@ -456,6 +530,7 @@ export default function PlanFamiliarForm() {
             value={formData.start_date}
             onChange={handleChange}
             required
+            error={validationErrors.start_date}
           />
           <FormField
             id="end_date"
@@ -465,6 +540,7 @@ export default function PlanFamiliarForm() {
             value={formData.end_date}
             onChange={handleChange}
             required
+            error={validationErrors.end_date}
           />
         </div>
 
@@ -482,6 +558,7 @@ export default function PlanFamiliarForm() {
             max={1200}
             step="0.01"
             infoText="Rango permitido: $300 – $1,200 mensuales."
+            error={validationErrors.premium_amount}
           />
           <FormField
             id="payment_frequency"
@@ -496,7 +573,19 @@ export default function PlanFamiliarForm() {
               { value: 'quarterly', label: 'Trimestral' },
               { value: 'annually', label: 'Anual' },
             ]}
+            error={validationErrors.payment_frequency}
           />
+        </div>
+
+        {/* Componente de Prima Estimada */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">
+            ${calculatedPremium.toFixed(2)} / {formData.payment_frequency}
+          </p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
         </div>
 
         {/* Estado de la Póliza */}
@@ -515,6 +604,7 @@ export default function PlanFamiliarForm() {
             { value: 'expired', label: 'Expirada' },
             { value: 'rejected', label: 'Rechazada' },
           ]}
+          error={validationErrors.status}
         />
 
         {/* Detalles del Contrato */}
@@ -528,6 +618,7 @@ export default function PlanFamiliarForm() {
           rows={4}
           placeholder='Ej.: "Plan Familiar con atención domiciliaria incluida."'
           infoText="Introduce detalles adicionales si los hay."
+          error={validationErrors.contract_details}
         />
 
         {/* ———————————— Campos Específicos: Plan Médico Familiar ———————————— */}
@@ -545,6 +636,7 @@ export default function PlanFamiliarForm() {
           max={3000}
           step="1"
           infoText="Rango permitido: $1,500 – $3,000."
+          error={validationErrors.deductible}
         />
 
         {/* Coaseguro (20%) */}
@@ -556,6 +648,7 @@ export default function PlanFamiliarForm() {
           value={formData.coinsurance}
           readOnly // Esto hará que el onChange sea opcional
           infoText="Para el Plan Familiar, el coaseguro está fijado en 20 %."
+          error={validationErrors.coinsurance}
         />
 
         {/* Máximo Desembolsable Anual Familiar */}
@@ -567,6 +660,7 @@ export default function PlanFamiliarForm() {
           value={formData.max_annual}
           readOnly // Esto hará que el onChange sea opcional
           infoText="Límite: $80,000/año (familiar)."
+          error={validationErrors.max_annual}
         />
 
         {/* Cobertura Dental Básica (incluida) */}
@@ -642,6 +736,7 @@ export default function PlanFamiliarForm() {
           max={4}
           step="1"
           infoText="Cada dependiente extra +$100/mes."
+          error={validationErrors.num_dependents}
         />
 
         {/* Campos dinámicos para cada dependiente */}
@@ -665,6 +760,7 @@ export default function PlanFamiliarForm() {
                   value={formData.dependents_details[idx]?.name || ''}
                   onChange={e => handleDependentChange(idx, 'name', e.target.value)}
                   required
+                  error={validationErrors[`dependent_${idx}_name`]}
                 />
                 <FormField
                   id={`dep_birth_${idx}`}
@@ -674,6 +770,7 @@ export default function PlanFamiliarForm() {
                   value={formData.dependents_details[idx]?.birth_date || ''}
                   onChange={e => handleDependentChange(idx, 'birth_date', e.target.value)}
                   required
+                  error={validationErrors[`dependent_${idx}_birth_date`]}
                 />
                 <FormField
                   id={`dep_rel_${idx}`}
@@ -690,6 +787,7 @@ export default function PlanFamiliarForm() {
                     { value: 'parent', label: 'Padre/Madre' },
                     { value: 'other', label: 'Otro' },
                   ]}
+                  error={validationErrors[`dependent_${idx}_relationship`]}
                 />
               </div>
             ))}

@@ -25,7 +25,7 @@ export default function PlanIntermedioForm() {
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 0,
+    premium_amount: 0, // Se calculará dinámicamente
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
@@ -40,17 +40,63 @@ export default function PlanIntermedioForm() {
     num_dependents: 0,
     dependents_details: [] as { name: string; birth_date: string; relationship: string }[],
     // Campos genéricos de salud que deben estar en CreatePolicyData como opcionales o ser inferidos
-    has_dental: true, // Se asume que siempre tendrá dental básica
-    has_vision: false, // Se asume que no tendrá visión a menos que se marque
+    has_dental: true, // Se asume que siempre tendrá dental básica (por has_dental_basic)
+    has_vision: false, // Se asume que no tendrá visión a menos que se marque (por wants_vision)
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]); // Aunque no se usa directamente en el render, se mantiene para la carga
+  const [products, setProducts] = useState<InsuranceProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [planIntermedioProduct, setPlanIntermedioProduct] = useState<InsuranceProduct | null>(null);
 
+  // NUEVOS ESTADOS para la prima calculada y errores de validación por campo
+  const [calculatedPremium, setCalculatedPremium] = useState<number>(0);
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string | null }>({});
+
+  // -----------------------------------------------------
+  // Lógica de cálculo de prima
+  // -----------------------------------------------------
+  const calculatePremium = (data: CreatePolicyData) => {
+    let basePremium = 250; // Prima base para Plan Intermedio
+    let currentErrors: { [key: string]: string | null } = { premium_amount: null };
+
+    // Costo por dependientes
+    basePremium += (data.num_dependents || 0) * 40; // Por ejemplo, $40 por dependiente
+    // Ajuste por tipo de dependiente (si aplica)
+    if (data.dependents_details) {
+      data.dependents_details.forEach(dep => {
+        if (dep.relationship === 'spouse') {
+          basePremium += 20; // Costo adicional por cónyuge (ej. $60 total: 40 base + 20 adicional)
+        }
+      });
+    }
+
+    // Cobertura Dental Premium
+    if (data.wants_dental_premium) {
+      basePremium += 25; // +$25/mes
+    }
+
+    // Cobertura de Visión
+    if (data.wants_vision) {
+      basePremium += 10; // +$10/mes
+    }
+
+    // Aplicar validación de rango para la prima calculada
+    if (basePremium < 150 || basePremium > 400) {
+      currentErrors.premium_amount = 'La prima estimada debe estar entre $150 y $400 mensuales según las opciones seleccionadas.';
+    } else {
+      currentErrors.premium_amount = null;
+    }
+
+    setValidationErrors(currentErrors);
+    return basePremium;
+  };
+
+  // -----------------------------------------------------
+  // Efecto para cargar datos iniciales y recalcular prima
+  // -----------------------------------------------------
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
@@ -65,18 +111,20 @@ export default function PlanIntermedioForm() {
         return;
       }
       if (productsData) {
-        setProducts(productsData); // Guardar todos los productos
-        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Plan Intermedio" ---
+        setProducts(productsData);
         const foundPlanIntermedioProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Intermedio');
         if (foundPlanIntermedioProduct) {
           setPlanIntermedioProduct(foundPlanIntermedioProduct);
           setFormData(prev => ({
             ...prev,
-            product_id: foundPlanIntermedioProduct.id, // Establece el ID en el formData
+            product_id: foundPlanIntermedioProduct.id,
+            // Establecer has_dental y has_vision iniciales basadas en los defaults
+            has_dental: prev.has_dental_basic || prev.wants_dental_premium,
+            has_vision: prev.wants_vision,
           }));
         } else {
           setError('Error: El producto "Seguro de Salud Plan Intermedio" no fue encontrado. Asegúrate de que existe en la base de datos.');
-          setLoading(false); // Detener la carga si el producto no se encuentra
+          setLoading(false);
           return;
         }
       }
@@ -85,7 +133,6 @@ export default function PlanIntermedioForm() {
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
       if (clientsError) {
         console.error('Error al cargar clientes:', clientsError);
-        // Concatenar el error si ya hay uno de productos, o establecer uno nuevo
         setError(prev => (prev ? prev + ' Y error al cargar clientes.' : 'Error al cargar los clientes.'));
         setLoading(false);
         return;
@@ -100,11 +147,28 @@ export default function PlanIntermedioForm() {
     fetchInitialData();
   }, []);
 
+  // Efecto para recalcular la prima cuando cambie formData relevante
+  useEffect(() => {
+    // Solo si el producto intermedio ha sido cargado
+    if (planIntermedioProduct) {
+      const newCalculatedPremium = calculatePremium(formData);
+      setCalculatedPremium(newCalculatedPremium);
+      // Actualizar formData.premium_amount con el valor calculado
+      setFormData(prev => ({ ...prev, premium_amount: newCalculatedPremium }));
+    }
+  }, [
+    formData.num_dependents,
+    formData.dependents_details,
+    formData.wants_dental_premium,
+    formData.wants_vision,
+    planIntermedioProduct // Recalcular cuando el producto esté disponible
+  ]);
+
+
   // -----------------------------------------------------
   // Helpers
   // -----------------------------------------------------
   const generatePolicyNumber = () => {
-    // Generación de número de póliza simple para frontend
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
@@ -114,39 +178,38 @@ export default function PlanIntermedioForm() {
     const { name, value, type } = e.target;
 
     setFormData(prev => {
-      // Si es premium_amount o deductible, asegúrate de que sea un número
-      if (name === 'premium_amount' || name === 'deductible' || name === 'coinsurance' || name === 'max_annual') {
-        const numValue = parseFloat(value);
-        return { ...prev, [name]: isNaN(numValue) ? 0 : numValue };
-      }
-      // Si es num_dependents, maneja la creación/actualización del array de dependientes
-      if (name === 'num_dependents') {
-        const num = parseInt(value);
-        const newNumDependents = isNaN(num) || num < 0 ? 0 : Math.min(num, 3); // Límite de 3 dependientes
+      let newState = { ...prev };
 
-        // Si el número de dependientes disminuye, trunca el array
-        // Si aumenta, añade nuevos objetos dependientes vacíos
+      if (name === 'deductible' || name === 'coinsurance' || name === 'max_annual') {
+        const numValue = parseFloat(value);
+        newState = { ...newState, [name]: isNaN(numValue) ? 0 : numValue };
+      }
+      else if (name === 'num_dependents') {
+        const num = parseInt(value);
+        const newNumDependents = isNaN(num) || num < 0 ? 0 : Math.min(num, 3);
+
         const currentDependents = prev.dependents_details || [];
         const newDependentsArray = Array.from({ length: newNumDependents }, (_, i) =>
           currentDependents[i] || { name: '', birth_date: '', relationship: '' }
         );
-
-        return { ...prev, num_dependents: newNumDependents, dependents_details: newDependentsArray };
+        newState = { ...newState, num_dependents: newNumDependents, dependents_details: newDependentsArray };
       }
-      // Booleanos (checkboxes)
-      if (type === 'checkbox') {
-        // Asegura que has_dental y has_vision se actualicen según wants_dental_premium y wants_vision
+      else if (type === 'checkbox') {
         const checked = (e.target as HTMLInputElement).checked;
         if (name === 'wants_dental_premium') {
-            return { ...prev, wants_dental_premium: checked, has_dental: checked || prev.has_dental_basic };
+          newState = { ...newState, wants_dental_premium: checked, has_dental: checked || prev.has_dental_basic };
+        } else if (name === 'wants_vision') {
+          newState = { ...newState, wants_vision: checked, has_vision: checked };
+        } else {
+          newState = { ...newState, [name]: checked };
         }
-        if (name === 'wants_vision') {
-            return { ...prev, wants_vision: checked, has_vision: checked };
-        }
-        return { ...prev, [name]: checked };
+      } else {
+        newState = { ...newState, [name]: value };
       }
-      // Resto de inputs
-      return { ...prev, [name]: value };
+
+      // NO recalculamos la prima aquí directamente.
+      // El useEffect se encargará de esto cuando cambie formData.
+      return newState;
     });
   };
 
@@ -163,7 +226,6 @@ export default function PlanIntermedioForm() {
           [field]: value,
         };
       } else {
-        // En caso de que el índice no exista, lo cual no debería pasar si num_dependents se maneja correctamente
         console.warn(`Attempted to update non-existent dependent at index ${idx}.`);
       }
       return { ...prev, dependents_details: newDetails };
@@ -174,6 +236,7 @@ export default function PlanIntermedioForm() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({}); // Limpiar errores de validación al intentar enviar
 
     // -----------------------------------------------------
     // Validaciones de Formulario
@@ -184,19 +247,19 @@ export default function PlanIntermedioForm() {
     }
 
     if (!formData.client_id) {
-        setError('Por favor, selecciona un cliente.');
-        return;
+      setError('Por favor, selecciona un cliente.');
+      return;
     }
 
     if (!formData.product_id) {
-        setError('Error: El ID del producto no ha sido asignado. Recarga la página.');
-        return;
+      setError('Error: El ID del producto no ha sido asignado. Recarga la página.');
+      return;
     }
 
     // Validación de fechas
     if (!formData.start_date || !formData.end_date) {
-        setError('Las fechas de inicio y fin de la póliza son obligatorias.');
-        return;
+      setError('Las fechas de inicio y fin de la póliza son obligatorias.');
+      return;
     }
     const startDate = new Date(formData.start_date);
     const endDate = new Date(formData.end_date);
@@ -204,40 +267,37 @@ export default function PlanIntermedioForm() {
     today.setHours(0, 0, 0, 0); // Normalizar a inicio del día
 
     if (startDate < today) {
-        setError('La fecha de inicio no puede ser anterior a la fecha actual.');
-        return;
+      setError('La fecha de inicio no puede ser anterior a la fecha actual.');
+      return;
     }
     if (endDate <= startDate) {
-        setError('La fecha de fin debe ser posterior a la fecha de inicio.');
-        return;
+      setError('La fecha de fin debe ser posterior a la fecha de inicio.');
+      return;
     }
 
-    // 1) Deducible entre 1000 y 2500
+    // Validaciones específicas de Plan Intermedio (ya se hacen en handleChange o useEffect, pero reconfirmamos para el submit)
     if (formData.deductible === undefined || formData.deductible < 1000 || formData.deductible > 2500) {
       setError('El deducible debe estar entre $1,000 y $2,500.');
       return;
     }
-    // 2) Coaseguro = 20%
     if (formData.coinsurance === undefined || formData.coinsurance !== 20) {
       setError('El coaseguro para Plan Intermedio debe ser 20%.');
       return;
     }
-    // 3) Máximo Desembolsable Anual = 50000
     if (formData.max_annual === undefined || formData.max_annual !== 50000) {
-        setError('El máximo desembolsable anual para Plan Intermedio debe ser $50,000.');
-        return;
-    }
-    // 4) Prima entre $150 y $400
-    if (formData.premium_amount === undefined || formData.premium_amount < 150 || formData.premium_amount > 400) {
-      setError('El monto de la prima debe estar entre $150 y $400 mensuales.');
+      setError('El máximo desembolsable anual para Plan Intermedio debe ser $50,000.');
       return;
     }
-    // 5) num_dependents entre 0 y 3
+    // ¡NUEVO! Validar la prima calculada antes de enviar
+    if (validationErrors.premium_amount) {
+      setError(validationErrors.premium_amount);
+      return;
+    }
+
     if (formData.num_dependents === undefined || formData.num_dependents < 0 || formData.num_dependents > 3) {
       setError('El número de dependientes debe ser entre 0 y 3.');
       return;
     }
-    // 6) Si hay dependientes, todos deben tener datos completos y válidos
     if (formData.num_dependents > 0) {
       if (!formData.dependents_details || formData.dependents_details.length !== formData.num_dependents) {
         setError('Los detalles de los dependientes no coinciden con el número especificado.');
@@ -249,24 +309,22 @@ export default function PlanIntermedioForm() {
           setError(`Por favor, completa todos los campos del dependiente ${i + 1} (nombre, fecha de nacimiento y parentesco).`);
           return;
         }
-        // Validación de fecha de nacimiento del dependiente
         const depBirthDate = new Date(d.birth_date);
         if (depBirthDate > today) {
-            setError(`La fecha de nacimiento del dependiente ${i + 1} no puede ser en el futuro.`);
-            return;
+          setError(`La fecha de nacimiento del dependiente ${i + 1} no puede ser en el futuro.`);
+          return;
         }
       }
     }
 
     const policyNumber = generatePolicyNumber();
 
-    // Crear una copia del formData para enviar, asegurando los tipos correctos y campos específicos
     const policyToCreate: CreatePolicyData = {
       ...formData,
       policy_number: policyNumber,
-      agent_id: user.id, // Asegurado por la validación inicial de user.id
-      premium_amount: Number(formData.premium_amount),
-      // Campos específicos para Plan Intermedio, asegurando que se envíen
+      agent_id: user.id,
+      premium_amount: calculatedPremium, // Usa la prima calculada aquí
+      // Asegurando que los campos específicos se envíen (ya están en formData, pero por claridad)
       deductible: formData.deductible,
       coinsurance: formData.coinsurance,
       max_annual: formData.max_annual,
@@ -276,9 +334,8 @@ export default function PlanIntermedioForm() {
       wants_vision: formData.wants_vision,
       num_dependents: formData.num_dependents,
       dependents_details: formData.dependents_details,
-      // Actualiza has_dental y has_vision basados en las selecciones
-      has_dental: formData.has_dental_basic || formData.wants_dental_premium,
-      has_vision: formData.wants_vision,
+      has_dental: formData.has_dental_basic || formData.wants_dental_premium, // Asegura el valor final
+      has_vision: formData.wants_vision, // Asegura el valor final
     };
 
     const { data, error: createError } = await createPolicy(policyToCreate);
@@ -292,10 +349,10 @@ export default function PlanIntermedioForm() {
       setFormData({
         policy_number: '',
         client_id: '',
-        product_id: planIntermedioProduct?.id || '', // Restablecer product_id si el producto ya fue encontrado
+        product_id: planIntermedioProduct?.id || '',
         start_date: '',
         end_date: '',
-        premium_amount: 0,
+        premium_amount: 0, // Reiniciar a 0, se recalculará
         payment_frequency: 'monthly',
         status: 'pending',
         contract_details: '',
@@ -308,9 +365,12 @@ export default function PlanIntermedioForm() {
         wants_vision: false,
         num_dependents: 0,
         dependents_details: [],
-        has_dental: true,
-        has_vision: false,
+        has_dental: true, // Reiniciar a los valores por defecto del plan
+        has_vision: false, // Reiniciar a los valores por defecto del plan
       });
+      setCalculatedPremium(calculatePremium({ // Recalcular prima para el estado inicial
+        policy_number: '', client_id: '', product_id: planIntermedioProduct?.id || '', start_date: '', end_date: '', premium_amount: 0, payment_frequency: 'monthly', status: 'pending', contract_details: '', deductible: 1000, coinsurance: 20, max_annual: 50000, has_dental_basic: true, wants_dental_premium: false, has_vision_basic: false, wants_vision: false, num_dependents: 0, dependents_details: [], has_dental: true, has_vision: false
+      }));
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -327,7 +387,6 @@ export default function PlanIntermedioForm() {
     );
   }
 
-  // Si hay un error y no estamos cargando, y el producto no se encontró
   if (error && !loading && !planIntermedioProduct) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4 text-center">
@@ -335,15 +394,14 @@ export default function PlanIntermedioForm() {
         <span className="block sm:inline"> {error}</span>
         <p className="mt-2 text-sm">No se puede cargar el formulario sin el producto "Plan Intermedio". Por favor, verifica la configuración de productos.</p>
         <button
-            onClick={() => navigate('/agent/dashboard')}
-            className="mt-4 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          onClick={() => navigate('/agent/dashboard')}
+          className="mt-4 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
-            Volver al Dashboard
+          Volver al Dashboard
         </button>
       </div>
     );
   }
-
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-blue-100">
@@ -459,51 +517,26 @@ export default function PlanIntermedioForm() {
           </div>
         </div>
 
-        {/* Prima y Frecuencia */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="premium_amount"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Monto de la Prima ($)
-            </label>
-            <input
-              type="number"
-              id="premium_amount"
-              name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="150"
-              max="400"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $150 – $400 mensuales.
-            </p>
-          </div>
-          <div>
-            <label
-              htmlFor="payment_frequency"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Frecuencia de Pago
-            </label>
-            <select
-              id="payment_frequency"
-              name="payment_frequency"
-              value={formData.payment_frequency}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="monthly">Mensual</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="annually">Anual</option>
-            </select>
-          </div>
+        {/* Frecuencia de Pago (Monto de la Prima se calculará) */}
+        <div>
+          <label
+            htmlFor="payment_frequency"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Frecuencia de Pago
+          </label>
+          <select
+            id="payment_frequency"
+            name="payment_frequency"
+            value={formData.payment_frequency}
+            onChange={handleChange}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="monthly">Mensual</option>
+            <option value="quarterly">Trimestral</option>
+            <option value="annually">Anual</option>
+          </select>
         </div>
 
         {/* Estado de la Póliza */}
@@ -693,7 +726,7 @@ export default function PlanIntermedioForm() {
             onChange={handleChange}
             required
             min={0}
-            max={3} // Actualizado a 3 según la descripción
+            max={3}
             step="1"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
@@ -776,6 +809,15 @@ export default function PlanIntermedioForm() {
             ))}
           </div>
         )}
+
+        {/* Sección de Prima Estimada - ¡NUEVO! */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
+        </div>
 
         {/* Botones de acción */}
         <div className="flex justify-end gap-4 mt-6">

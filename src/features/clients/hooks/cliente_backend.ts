@@ -36,7 +36,7 @@ export async function getClientProfileById(user_id: string): Promise<{ data: Cli
     .single();
 
   if (error) {
-    console.error(`Error al obtener perfil de cliente con ID ${user_id}:`, error.message);
+    console.error(`Error al obtener perfil de cliente con ID ${user_id}:`, error.message); // Corrected line
     return { data: null, error };
   }
 

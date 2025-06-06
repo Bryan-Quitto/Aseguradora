@@ -2,20 +2,30 @@ import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
-  CreatePolicyData,
-  CreatePlanPremierPolicyData, // <--- Importamos la interfaz específica
+  CreatePolicyData, // Asegúrate de que esta interfaz es lo suficientemente genérica si la usas en otros lugares
+  CreatePlanPremierPolicyData, // Esta es la interfaz específica para Plan Premier
   InsuranceProduct,
   getActiveInsuranceProducts,
   createPolicy,
 } from '../../../policies/policy_management';
-// Importa la función para obtener agentes en lugar de clientes
-import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend'; // <--- MODIFICACIÓN CLAVE: Importa agentes
+import { AgentProfile, getAllAgentProfiles } from '../../../agents/hooks/agente_backend';
 
+// --- Interfaz para Dependiente ---
 interface Dependent {
   name: string;
   birth_date: string;
   relationship: string;
 }
+
+// --- Definición de la Prima Mínima y Máxima para el Plan Premier ---
+// Es buena práctica tener estos valores como constantes para fácil mantenimiento.
+const BASE_PREMIUM_MIN = 400;
+const DEPENDENT_COST_PER_MONTH = 100;
+const MAX_PREMIUM_LIMIT = 1500;
+const MIN_DEDUCTIBLE = 500;
+const MAX_DEDUCTIBLE = 1000;
+const FIXED_COINSURANCE = 10;
+const MAX_DEPENDENTS = 4;
 
 /**
  * Formulario específico para que el CLIENTE solicite el Plan Médico Premier.
@@ -27,118 +37,154 @@ export default function PlanPremierForm() {
   // -----------------------------------------------------
   // Estado base + campos propios de Plan Premier
   // -----------------------------------------------------
-  // Usamos la nueva interfaz específica aquí
   const [formData, setFormData] = useState<CreatePlanPremierPolicyData>({
     policy_number: '',
     client_id: '', // Se llenará con el ID del usuario autenticado (cliente)
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 400, // Prima mínima para Plan Premier: $400
+    premium_amount: BASE_PREMIUM_MIN, // Prima mínima para Plan Premier
     payment_frequency: 'monthly',
     status: 'pending', // <-- El estado siempre inicia como pendiente
     contract_details: '',
-    // ↓ Campos específicos Plan Premier (ahora son obligatorios por el tipo)
-    deductible: 500, // rango [500‒1000]
-    coinsurance: 10, // 10 % fijo
-    max_annual: 100000, // máximo desembolsable anual
-    has_dental_premium: true, // Premium incluida
-    has_vision_full: true, // Visión completa incluida
+    deductible: MIN_DEDUCTIBLE, // rango [500‒1000]
+    coinsurance: FIXED_COINSURANCE, // 10 % fijo
+    max_annual: 100000, // máximo desembolsable anual (fijo)
+    has_dental_premium: true, // Premium incluida (fijo)
+    has_vision_full: true, // Visión completa incluida (fijo)
     wellness_rebate: 50, // $50/mes reembolso gym (info solo explicativa)
     num_dependents: 0,
-    dependents_details: [] as Dependent[], // Inicializamos como array vacío y con tipo correcto
-    // Campos genéricos de salud que son obligatorios para este plan
-    has_dental: true, // Se asume que siempre tendrá dental premium
-    has_vision: true, // Se asume que siempre tendrá visión completa
+    dependents_details: [] as Dependent[],
+    has_dental: true, // Se asume que siempre tendrá dental premium (consistente con has_dental_premium)
+    has_vision: true, // Se asume que siempre tendrá visión completa (consistente con has_vision_full)
     agent_id: '', // Agregado para almacenar el ID del agente seleccionado por el cliente
   });
 
-  const [agents, setAgents] = useState<AgentProfile[]>([]); // Para que el cliente seleccione un agente
-  const [products, setProducts] = useState<InsuranceProduct[]>([]); // No se usa directamente pero se mantiene por si acaso
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [products, setProducts] = useState<InsuranceProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [planPremierProduct, setPlanPremierProduct] = useState<InsuranceProduct | null>(null);
 
+  // Nuevo estado para errores de validación específicos del frontend
+  const [validationErrors, setValidationErrors] = useState<{ [key: string]: string | null }>({});
+
+  // -----------------------------------------------------
+  // useEffect para Carga Inicial de Datos
+  // -----------------------------------------------------
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
-      setError(null);
+      setError(null); // Limpiar errores previos
 
-      // Cargar productos
-      const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
-      if (productsError) {
-        console.error('Error al cargar productos de seguro:', productsError);
-        setError('Error al cargar los productos de seguro.');
-        setLoading(false);
-        return;
-      }
-      if (productsData) {
-        setProducts(productsData);
-
-        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Plan Premier" ---
-        const foundPlanPremierProduct = productsData.find(p => p.name === 'Seguro de Salud Plan Premier');
-        if (foundPlanPremierProduct) {
-          setPlanPremierProduct(foundPlanPremierProduct);
-          setFormData(prev => ({
-            ...prev,
-            product_id: foundPlanPremierProduct.id, // Establece el ID en el formData
-          }));
-        } else {
-          setError('Error: El producto "Seguro de Salud Plan Premier" no fue encontrado. Asegúrate de que existe en la base de datos.');
+      try {
+        const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
+        if (productsError) throw productsError;
+        if (productsData) {
+          setProducts(productsData);
+          const foundPlanPremierProduct = productsData.find(
+            p => p.name === 'Seguro de Salud Plan Premier'
+          );
+          if (foundPlanPremierProduct) {
+            setPlanPremierProduct(foundPlanPremierProduct);
+            setFormData(prev => ({
+              ...prev,
+              product_id: foundPlanPremierProduct.id,
+              client_id: user?.id || '', // Asegúrate de establecer client_id aquí si el user ya está disponible
+            }));
+          } else {
+            setError(
+              'Error: El producto "Seguro de Salud Plan Premier" no fue encontrado. Asegúrate de que existe en la base de datos.'
+            );
+          }
         }
-      }
 
-      // Cargar agentes (para que el cliente pueda seleccionarlo)
-      const { data: agentsData, error: agentsError } = await getAllAgentProfiles();
-      if (agentsError) {
-        console.error('Error al cargar agentes:', agentsError);
-        setError(prev => (prev ? prev + ' Y agentes.' : 'Error al cargar los agentes.'));
+        const { data: agentsData, error: agentsError } = await getAllAgentProfiles();
+        if (agentsError) throw agentsError;
+        if (agentsData) {
+          setAgents(agentsData);
+        }
+      } catch (err: any) {
+        console.error('Error al cargar datos iniciales:', err);
+        setError(`Error al cargar datos: ${err.message || err.toString()}`);
+      } finally {
         setLoading(false);
-        return;
       }
-      if (agentsData) {
-        setAgents(agentsData);
-      }
-
-      setLoading(false);
     };
 
     fetchInitialData();
-  }, []);
+  }, [user?.id]); // Dependencia del user.id para asegurar que se setea client_id
 
   // -----------------------------------------------------
   // Helpers
   // -----------------------------------------------------
-  const generatePolicyNumber = () => {
+  const generatePolicyNumber = (): string => {
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
+  // Lógica de cálculo de prima estimada
+  const calculateEstimatedPremium = (numDependents: number): number => {
+    let calculated = BASE_PREMIUM_MIN + numDependents * DEPENDENT_COST_PER_MONTH;
+    // Asegurarse de que no exceda el máximo permitido
+    return Math.min(calculated, MAX_PREMIUM_LIMIT);
+  };
+
+  // -----------------------------------------------------
+  // useEffect para recalcular la prima cuando cambian dependientes
+  // -----------------------------------------------------
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      premium_amount: calculateEstimatedPremium(prev.num_dependents),
+    }));
+  }, [formData.num_dependents]); // Recalcular solo cuando cambia num_dependents
+
+  // -----------------------------------------------------
+  // Manejo de cambios en los inputs
+  // -----------------------------------------------------
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     setFormData(prev => {
-      // Si es un campo numérico
-      if (name === 'premium_amount' || name === 'deductible' || name === 'max_annual' || name === 'coinsurance' || name === 'wellness_rebate') {
-        const numValue = parseFloat(value);
-        return { ...prev, [name]: isNaN(numValue) ? 0 : numValue };
-      }
+      let newFormData = { ...prev };
 
-      // Si es número de dependientes
-      if (name === 'num_dependents') {
-        const num = parseInt(value) || 0;
-        // Aseguramos que dependents_details siempre sea un array del tamaño correcto.
+      if (
+        name === 'premium_amount' ||
+        name === 'deductible' ||
+        name === 'max_annual' ||
+        name === 'coinsurance' ||
+        name === 'wellness_rebate'
+      ) {
+        const numValue = parseFloat(value);
+        newFormData = { ...newFormData, [name]: isNaN(numValue) ? 0 : numValue };
+      } else if (name === 'num_dependents') {
+        const num = parseInt(value, 10) || 0; // Usar radix 10 para parseInt
         const newDependentsArray: Dependent[] = [];
         const existingDependents = prev.dependents_details || [];
         for (let i = 0; i < num; i++) {
-          newDependentsArray.push(existingDependents[i] || { name: '', birth_date: '', relationship: '' });
+          newDependentsArray.push(
+            existingDependents[i] || { name: '', birth_date: '', relationship: '' }
+          );
         }
-        return { ...prev, num_dependents: num, dependents_details: newDependentsArray };
+        newFormData = {
+          ...newFormData,
+          num_dependents: Math.min(Math.max(0, num), MAX_DEPENDENTS), // Limitar entre 0 y 4
+          dependents_details: newDependentsArray,
+          // premium_amount se actualizará con el useEffect de arriba
+        };
+      } else {
+        newFormData = { ...newFormData, [name]: value };
       }
-      
-      // Resto de campos
-      return { ...prev, [name]: value };
+
+      // Limpiar errores de validación para el campo modificado
+      setValidationErrors(prevErrors => ({
+        ...prevErrors,
+        [name]: null,
+      }));
+
+      return newFormData;
     });
   };
 
@@ -148,7 +194,6 @@ export default function PlanPremierForm() {
     value: string
   ) => {
     setFormData(prev => {
-      // dependents_details es obligatorio en CreatePlanPremierPolicyData
       const newDetails = [...prev.dependents_details!];
       if (!newDetails[idx]) {
         newDetails[idx] = { name: '', birth_date: '', relationship: '' };
@@ -159,14 +204,93 @@ export default function PlanPremierForm() {
       };
       return { ...prev, dependents_details: newDetails };
     });
+    // Limpiar errores de validación específicos de dependientes
+    setValidationErrors(prevErrors => ({
+      ...prevErrors,
+      [`dependent_${idx + 1}`]: null, // Limpia el error general del dependiente
+    }));
   };
 
+  // -----------------------------------------------------
+  // Función de Validación Centralizada
+  // -----------------------------------------------------
+  const validateForm = (): boolean => {
+    let currentErrors: { [key: string]: string | null } = {};
+    let isValid = true;
+
+    // Validación de Agente
+    if (!formData.agent_id) {
+      currentErrors.agent_id = 'Por favor, selecciona un agente para tu solicitud de póliza.';
+      isValid = false;
+    }
+
+    // Validación de Deducible
+    if (formData.deductible < MIN_DEDUCTIBLE || formData.deductible > MAX_DEDUCTIBLE) {
+      currentErrors.deductible = `El deducible debe estar entre $${MIN_DEDUCTIBLE} y $${MAX_DEDUCTIBLE}.`;
+      isValid = false;
+    }
+
+    // Validación de Coaseguro (si es editable, si no, solo mostrar el error si el valor cambia inesperadamente)
+    if (formData.coinsurance !== FIXED_COINSURANCE) {
+      currentErrors.coinsurance = `El coaseguro para Plan Premier debe ser ${FIXED_COINSURANCE}%.`;
+      isValid = false;
+    }
+
+    // Validación de Prima (basada en el cálculo y los límites)
+    if (calculatedPremium < BASE_PREMIUM_MIN || calculatedPremium > MAX_PREMIUM_LIMIT) {
+      currentErrors.premium_amount = `La prima estimada debe estar entre $${BASE_PREMIUM_MIN} y $${MAX_PREMIUM_LIMIT} (según dependientes).`;
+      isValid = false;
+    }
+
+    // Validación de Número de Dependientes
+    if (formData.num_dependents < 0 || formData.num_dependents > MAX_DEPENDENTS) {
+      currentErrors.num_dependents = `El número de dependientes debe ser entre 0 y ${MAX_DEPENDENTS}.`;
+      isValid = false;
+    }
+
+    // Validación de Fechas
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Ignorar la hora para la comparación
+    const startDate = new Date(formData.start_date);
+    const endDate = new Date(formData.end_date);
+
+    if (!formData.start_date) {
+      currentErrors.start_date = 'La fecha de inicio es requerida.';
+      isValid = false;
+    } else if (startDate < today) {
+        currentErrors.start_date = 'La fecha de inicio no puede ser en el pasado.';
+        isValid = false;
+    }
+
+    if (!formData.end_date) {
+      currentErrors.end_date = 'La fecha de fin es requerida.';
+      isValid = false;
+    } else if (startDate && endDate && startDate >= endDate) {
+      currentErrors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio.';
+      isValid = false;
+    }
+
+    // Validación de detalles de dependientes
+    for (let i = 0; i < formData.num_dependents; i++) {
+      const d = formData.dependents_details?.[i];
+      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
+        currentErrors[`dependent_${i + 1}`] = `Por favor completa todos los campos del dependiente ${i + 1}.`;
+        isValid = false;
+      }
+    }
+
+    setValidationErrors(currentErrors);
+    return isValid;
+  };
+
+  // -----------------------------------------------------
+  // Envío del formulario
+  // -----------------------------------------------------
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    // El ID del usuario actualmente autenticado es el CLIENTE que crea la póliza.
     const currentClientId = user?.id;
 
     if (!currentClientId) {
@@ -174,101 +298,101 @@ export default function PlanPremierForm() {
       return;
     }
 
-    // El cliente debe seleccionar un agente para la póliza.
-    if (!formData.agent_id) {
-      setError('Por favor, selecciona un agente para tu solicitud de póliza.');
+    // Ejecutar la validación centralizada
+    if (!validateForm()) {
+      setError('Por favor corrige los errores en el formulario antes de enviar.');
       return;
     }
 
-    if (!formData.product_id) {
+    // Asegurarse de que el product_id esté establecido antes de enviar
+    if (!planPremierProduct?.id) {
       setError('Error interno: El producto Plan Premier no está configurado. Contacta a soporte.');
       return;
-    }
-
-    // Validaciones Plan Premier
-    if (formData.deductible < 500 || formData.deductible > 1000) {
-      setError('El deducible debe estar entre $500 y $1,000.');
-      return;
-    }
-    if (formData.coinsurance !== 10) {
-      setError('El coaseguro para Plan Premier debe ser 10%.');
-      return;
-    }
-    if (formData.premium_amount < 400 || formData.premium_amount > 1500) {
-        setError('La prima mínima es $400 y máxima $1500.');
-        return;
-      }
-    if (formData.num_dependents < 0 || formData.num_dependents > 4) {
-      setError('El número de dependientes debe ser entre 0 y 4.');
-      return;
-    }
-
-    // Si hay dependientes, todos deben tener datos
-    for (let i = 0; i < formData.num_dependents; i++) {
-      const d = formData.dependents_details![i];
-      if (!d || !d.name.trim() || !d.birth_date || !d.relationship.trim()) {
-        setError(`Por favor completa todos los campos del dependiente ${i + 1}.`);
-        return;
-      }
     }
 
     const policyNumber = generatePolicyNumber();
     const payload: CreatePlanPremierPolicyData = {
       ...formData,
       policy_number: policyNumber,
-      client_id: currentClientId, // <-- El ID del CLIENTE que envía la póliza
-      agent_id: formData.agent_id, // <-- El ID del AGENTE seleccionado por el cliente
-      status: 'pending', // <-- El estado siempre será 'pending' al ser enviado por el cliente
-
+      client_id: currentClientId,
+      product_id: planPremierProduct.id, // Usar el ID del producto cargado
+      status: 'pending',
+      // Asegurarse de que los valores numéricos estén convertidos a Number
       premium_amount: Number(formData.premium_amount),
       deductible: Number(formData.deductible),
       coinsurance: Number(formData.coinsurance),
       max_annual: Number(formData.max_annual),
       wellness_rebate: Number(formData.wellness_rebate),
       num_dependents: Number(formData.num_dependents),
-      // has_dental_premium y has_vision_full ya son booleanos y se envían como están
-      // dependents_details ya es un array de objetos
+      // Asegurarse de que dependents_details sea un array válido, incluso si está vacío
+      dependents_details: formData.dependents_details || [],
     };
 
-    const { data, error: createError } = await createPolicy(payload);
+    try {
+      const { data, error: createError } = await createPolicy(payload);
 
-    if (createError) {
-      console.error('Error al crear póliza:', createError);
-      setError(`Error al enviar la solicitud de póliza: ${createError.message}`);
-    } else if (data) {
-      setSuccessMessage(`Solicitud de póliza ${data.policy_number} enviada exitosamente para revisión.`);
-      // Resetear formulario
-      setFormData(prev => ({
-        ...prev,
-        policy_number: '',
-        client_id: '', // Limpiar, aunque se llenará automáticamente con user?.id al siguiente submit
-        product_id: planPremierProduct ? planPremierProduct.id : '',
-        start_date: '',
-        end_date: '',
-        premium_amount: 400,
-        payment_frequency: 'monthly',
-        status: 'pending', // Volver a 'pending'
-        contract_details: '',
-        deductible: 500,
-        coinsurance: 10,
-        max_annual: 100000,
-        has_dental_premium: true,
-        has_vision_full: true,
-        wellness_rebate: 50,
-        num_dependents: 0,
-        dependents_details: [],
-        agent_id: '', // Limpiar el agente seleccionado
-      }));
-      setTimeout(() => {
-        navigate('/client/dashboard/policies'); // Redirigir al dashboard del cliente
-      }, 2000);
+      if (createError) {
+        console.error('Error al crear póliza:', createError);
+        setError(`Error al enviar la solicitud de póliza: ${createError.message}`);
+      } else if (data) {
+        setSuccessMessage(`Solicitud de póliza ${data.policy_number} enviada exitosamente para revisión.`);
+        // Resetear formulario
+        setFormData(prev => ({
+          ...prev,
+          policy_number: '',
+          client_id: '',
+          product_id: planPremierProduct ? planPremierProduct.id : '', // Mantener el product_id si se recarga el form
+          start_date: '',
+          end_date: '',
+          premium_amount: BASE_PREMIUM_MIN, // Volver a la prima base
+          payment_frequency: 'monthly',
+          status: 'pending',
+          contract_details: '',
+          deductible: MIN_DEDUCTIBLE,
+          coinsurance: FIXED_COINSURANCE,
+          max_annual: 100000,
+          has_dental_premium: true,
+          has_vision_full: true,
+          wellness_rebate: 50,
+          num_dependents: 0,
+          dependents_details: [],
+          agent_id: '',
+        }));
+        setValidationErrors({}); // Limpiar todos los errores
+        setTimeout(() => {
+          navigate('/client/dashboard/policies');
+        }, 2000);
+      }
+    } catch (apiError: any) {
+      console.error('Error inesperado al crear póliza:', apiError);
+      setError(`Ocurrió un error inesperado: ${apiError.message || apiError.toString()}`);
     }
   };
+
+  // --- Nueva función para manejar la cancelación ---
+  const handleCancel = () => {
+    // Redirige al usuario al dashboard de políticas del cliente
+    navigate('/client/dashboard/policies');
+  };
+
+  // La prima calculada se usa para mostrar y validar
+  const calculatedPremium = calculateEstimatedPremium(formData.num_dependents);
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <p className="text-blue-600 text-xl">Cargando datos para Plan Premier…</p>
+      </div>
+    );
+  }
+
+  // Si hubo un error al cargar el producto, se puede mostrar un mensaje y evitar renderizar el formulario.
+  if (error && !planPremierProduct) {
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-red-100 text-red-700 text-center">
+        <h2 className="text-2xl font-bold mb-4">Error al cargar el formulario</h2>
+        <p>{error}</p>
+        <p className="mt-4">Por favor, contacta a soporte técnico.</p>
       </div>
     );
   }
@@ -315,7 +439,7 @@ export default function PlanPremierForm() {
             value={formData.agent_id ?? ''}
             onChange={handleChange}
             required
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.agent_id ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           >
             <option value="">Selecciona un agente</option>
             {agents.map(agent => (
@@ -326,6 +450,9 @@ export default function PlanPremierForm() {
               </option>
             ))}
           </select>
+          {validationErrors.agent_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.agent_id}</p>
+          )}
         </div>
 
         {/* Producto de Seguro (MODIFICADO) */}
@@ -365,8 +492,11 @@ export default function PlanPremierForm() {
               value={formData.start_date}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className={`mt-1 block w-full px-3 py-2 border ${validationErrors.start_date ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
             />
+            {validationErrors.start_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.start_date}</p>
+            )}
           </div>
           <div>
             <label
@@ -382,12 +512,15 @@ export default function PlanPremierForm() {
               value={formData.end_date}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className={`mt-1 block w-full px-3 py-2 border ${validationErrors.end_date ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
             />
+            {validationErrors.end_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.end_date}</p>
+            )}
           </div>
         </div>
 
-        {/* Monto de la Prima y Frecuencia */}
+        {/* Monto de la Prima (AHORA ESTÁ LIGADO A num_dependents) y Frecuencia */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label
@@ -401,15 +534,11 @@ export default function PlanPremierForm() {
               id="premium_amount"
               name="premium_amount"
               value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="400"
-              max="1500"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              readOnly
+              className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm cursor-not-allowed"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Rango permitido: $400 – $1,500 mensuales.
+              Este valor se calcula automáticamente según el número de dependientes (Base $400 + $100/dependiente), con un máximo de $1500.
             </p>
           </div>
           <div>
@@ -425,12 +554,15 @@ export default function PlanPremierForm() {
               value={formData.payment_frequency}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className={`mt-1 block w-full px-3 py-2 border ${validationErrors.payment_frequency ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
             >
               <option value="monthly">Mensual</option>
               <option value="quarterly">Trimestral</option>
               <option value="annually">Anual</option>
             </select>
+            {validationErrors.payment_frequency && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.payment_frequency}</p>
+            )}
           </div>
         </div>
 
@@ -473,14 +605,17 @@ export default function PlanPremierForm() {
             value={formData.deductible}
             onChange={handleChange}
             required
-            min={500}
-            max={1000}
+            min={MIN_DEDUCTIBLE}
+            max={MAX_DEDUCTIBLE}
             step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.deductible ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           />
           <p className="mt-1 text-xs text-gray-500">
-            Rango permitido: $500 – $1,000.
+            Rango permitido: ${MIN_DEDUCTIBLE} – ${MAX_DEDUCTIBLE}.
           </p>
+          {validationErrors.deductible && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.deductible}</p>
+          )}
         </div>
 
         {/* Coaseguro (10%) */}
@@ -500,8 +635,11 @@ export default function PlanPremierForm() {
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Para el Plan Premier, el coaseguro está fijado en 10 %.
+            Para el Plan Premier, el coaseguro está fijado en {FIXED_COINSURANCE} %.
           </p>
+          {validationErrors.coinsurance && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.coinsurance}</p>
+          )}
         </div>
 
         {/* Máximo Desembolsable Anual */}
@@ -521,7 +659,7 @@ export default function PlanPremierForm() {
             className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Límite: $100,000/año (fijo para Plan Premier).
+            Límite: ${formData.max_annual.toLocaleString()}/año (fijo para Plan Premier).
           </p>
         </div>
 
@@ -531,8 +669,7 @@ export default function PlanPremierForm() {
             Cobertura Dental Premium
           </label>
           <p className="text-sm text-gray-700">
-            Incluye hasta $10,000/año en tratamientos dentales (ortodoncia,
-            implantes).
+            Incluye hasta $10,000/año en tratamientos dentales (ortodoncia, implantes).
           </p>
         </div>
 
@@ -552,7 +689,7 @@ export default function PlanPremierForm() {
             Programa de Bienestar
           </label>
           <p className="text-sm text-gray-700">
-            Reembolso de membresía de gimnasio de hasta $50/mes.
+            Reembolso de membresía de gimnasio de hasta ${formData.wellness_rebate}/mes.
           </p>
         </div>
 
@@ -562,7 +699,7 @@ export default function PlanPremierForm() {
             htmlFor="num_dependents"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Número de Dependientes (0–4)
+            Número de Dependientes (0–{MAX_DEPENDENTS})
           </label>
           <input
             type="number"
@@ -572,13 +709,16 @@ export default function PlanPremierForm() {
             onChange={handleChange}
             required
             min={0}
-            max={4}
+            max={MAX_DEPENDENTS}
             step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            className={`mt-1 block w-full px-3 py-2 border ${validationErrors.num_dependents ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
           />
           <p className="mt-1 text-xs text-gray-500">
-            Cada dependiente extra +$100/mes.
+            Cada dependiente extra +${DEPENDENT_COST_PER_MONTH}/mes.
           </p>
+          {validationErrors.num_dependents && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.num_dependents}</p>
+          )}
         </div>
 
         {/* Campos dinámicos para cada dependiente */}
@@ -611,7 +751,7 @@ export default function PlanPremierForm() {
                       handleDependentChange(idx, 'name', e.target.value)
                     }
                     required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full px-3 py-2 border ${validationErrors[`dependent_${idx + 1}`] ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
                   />
                 </div>
                 <div>
@@ -630,7 +770,7 @@ export default function PlanPremierForm() {
                       handleDependentChange(idx, 'birth_date', e.target.value)
                     }
                     required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full px-3 py-2 border ${validationErrors[`dependent_${idx + 1}`] ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
                   />
                 </div>
                 <div>
@@ -648,7 +788,7 @@ export default function PlanPremierForm() {
                       handleDependentChange(idx, 'relationship', e.target.value)
                     }
                     required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full px-3 py-2 border ${validationErrors[`dependent_${idx + 1}`] ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm`}
                   >
                     <option value="">Selecciona parentesco</option>
                     <option value="spouse">Cónyuge</option>
@@ -657,25 +797,37 @@ export default function PlanPremierForm() {
                     <option value="other">Otro</option>
                   </select>
                 </div>
+                {validationErrors[`dependent_${idx + 1}`] && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors[`dependent_${idx + 1}`]}</p>
+                )}
               </div>
             ))}
           </div>
         )}
 
-        {/* Botones de acción */}
-        <div className="flex justify-end gap-4 mt-6">
+        {/* --- SECCIÓN DE PRIMA ESTIMADA --- */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
+          <p className="text-2xl font-bold text-blue-900">${calculatedPremium.toFixed(2)} / {formData.payment_frequency}</p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
+        </div>
+
+        {/* --- Botones de acción (Envío y Cancelar) --- */}
+        <div className="flex justify-end space-x-4 mt-6">
           <button
-            type="button"
-            onClick={() => navigate('/client/dashboard/policies')}
-            className="inline-flex justify-center py-2 px-6 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
+            type="button" // Important: use type="button" for cancel to prevent form submission
+            onClick={handleCancel}
+            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Cancelar
           </button>
           <button
             type="submit"
-            className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
+            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
-            Enviar solicitud de póliza
+            Enviar Póliza
           </button>
         </div>
       </form>
