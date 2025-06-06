@@ -17,6 +17,7 @@
     "apexcharts": "3.48.0",
     "chance": "^1.1.11",
     "date-fns": "^2.30.0",
+    "emailjs-com": "^3.2.0",
     "flowbite": "^2.5.2",
     "flowbite-react": "^0.10.2",
     "formik": "^2.4.5",

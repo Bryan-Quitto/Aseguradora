@@ -46,7 +46,7 @@ export default function AdyDStandaloneForm() {
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 5, // Prima mínima para AD&D: $5
+    premium_amount: 5, // Prima inicial, el usuario puede ajustarla, pero con un mínimo
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
@@ -80,7 +80,6 @@ export default function AdyDStandaloneForm() {
       if (productsData) {
         setProducts(productsData);
 
-        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO AD&D ---
         const foundAdndProduct = productsData.find(
           (p) => p.name === 'Seguro por muerte accidental y desmembramiento (AD&D)'
         );
@@ -88,14 +87,13 @@ export default function AdyDStandaloneForm() {
           setAdndProduct(foundAdndProduct);
           setFormData((prev) => ({
             ...prev,
-            product_id: foundAdndProduct.id, // Establece el ID en el formData
+            product_id: foundAdndProduct.id,
           }));
         } else {
           setError(
             'Error: El producto "Seguro por muerte accidental y desmembramiento (AD&D)" no fue encontrado.'
           );
         }
-        // --------------------------------------------------------
       }
 
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
@@ -120,20 +118,17 @@ export default function AdyDStandaloneForm() {
     fetchInitialData();
   }, []);
 
-  // -----------------------------------------------------
-  // Helpers
-  // -----------------------------------------------------
   const generatePolicyNumber = () => {
     return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
 
-  /**
-   * Calcula la prima estimada basándose en el monto de cobertura y la edad.
-   * Puedes ajustar esta lógica según las tarifas de tu seguro.
-   * Esta es una función de ejemplo.
-   */
   const calculateEstimatedPremium = (coverage: number, age: number, frequency: string): number => {
-    let baseRate = 0.0005; // Tasa base por $1 de cobertura
+    console.log('--- Calculando Prima Estimada ---');
+    console.log('Cobertura (coverage):', coverage);
+    console.log('Edad (age):', age);
+    console.log('Frecuencia (frequency):', frequency);
+
+    let baseRate = 0.03; // <-- INCREASED THIS VALUE SIGNIFICANTLY
     let ageFactor = 1;
 
     if (age > 40 && age <= 50) {
@@ -148,63 +143,69 @@ export default function AdyDStandaloneForm() {
 
     switch (frequency) {
       case 'quarterly':
-        premium *= 3; // Si es trimestral, 3 veces la prima mensual
+        premium *= 3;
         break;
       case 'annually':
-        premium *= 12; // Si es anual, 12 veces la prima mensual
+        premium *= 12;
         break;
       case 'monthly':
       default:
-        // Ya es mensual
         break;
     }
 
-    // Asegurar que la prima mínima sea $5
-    return Math.max(premium, 5);
+    const finalPremium = Math.max(premium, 5);
+    console.log('Prima Calculada:', finalPremium);
+    console.log('---------------------------------');
+    return finalPremium;
   };
-
-  // Calcular la prima estimada usando useMemo para evitar recálculos innecesarios
   const calculatedPremium = useMemo(() => {
+    // Este console.log se activará cada vez que useMemo recalcule
+    console.log('useMemo se está re-ejecutando con:', {
+      coverage: formData.coverage_amount,
+      age: formData.age_at_inscription,
+      frequency: formData.payment_frequency
+    });
     return calculateEstimatedPremium(
       formData.coverage_amount || 0,
       formData.age_at_inscription || 0,
       formData.payment_frequency
     );
-  }, [formData.coverage_amount, formData.age_at_inscription, formData.payment_frequency]);
+  }, [formData.coverage_amount, formData.age_at_inscription, formData.payment_frequency]); // Dependencias
 
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
 
+    console.log(`handleChange - Campo: ${name}, Valor: ${value}`);
+
     setFormData((prev) => {
-      // Para campos numéricos, asegúrate de que el valor sea un número válido.
       let newValue: string | number | Beneficiary[] = value;
 
       if (name === 'premium_amount' || name === 'coverage_amount' || name === 'age_at_inscription') {
         const numValue = parseFloat(value);
-        newValue = isNaN(numValue) ? 0 : numValue; // Asigna 0 si es NaN
+        newValue = isNaN(numValue) ? 0 : numValue;
+        console.log(`  -> Es campo numérico. Valor convertido: ${newValue}, Tipo: ${typeof newValue}`);
       }
 
       if (name === 'num_beneficiaries') {
         const num = parseInt(value, 10);
-        const newNumBeneficiaries = isNaN(num) || num < 1 ? 1 : Math.min(num, 3); // Limitar entre 1 y 3
+        const newNumBeneficiaries = isNaN(num) || num < 1 ? 1 : Math.min(num, 3);
 
         const arr: Beneficiary[] = [];
         const existingBeneficiaries = prev.beneficiaries || [];
         for (let i = 0; i < newNumBeneficiaries; i++) {
           arr.push(existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 });
         }
-
-        // Si el número de beneficiarios se reduce, los porcentajes deben ser reajustados
-        // Aquí solo se truncan, la validación del submit manejará la suma del 100%.
+        console.log(`  -> num_beneficiaries actualizado a: ${newNumBeneficiaries}`);
         return { ...prev, num_beneficiaries: newNumBeneficiaries, beneficiaries: arr };
       }
 
-      return { ...prev, [name]: newValue };
+      const updatedFormData = { ...prev, [name]: newValue };
+      console.log('  -> formData después de la actualización:', updatedFormData);
+      return updatedFormData;
     });
 
-    // Limpiar el error de validación para el campo modificado
     if (validationErrors[name as keyof FormErrors]) {
       setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
     }
@@ -215,6 +216,7 @@ export default function AdyDStandaloneForm() {
     field: 'name' | 'relationship' | 'percentage',
     value: string
   ) => {
+    console.log(`handleBeneficiaryChange - Beneficiario #${idx}, Campo: ${field}, Valor: ${value}`);
     setFormData((prev) => {
       const newBens = [...(prev.beneficiaries || [])];
       if (!newBens[idx]) {
@@ -233,17 +235,14 @@ export default function AdyDStandaloneForm() {
           [field]: value,
         };
       }
+      console.log('  -> Beneficiarios actualizados:', newBens);
       return { ...prev, beneficiaries: newBens };
     });
-    // Limpiar el error de beneficiarios cuando se modifica alguno
     if (validationErrors.beneficiaries) {
       setValidationErrors((prev) => ({ ...prev, beneficiaries: undefined }));
     }
   };
 
-  // -----------------------------------------------------
-  // Validación del formulario
-  // -----------------------------------------------------
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
 
@@ -251,7 +250,7 @@ export default function AdyDStandaloneForm() {
       errors.client_id = 'Por favor, selecciona un cliente.';
     }
     if (!formData.product_id) {
-      errors.product_id = 'El producto de seguro no está seleccionado.'; // Este campo es de solo lectura y debería estar pre-seleccionado
+      errors.product_id = 'El producto de seguro no está seleccionado.';
     }
     if (!formData.start_date) {
       errors.start_date = 'La fecha de inicio es requerida.';
@@ -263,19 +262,16 @@ export default function AdyDStandaloneForm() {
       errors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio.';
     }
 
-    // Validaciones AD&D Stand-Alone
     if (typeof formData.age_at_inscription !== 'number' || formData.age_at_inscription < 18 || formData.age_at_inscription > 65) {
       errors.age_at_inscription = 'La edad de inscripción debe estar entre 18 y 65 años.';
     }
     if (typeof formData.coverage_amount !== 'number' || formData.coverage_amount < 5000 || formData.coverage_amount > 100000) {
       errors.coverage_amount = 'La cobertura debe estar entre $5,000 y $100,000.';
     }
-    if (typeof formData.premium_amount !== 'number' || formData.premium_amount < 5) {
-      errors.premium_amount = 'La prima mínima es $5.';
-    } else if (formData.premium_amount < calculatedPremium) {
-      // Validar si la prima ingresada manualmente es menor a la calculada
-      errors.premium_amount = `La prima debe ser al menos $${calculatedPremium.toFixed(2)}.`;
+    if (typeof formData.premium_amount !== 'number' || formData.premium_amount < calculatedPremium) {
+      errors.premium_amount = `La prima ingresada debe ser al menos $${calculatedPremium.toFixed(2)}.`;
     }
+
 
     if (!formData.beneficiaries || formData.beneficiaries.length === 0) {
       errors.beneficiaries = 'Debe haber al menos un beneficiario.';
@@ -304,6 +300,7 @@ export default function AdyDStandaloneForm() {
     }
 
     setValidationErrors(errors);
+    console.log('Errores de validación:', errors);
     return Object.keys(errors).length === 0;
   };
 
@@ -311,7 +308,7 @@ export default function AdyDStandaloneForm() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
-    setValidationErrors({}); // Limpiar errores de validación anteriores
+    setValidationErrors({});
 
     if (!user?.id) {
       setError('No se pudo obtener el ID del agente. Por favor, inicia sesión de nuevo.');
@@ -328,13 +325,13 @@ export default function AdyDStandaloneForm() {
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
-      // Asegurarse de que los valores numéricos sean de tipo 'number' si no lo son ya
       premium_amount: Number(formData.premium_amount),
       coverage_amount: Number(formData.coverage_amount),
       age_at_inscription: Number(formData.age_at_inscription),
       num_beneficiaries: Number(formData.num_beneficiaries),
-      // beneficiaries ya está en formData y tiene la estructura correcta
     };
+
+    console.log('Payload enviado:', payload);
 
     const { data, error: createError } = await createPolicy(payload);
     if (createError) {
@@ -342,12 +339,11 @@ export default function AdyDStandaloneForm() {
       setError(`Error al crear la póliza: ${createError.message || 'Error desconocido'}`);
     } else if (data) {
       setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
-      // Resetear
       setFormData((prev) => ({
         ...prev,
         policy_number: '',
         client_id: '',
-        product_id: adndProduct ? adndProduct.id : '', // Mantener el product_id si adndProduct existe
+        product_id: adndProduct ? adndProduct.id : '',
         start_date: '',
         end_date: '',
         premium_amount: 5,
@@ -434,7 +430,7 @@ export default function AdyDStandaloneForm() {
         {/* Producto de Seguro (MODIFICADO) */}
         <div>
           <label
-            htmlFor="product_name_display" // Nuevo ID para el input de solo lectura
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
@@ -443,8 +439,8 @@ export default function AdyDStandaloneForm() {
             type="text"
             id="product_name_display"
             name="product_name_display"
-            value={adndProduct ? adndProduct.name : 'Cargando...'} // Muestra el nombre o un mensaje de carga
-            readOnly // ¡Importante! Hace que el campo sea de solo lectura
+            value={adndProduct ? adndProduct.name : 'Cargando...'}
+            readOnly
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
@@ -580,25 +576,13 @@ export default function AdyDStandaloneForm() {
           )}
         </div>
 
-        {/* Prima Estimada Calculada */}
-        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
-          <h3 className="text-lg font-semibold text-blue-700 mb-2">Prima Estimada:</h3>
-          <p className="text-2xl font-bold text-blue-900">
-            ${calculatedPremium.toFixed(2)} / {formData.payment_frequency}
-          </p>
-          {validationErrors.premium_amount && (
-            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
-          )}
-        </div>
-
-        {/* Monto de la Prima (Editable, pero con validación) */}
+        {/* Monto de la Prima (Editable, con validación contra el precio total actual) */}
         <div>
           <label
             htmlFor="premium_amount"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Monto de la Prima ($) (Ajustable, mínimo $
-            {calculatedPremium.toFixed(2)})
+            Monto de la Prima ($) (Ingrese el valor, mínimo ${calculatedPremium.toFixed(2)})
           </label>
           <input
             type="number"
@@ -607,12 +591,12 @@ export default function AdyDStandaloneForm() {
             value={formData.premium_amount}
             onChange={handleChange}
             required
-            min={5} // El min HTML es el mínimo absoluto, la validación JS será más precisa
+            min={5}
             step="0.01"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Prima mínima: $5. Se recomienda usar la prima estimada.
+            Este campo representa la prima que desea pagar. Debe ser igual o mayor al precio total actual.
           </p>
           {validationErrors.premium_amount && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
@@ -764,7 +748,7 @@ export default function AdyDStandaloneForm() {
                     handleBeneficiaryChange(idx, 'percentage', e.target.value)
                   }
                   required
-                  min={0.01} // Permite porcentajes pequeños, la suma total se valida aparte
+                  min={0.01}
                   max={100}
                   step="0.01"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -778,6 +762,17 @@ export default function AdyDStandaloneForm() {
           {validationErrors.beneficiaries && (
             <p className="mt-1 text-sm text-red-600">{validationErrors.beneficiaries}</p>
           )}
+        </div>
+
+        {/* PRECIO TOTAL ACTUAL (DISPLAY DEL VALOR CALCULADO) */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Precio total actual:</h3>
+          <p className="text-2xl font-bold text-blue-900">
+            ${calculatedPremium.toFixed(2)} / {formData.payment_frequency}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Este es el costo mínimo de la póliza basado en las opciones seleccionadas.
+          </p>
         </div>
 
         {/* Botones de acción */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import {
@@ -15,6 +15,33 @@ interface Beneficiary {
   percentage: number;
 }
 
+// Extend CreatePolicyData for Vida Basica specific fields
+interface VidaBasicaPolicyData extends CreatePolicyData {
+  coverage_amount: number;
+  num_beneficiaries: number;
+  beneficiaries: Beneficiary[];
+  age_at_inscription: number;
+  medical_exam_required: boolean; // Specific for Vida Basica
+  smoking_status: 'smoker' | 'non-smoker' | 'former-smoker' | ''; // Specific for Vida Basica
+}
+
+// Interfaz para los errores de validación
+interface FormErrors {
+  client_id?: string;
+  product_id?: string;
+  start_date?: string;
+  end_date?: string;
+  premium_amount?: string;
+  payment_frequency?: string;
+  coverage_amount?: string;
+  num_beneficiaries?: string;
+  age_at_inscription?: string;
+  medical_exam_required?: string;
+  smoking_status?: string;
+  beneficiaries?: string;
+  general?: string;
+}
+
 /**
  * Formulario para el Seguro de Vida Básica.
  */
@@ -25,39 +52,38 @@ export default function VidaBasicaForm() {
   // -----------------------------------------------------
   // Estado base + campos específicos Vida Básica
   // -----------------------------------------------------
-  const [formData, setFormData] = useState<CreatePolicyData>({
+  const [formData, setFormData] = useState<VidaBasicaPolicyData>({
     policy_number: '',
     client_id: '',
     product_id: '',
     start_date: '',
     end_date: '',
-    premium_amount: 0, // Puede ir de 0 hasta 1× salario mensual (se valida en backend)
+    premium_amount: 15, // Prima inicial sugerida para Vida Básica
     payment_frequency: 'monthly',
     status: 'pending',
     contract_details: '',
     // ↓ Campos propios Vida Básica
-    coverage_amount: 0, // Monto de cobertura de vida
-    ad_d_included: true, // AD&D está incluido al 100% de coverage_amount
-    ad_d_coverage: 0, // Se iguala a coverage_amount automáticamente
-    beneficiaries: [{ name: '', relationship: '', percentage: 100 }] as Beneficiary[], // Array dinámico (1–5) - Inicializar con un beneficiario por defecto
+    coverage_amount: 25000, // Rango: $10,000 – $500,000
+    num_beneficiaries: 1, // 1–5
+    beneficiaries: [] as Beneficiary[],
+    age_at_inscription: 30, // Rango: 18–70
+    medical_exam_required: true, // Por defecto, sí requiere examen médico
+    smoking_status: '', // 'smoker', 'non-smoker', 'former-smoker'
   });
 
   const [clients, setClients] = useState<ClientProfile[]>([]);
-  const [products, setProducts] = useState<InsuranceProduct[]>([]); // Aunque no se usa directamente en el select, es bueno mantenerlo si hay planes futuros.
+  const [products, setProducts] = useState<InsuranceProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  // Para controlar cuántos beneficiarios mostrar (1–5)
-  const [numBeneficiaries, setNumBeneficiaries] = useState<number>(1);
   const [vidaBasicaProduct, setVidaBasicaProduct] = useState<InsuranceProduct | null>(null);
+  const [validationErrors, setValidationErrors] = useState<FormErrors>({}); // Nuevo estado para errores de validación
 
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
       setError(null);
 
-      // Cargar productos de seguro
       const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
       if (productsError) {
         console.error('Error al cargar productos de seguro:', productsError);
@@ -65,27 +91,29 @@ export default function VidaBasicaForm() {
         setLoading(false);
         return;
       }
-
       if (productsData) {
-        // --- ENCUENTRA Y ESTABLECE EL PRODUCTO ESPECÍFICO "Seguro de Vida Básico" ---
-        const foundVidaBasicaProduct = productsData.find(p => p.name === 'Seguro de Vida Básico'); // <-- Asegúrate de que el nombre sea EXACTO
+        setProducts(productsData);
+
+        const foundVidaBasicaProduct = productsData.find(
+          (p) => p.name === 'Seguro de Vida Básico' // ASUME ESTE ES EL NOMBRE DEL PRODUCTO
+        );
         if (foundVidaBasicaProduct) {
           setVidaBasicaProduct(foundVidaBasicaProduct);
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
-            product_id: foundVidaBasicaProduct.id, // Establece el ID en el formData
+            product_id: foundVidaBasicaProduct.id,
           }));
         } else {
-          setError('Error: El producto "Seguro de Vida Básico" no fue encontrado. Asegúrate de que existe en la base de datos.');
+          setError(
+            'Error: El producto "Seguro de Vida Básica" no fue encontrado. Por favor, asegúrate de que esté activo.'
+          );
         }
-        // -------------------------------------------------------------------------
       }
 
-      // Cargar clientes
       const { data: clientsData, error: clientsError } = await getAllClientProfiles();
       if (clientsError) {
         console.error('Error al cargar clientes:', clientsError);
-        setError(prev => (prev ? prev + ' Y clientes.' : 'Error al cargar los clientes.'));
+        setError((prev) => (prev ? prev + ' Y clientes.' : 'Error al cargar los clientes.'));
         setLoading(false);
         return;
       }
@@ -93,172 +121,309 @@ export default function VidaBasicaForm() {
         setClients(clientsData);
       }
 
+      setFormData((prev) => ({
+        ...prev,
+        beneficiaries: [{ name: '', relationship: '', percentage: 100 }], // Inicializa con 1 beneficiario por defecto
+      }));
+
       setLoading(false);
     };
 
     fetchInitialData();
   }, []);
 
-  // -----------------------------------------------------
-  // Helpers
-  // -----------------------------------------------------
   const generatePolicyNumber = () => {
-    return `POL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    return `POL-VB-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
   };
+
+  const calculateEstimatedPremium = (
+    coverage: number,
+    age: number,
+    frequency: string,
+    smokingStatus: string
+  ): number => {
+    console.log('--- Calculando Prima Estimada (Vida Básica) ---');
+    console.log('Cobertura (coverage):', coverage);
+    console.log('Edad (age):', age);
+    console.log('Frecuencia (frequency):', frequency);
+    console.log('Estado Fumador (smokingStatus):', smokingStatus);
+
+    let baseRatePerThousand = 0.08; // Prima base por cada $1,000 de cobertura al mes
+    let ageFactor = 1;
+    let smokingFactor = 1;
+
+    // Ajuste por edad
+    if (age >= 18 && age <= 25) {
+      ageFactor = 0.8;
+    } else if (age > 25 && age <= 35) {
+      ageFactor = 1.0;
+    } else if (age > 35 && age <= 45) {
+      ageFactor = 1.3;
+    } else if (age > 45 && age <= 55) {
+      ageFactor = 1.8;
+    } else if (age > 55 && age <= 65) {
+      ageFactor = 2.5;
+    } else if (age > 65) {
+      ageFactor = 3.5;
+    }
+
+    // Ajuste por estado de fumador
+    switch (smokingStatus) {
+      case 'smoker':
+        smokingFactor = 1.7; // Los fumadores pagan más
+        break;
+      case 'former-smoker':
+        smokingFactor = 1.2; // Ex-fumadores pagan un poco más
+        break;
+      case 'non-smoker':
+      default:
+        smokingFactor = 1.0; // No fumadores, factor base
+        break;
+    }
+
+    // Cálculo de la prima mensual inicial
+    let premium = (coverage / 1000) * baseRatePerThousand * ageFactor * smokingFactor;
+
+    // Ajuste por frecuencia de pago
+    switch (frequency) {
+      case 'quarterly':
+        premium *= 3;
+        break;
+      case 'annually':
+        premium *= 12;
+        break;
+      case 'monthly':
+      default:
+        break;
+    }
+
+    const finalPremium = Math.max(premium, 15); // Prima mínima de $15
+    console.log('Prima Calculada:', finalPremium);
+    console.log('---------------------------------');
+    return finalPremium;
+  };
+
+  const calculatedPremium = useMemo(() => {
+    console.log('useMemo se está re-ejecutando con:', {
+      coverage: formData.coverage_amount,
+      age: formData.age_at_inscription,
+      frequency: formData.payment_frequency,
+      smokingStatus: formData.smoking_status,
+    });
+    return calculateEstimatedPremium(
+      formData.coverage_amount || 0,
+      formData.age_at_inscription || 0,
+      formData.payment_frequency,
+      formData.smoking_status
+    );
+  }, [
+    formData.coverage_amount,
+    formData.age_at_inscription,
+    formData.payment_frequency,
+    formData.smoking_status,
+  ]); // Dependencias
 
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
-    const { name, value } = e.target; // 'type' no es necesario aquí
+    const { name, value, type, checked } = e.target as HTMLInputElement;
 
-    setFormData(prev => {
-      if (name === 'premium_amount') {
+    console.log(`handleChange - Campo: ${name}, Valor: ${value}, Tipo: ${type}`);
+
+    setFormData((prev) => {
+      let newValue: string | number | boolean | Beneficiary[] = value;
+
+      // Handle checkbox specially
+      if (type === 'checkbox') {
+        newValue = checked;
+        console.log(`  -> Es checkbox. Valor convertido: ${newValue}, Tipo: ${typeof newValue}`);
+      }
+      // Handle numeric inputs
+      else if (name === 'premium_amount' || name === 'coverage_amount' || name === 'age_at_inscription') {
         const numValue = parseFloat(value);
-        // Asegúrate de que el valor sea un número válido, de lo contrario, regresa 0 o el valor anterior.
-        return { ...prev, [name]: isNaN(numValue) ? 0 : numValue };
+        newValue = isNaN(numValue) ? 0 : numValue;
+        console.log(`  -> Es campo numérico. Valor convertido: ${newValue}, Tipo: ${typeof newValue}`);
       }
-      if (name === 'coverage_amount') {
-        const cov = parseFloat(value);
-        // Igualar ad_d_coverage a coverage_amount (AD&D incluido al 100%)
-        return { ...prev, coverage_amount: isNaN(cov) ? 0 : cov, ad_d_coverage: isNaN(cov) ? 0 : cov };
+
+      // Special handling for num_beneficiaries to adjust the beneficiaries array
+      if (name === 'num_beneficiaries') {
+        const num = parseInt(value, 10);
+        // Clamp between 1 and 5 beneficiaries for Vida Basica
+        const newNumBeneficiaries = isNaN(num) || num < 1 ? 1 : Math.min(num, 5); 
+
+        const arr: Beneficiary[] = [];
+        const existingBeneficiaries = prev.beneficiaries || [];
+        for (let i = 0; i < newNumBeneficiaries; i++) {
+          arr.push(existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 });
+        }
+        console.log(`  -> num_beneficiaries actualizado a: ${newNumBeneficiaries}`);
+        return { ...prev, num_beneficiaries: newNumBeneficiaries, beneficiaries: arr };
       }
-      // Resto
-      return { ...prev, [name]: value };
+
+      const updatedFormData = { ...prev, [name]: newValue };
+      console.log('  -> formData después de la actualización:', updatedFormData);
+      return updatedFormData;
     });
+
+    if (validationErrors[name as keyof FormErrors]) {
+      setValidationErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
-  // Cuando cambia el número de beneficiarios (1–5)
-  const handleNumBeneficiariesChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const num = parseInt(e.target.value);
-    // Asegurarse de que num sea un número válido y dentro del rango (1-5)
-    const newNum = isNaN(num) ? 1 : Math.max(1, Math.min(5, num));
-    
-    setNumBeneficiaries(newNum);
-
-    setFormData(prev => {
-      const existingBeneficiaries = prev.beneficiaries || [];
-      const newBeneficiaries: Beneficiary[] = [];
-
-      for (let i = 0; i < newNum; i++) {
-        // Conservamos datos anteriores si existían, o inicializamos vacíos con 0% por defecto
-        // La suma de porcentajes será validada al hacer submit
-        newBeneficiaries.push(existingBeneficiaries[i] || { name: '', relationship: '', percentage: 0 });
-      }
-      return { ...prev, beneficiaries: newBeneficiaries };
-    });
-  };
-
-  // Cambios en datos de cada beneficiario
   const handleBeneficiaryChange = (
     idx: number,
     field: 'name' | 'relationship' | 'percentage',
     value: string
   ) => {
-    setFormData(prev => {
-      const newBens = [...(prev.beneficiaries || [])]; // Asegúrate de que es un array
-      // Si el índice no existe (ej. se añadió un nuevo campo de beneficiario), inicialízalo.
+    console.log(`handleBeneficiaryChange - Beneficiario #${idx}, Campo: ${field}, Valor: ${value}`);
+    setFormData((prev) => {
+      const newBens = [...(prev.beneficiaries || [])];
       if (!newBens[idx]) {
         newBens[idx] = { name: '', relationship: '', percentage: 0 };
       }
 
-      newBens[idx] = {
-        ...newBens[idx],
-        [field]: field === 'percentage' ? parseFloat(value) : value,
-      };
+      if (field === 'percentage') {
+        const numValue = parseFloat(value);
+        newBens[idx] = {
+          ...newBens[idx],
+          [field]: isNaN(numValue) ? 0 : numValue,
+        };
+      } else {
+        newBens[idx] = {
+          ...newBens[idx],
+          [field]: value,
+        };
+      }
+      console.log('  -> Beneficiarios actualizados:', newBens);
       return { ...prev, beneficiaries: newBens };
     });
+    if (validationErrors.beneficiaries) {
+      setValidationErrors((prev) => ({ ...prev, beneficiaries: undefined }));
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
+
+    if (!formData.client_id) {
+      errors.client_id = 'Por favor, selecciona un cliente.';
+    }
+    if (!formData.product_id) {
+      errors.product_id = 'El producto de seguro no está seleccionado.';
+    }
+    if (!formData.start_date) {
+      errors.start_date = 'La fecha de inicio es requerida.';
+    }
+    if (!formData.end_date) {
+      errors.end_date = 'La fecha de fin es requerida.';
+    }
+    if (formData.start_date && formData.end_date && new Date(formData.start_date) >= new Date(formData.end_date)) {
+      errors.end_date = 'La fecha de fin debe ser posterior a la fecha de inicio.';
+    }
+
+    // Vida Basica specific validations
+    if (typeof formData.age_at_inscription !== 'number' || formData.age_at_inscription < 18 || formData.age_at_inscription > 70) {
+      errors.age_at_inscription = 'La edad de inscripción debe estar entre 18 y 70 años para este producto.';
+    }
+    if (typeof formData.coverage_amount !== 'number' || formData.coverage_amount < 10000 || formData.coverage_amount > 500000) {
+      errors.coverage_amount = 'La cobertura debe estar entre $10,000 y $500,000 para Vida Básica.';
+    }
+    if (typeof formData.premium_amount !== 'number' || formData.premium_amount < calculatedPremium) {
+      errors.premium_amount = `La prima ingresada debe ser al menos $${calculatedPremium.toFixed(2)}.`;
+    }
+    if (!formData.smoking_status) {
+      errors.smoking_status = 'El estado de fumador es requerido.';
+    }
+    // No specific validation for medical_exam_required, as it's a boolean and has a default.
+    // If it were optional and had conditions, validation would be added here.
+
+
+    if (!formData.beneficiaries || formData.beneficiaries.length === 0) {
+      errors.beneficiaries = 'Debe haber al menos un beneficiario.';
+    } else {
+      let sumaPct = 0;
+      for (let i = 0; i < formData.beneficiaries.length; i++) {
+        const b = formData.beneficiaries[i];
+        if (!b.name.trim()) {
+          errors.beneficiaries = `El nombre del beneficiario ${i + 1} es requerido.`;
+          break;
+        }
+        if (!b.relationship.trim()) {
+          errors.beneficiaries = `El parentesco del beneficiario ${i + 1} es requerido.`;
+          break;
+        }
+        if (typeof b.percentage !== 'number' || b.percentage <= 0 || b.percentage > 100) {
+          errors.beneficiaries = `El porcentaje del beneficiario ${i + 1} debe ser entre 1 y 100.`;
+          break;
+        }
+        sumaPct += b.percentage;
+      }
+
+      if (!errors.beneficiaries && Math.abs(sumaPct - 100) > 0.01) {
+        errors.beneficiaries = 'La suma de porcentajes de todos los beneficiarios debe ser 100%.';
+      }
+    }
+
+    setValidationErrors(errors);
+    console.log('Errores de validación (Vida Básica):', errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+    setValidationErrors({});
 
     if (!user?.id) {
-      setError('No se pudo obtener el ID del agente. Por favor, asegúrate de estar logueado.');
+      setError('No se pudo obtener el ID del agente. Por favor, inicia sesión de nuevo.');
       return;
     }
 
-    // Validaciones Vida Básica
-    // 1) coverage_amount > 0
-    if (formData.coverage_amount! <= 0) {
-      setError('Debes indicar un monto de cobertura mayor que 0.');
-      return;
-    }
-    // 2) premium_amount >= 0 (se asume que backend valida tope máximo según salario)
-    if (formData.premium_amount < 0) {
-      setError('La prima no puede ser negativa.');
-      return;
-    }
-    // 3) Validar beneficiarios: al menos 1, máximo 5, suma de porcentajes = 100%
-    if (!formData.beneficiaries || formData.beneficiaries.length === 0) {
-      setError('Debe haber al menos un beneficiario.');
-      return;
-    }
-    
-    let sumaPct = 0;
-    // Iterar sobre los beneficiarios mostrados actualmente (controlado por numBeneficiaries)
-    // Esto asegura que solo se validan los que el usuario ha especificado que quiere.
-    for (let i = 0; i < numBeneficiaries; i++) {
-      const b = formData.beneficiaries[i];
-      if (!b) { // Si por alguna razón el beneficiario no existe en formData.beneficiaries, es un error
-        setError(`Faltan datos para el beneficiario ${i + 1}.`);
-        return;
-      }
-      if (!b.name.trim() || !b.relationship.trim() || b.percentage <= 0) {
-        setError(`Completa todos los datos y asegúrate que el porcentaje sea mayor que 0 para el beneficiario ${i + 1}.`);
-        return;
-      }
-      sumaPct += b.percentage;
-    }
-
-    // Usar una tolerancia para la suma de porcentajes debido a la aritmética de punto flotante
-    if (Math.abs(sumaPct - 100) > 0.01) {
-      setError('La suma de porcentajes de todos los beneficiarios debe ser 100%.');
+    if (!validateForm()) {
+      setError('Por favor, corrige los errores en el formulario.');
       return;
     }
 
     const policyNumber = generatePolicyNumber();
-    const payload: CreatePolicyData = {
+    const payload: VidaBasicaPolicyData = {
       ...formData,
       policy_number: policyNumber,
       agent_id: user.id,
-      // Asegurar que los números sean parseados correctamente, aunque los inputs ya son de tipo "number"
       premium_amount: Number(formData.premium_amount),
       coverage_amount: Number(formData.coverage_amount),
-      ad_d_included: true, // Siempre true para Vida Básica
-      ad_d_coverage: Number(formData.ad_d_coverage),
-      // Solo enviar los beneficiarios que realmente se están mostrando/usando
-      beneficiaries: formData.beneficiaries.slice(0, numBeneficiaries).map(b => ({
-        ...b,
-        percentage: Number(b.percentage) // Asegurarse de que el porcentaje sea numérico
-      })),
+      age_at_inscription: Number(formData.age_at_inscription),
+      num_beneficiaries: Number(formData.num_beneficiaries),
+      // medical_exam_required is already boolean
+      // smoking_status is already string
     };
+
+    console.log('Payload enviado (Vida Básica):', payload);
 
     const { data, error: createError } = await createPolicy(payload);
     if (createError) {
-      console.error('Error al crear póliza:', createError);
-      setError(`Error al crear la póliza: ${createError.message || 'Error desconocido'}`);
+      console.error('Error al crear póliza de Vida Básica:', createError);
+      setError(`Error al crear la póliza de Vida Básica: ${createError.message || 'Error desconocido'}`);
     } else if (data) {
-      setSuccessMessage(`Póliza ${data.policy_number} creada exitosamente.`);
-      // Resetear formulario a su estado inicial
-      setFormData({
+      setSuccessMessage(`Póliza de Vida Básica ${data.policy_number} creada exitosamente.`);
+      setFormData((prev) => ({
+        ...prev,
         policy_number: '',
         client_id: '',
-        product_id: vidaBasicaProduct?.id || '', // Vuelve a establecer el product_id si está disponible
+        product_id: vidaBasicaProduct ? vidaBasicaProduct.id : '',
         start_date: '',
         end_date: '',
-        premium_amount: 0,
+        premium_amount: 15,
         payment_frequency: 'monthly',
         status: 'pending',
         contract_details: '',
-        coverage_amount: 0,
-        ad_d_included: true,
-        ad_d_coverage: 0,
-        beneficiaries: [{ name: '', relationship: '', percentage: 100 }], // Resetear a 1 beneficiario con 100%
-      });
-      setNumBeneficiaries(1); // Resetear el control de beneficiarios a 1
-
+        coverage_amount: 25000,
+        num_beneficiaries: 1,
+        beneficiaries: [{ name: '', relationship: '', percentage: 100 }],
+        age_at_inscription: 30,
+        medical_exam_required: true,
+        smoking_status: '',
+      }));
       setTimeout(() => {
         navigate('/agent/dashboard/policies');
       }, 2000);
@@ -268,7 +433,7 @@ export default function VidaBasicaForm() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-blue-600 text-xl">Cargando datos para Vida Básica…</p>
+        <p className="text-blue-600 text-xl">Cargando datos para Seguro de Vida Básica…</p>
       </div>
     );
   }
@@ -318,7 +483,7 @@ export default function VidaBasicaForm() {
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           >
             <option value="">Selecciona un cliente</option>
-            {clients.map(client => (
+            {clients.map((client) => (
               <option key={client.user_id} value={client.user_id}>
                 {client.full_name ||
                   `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()}{' '}
@@ -326,12 +491,15 @@ export default function VidaBasicaForm() {
               </option>
             ))}
           </select>
+          {validationErrors.client_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.client_id}</p>
+          )}
         </div>
 
         {/* Producto de Seguro (MODIFICADO) */}
         <div>
           <label
-            htmlFor="product_name_display" // Nuevo ID para el input de solo lectura
+            htmlFor="product_name_display"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
             Producto de Seguro
@@ -340,14 +508,16 @@ export default function VidaBasicaForm() {
             type="text"
             id="product_name_display"
             name="product_name_display"
-            // Muestra el nombre del producto si ya se cargó, o un mensaje de carga
-            value={vidaBasicaProduct ? vidaBasicaProduct.name : 'Cargando producto...'}
-            readOnly // ¡Importante! Hace que el campo sea de solo lectura
+            value={vidaBasicaProduct ? vidaBasicaProduct.name : 'Cargando...'}
+            readOnly
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50 cursor-not-allowed sm:text-sm"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Este formulario es específicamente para el "Seguro de Vida Básico".
+            Este formulario es específicamente para el "Seguro de Vida Básica".
           </p>
+          {validationErrors.product_id && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.product_id}</p>
+          )}
         </div>
 
         {/* Fechas Inicio / Fin */}
@@ -368,6 +538,9 @@ export default function VidaBasicaForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
+            {validationErrors.start_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.start_date}</p>
+            )}
           </div>
           <div>
             <label
@@ -385,53 +558,162 @@ export default function VidaBasicaForm() {
               required
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             />
+            {validationErrors.end_date && (
+              <p className="mt-1 text-sm text-red-600">{validationErrors.end_date}</p>
+            )}
           </div>
         </div>
 
-        {/* Monto de la Prima y Frecuencia */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label
-              htmlFor="premium_amount"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Monto de la Prima ($)
-            </label>
-            <input
-              type="number"
-              id="premium_amount"
-              name="premium_amount"
-              value={formData.premium_amount}
-              onChange={handleChange}
-              required
-              min="0"
-              step="0.01"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              Puede quedar en $0 (cubierto por la empresa) o más según la cobertura.
-            </p>
-          </div>
-          <div>
-            <label
-              htmlFor="payment_frequency"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Frecuencia de Pago
-            </label>
-            <select
-              id="payment_frequency"
-              name="payment_frequency"
-              value={formData.payment_frequency}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="monthly">Mensual</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="annually">Anual</option>
-            </select>
-          </div>
+        {/* ———————————— Campos Específicos: Vida Básica ———————————— */}
+
+        {/* Monto de Cobertura Vida Básica */}
+        <div>
+          <label
+            htmlFor="coverage_amount"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Monto de Cobertura ($)
+          </label>
+          <input
+            type="number"
+            id="coverage_amount"
+            name="coverage_amount"
+            value={formData.coverage_amount}
+            onChange={handleChange}
+            required
+            min={10000}
+            max={500000}
+            step="1000"
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Monto de cobertura entre $10,000 y $500,000.
+          </p>
+          {validationErrors.coverage_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.coverage_amount}</p>
+          )}
+        </div>
+
+        {/* Edad al Inscribirse */}
+        <div>
+          <label
+            htmlFor="age_at_inscription"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Edad del Asegurado al Inscribirse
+          </label>
+          <input
+            type="number"
+            id="age_at_inscription"
+            name="age_at_inscription"
+            value={formData.age_at_inscription}
+            onChange={handleChange}
+            required
+            min={18}
+            max={70}
+            step="1"
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Rango válido: 18 – 70 años.
+          </p>
+          {validationErrors.age_at_inscription && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.age_at_inscription}</p>
+          )}
+        </div>
+
+        {/* Estado de Fumador */}
+        <div>
+          <label
+            htmlFor="smoking_status"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Estado de Fumador
+          </label>
+          <select
+            id="smoking_status"
+            name="smoking_status"
+            value={formData.smoking_status}
+            onChange={handleChange}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="">Selecciona una opción</option>
+            <option value="non-smoker">No fumador</option>
+            <option value="former-smoker">Ex-fumador</option>
+            <option value="smoker">Fumador</option>
+          </select>
+          {validationErrors.smoking_status && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.smoking_status}</p>
+          )}
+        </div>
+
+        {/* ¿Requiere Examen Médico? */}
+        <div className="flex items-center">
+          <input
+            id="medical_exam_required"
+            name="medical_exam_required"
+            type="checkbox"
+            checked={formData.medical_exam_required}
+            onChange={handleChange}
+            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+          />
+          <label htmlFor="medical_exam_required" className="ml-2 block text-sm font-medium text-gray-700">
+            ¿Requiere examen médico?
+          </label>
+        </div>
+
+
+        {/* Frecuencia de Pago */}
+        <div>
+          <label
+            htmlFor="payment_frequency"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Frecuencia de Pago
+          </label>
+          <select
+            id="payment_frequency"
+            name="payment_frequency"
+            value={formData.payment_frequency}
+            onChange={handleChange}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          >
+            <option value="monthly">Mensual</option>
+            <option value="quarterly">Trimestral</option>
+            <option value="annually">Anual</option>
+          </select>
+          {validationErrors.payment_frequency && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.payment_frequency}</p>
+          )}
+        </div>
+
+        {/* Monto de la Prima (Editable, con validación contra el precio total actual) */}
+        <div>
+          <label
+            htmlFor="premium_amount"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Monto de la Prima ($) (Ingrese el valor, mínimo ${calculatedPremium.toFixed(2)})
+          </label>
+          <input
+            type="number"
+            id="premium_amount"
+            name="premium_amount"
+            value={formData.premium_amount}
+            onChange={handleChange}
+            required
+            min={15} // Mínimo acorde a la nueva prima base
+            step="0.01"
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Este campo representa la prima que desea pagar. Debe ser igual o mayor al precio total actual.
+          </p>
+          {validationErrors.premium_amount && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.premium_amount}</p>
+          )}
         </div>
 
         {/* Estado de la Póliza */}
@@ -473,59 +755,13 @@ export default function VidaBasicaForm() {
             onChange={handleChange}
             rows={4}
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono"
-            placeholder='Ej.: "Incluye cobertura básica para fallecimiento natural y accidental."'
+            placeholder='Ej.: "Cobertura de Vida $100,000 con prima $50. Asegurado no fumador."'
           />
           <p className="mt-1 text-xs text-gray-500">
             Introduce detalles adicionales si los hay.
           </p>
         </div>
 
-        {/* ———————————— Campos Específicos: Vida Básica ———————————— */}
-
-        {/* Monto de Cobertura de Vida */}
-        <div>
-          <label
-            htmlFor="coverage_amount"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Monto de Cobertura de Vida ($)
-          </label>
-          <input
-            type="number"
-            id="coverage_amount"
-            name="coverage_amount"
-            value={formData.coverage_amount}
-            onChange={handleChange}
-            required
-            min={1}
-            step="1"
-            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            Ingresa el monto que deseas cubrir (mínimo $1). AD&D se iguala a este monto.
-          </p>
-        </div>
-
-        {/* Cobertura AD&D (incluida) */}
-        <div>
-          <label
-            htmlFor="ad_d_coverage"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Cobertura AD&D ($)
-          </label>
-          <input
-            type="number"
-            id="ad_d_coverage"
-            name="ad_d_coverage"
-            value={formData.ad_d_coverage}
-            readOnly
-            className="mt-1 block w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-md shadow-sm sm:text-sm"
-          />
-          <p className="mt-1 text-xs text-gray-500">
-            AD&D está incluido al 100 % de la cobertura de vida.
-          </p>
-        </div>
 
         {/* Número de Beneficiarios (1–5) */}
         <div>
@@ -539,8 +775,8 @@ export default function VidaBasicaForm() {
             type="number"
             id="num_beneficiaries"
             name="num_beneficiaries"
-            value={numBeneficiaries}
-            onChange={handleNumBeneficiariesChange}
+            value={formData.num_beneficiaries}
+            onChange={handleChange}
             required
             min={1}
             max={5}
@@ -550,13 +786,15 @@ export default function VidaBasicaForm() {
           <p className="mt-1 text-xs text-gray-500">
             La suma de porcentajes de todos los beneficiarios debe ser 100 %.
           </p>
+          {validationErrors.num_beneficiaries && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.num_beneficiaries}</p>
+          )}
         </div>
 
         {/* Campos dinámicos para cada beneficiario */}
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-gray-700">Beneficiarios</h3>
-          {/* Mapear solo hasta numBeneficiaries para renderizar los campos */}
-          {formData.beneficiaries && formData.beneficiaries.slice(0, numBeneficiaries).map((ben, idx) => (
+          {formData.beneficiaries && formData.beneficiaries.map((ben, idx) => (
             <div
               key={idx}
               className="p-4 border border-gray-200 rounded-lg space-y-3"
@@ -574,7 +812,7 @@ export default function VidaBasicaForm() {
                   id={`ben_name_${idx}`}
                   name={`ben_name_${idx}`}
                   value={ben.name}
-                  onChange={e =>
+                  onChange={(e) =>
                     handleBeneficiaryChange(idx, 'name', e.target.value)
                   }
                   required
@@ -592,7 +830,7 @@ export default function VidaBasicaForm() {
                   id={`ben_rel_${idx}`}
                   name={`ben_rel_${idx}`}
                   value={ben.relationship}
-                  onChange={e =>
+                  onChange={(e) =>
                     handleBeneficiaryChange(idx, 'relationship', e.target.value)
                   }
                   required
@@ -602,6 +840,7 @@ export default function VidaBasicaForm() {
                   <option value="spouse">Cónyuge</option>
                   <option value="child">Hijo(a)</option>
                   <option value="parent">Padre/Madre</option>
+                  <option value="sibling">Hermano(a)</option>
                   <option value="other">Otro</option>
                 </select>
               </div>
@@ -617,13 +856,13 @@ export default function VidaBasicaForm() {
                   id={`ben_pct_${idx}`}
                   name={`ben_pct_${idx}`}
                   value={ben.percentage}
-                  onChange={e =>
+                  onChange={(e) =>
                     handleBeneficiaryChange(idx, 'percentage', e.target.value)
                   }
                   required
-                  min={0.01} // Mínimo 0.01 para evitar que un beneficiario tenga 0%
+                  min={0.01}
                   max={100}
-                  step="0.01" // Permite dos decimales
+                  step="0.01"
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">
@@ -632,6 +871,20 @@ export default function VidaBasicaForm() {
               </div>
             </div>
           ))}
+          {validationErrors.beneficiaries && (
+            <p className="mt-1 text-sm text-red-600">{validationErrors.beneficiaries}</p>
+          )}
+        </div>
+
+        {/* PRECIO TOTAL ACTUAL (DISPLAY DEL VALOR CALCULADO) */}
+        <div className="bg-blue-50 p-4 rounded-md shadow-sm">
+          <h3 className="text-lg font-semibold text-blue-700 mb-2">Precio total actual:</h3>
+          <p className="text-2xl font-bold text-blue-900">
+            ${calculatedPremium.toFixed(2)} / {formData.payment_frequency}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Este es el costo mínimo de la póliza basado en las opciones seleccionadas.
+          </p>
         </div>
 
         {/* Botones de acción */}
@@ -647,7 +900,7 @@ export default function VidaBasicaForm() {
             type="submit"
             className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
           >
-            Crear Póliza
+            Crear Póliza de Vida
           </button>
         </div>
       </form>
