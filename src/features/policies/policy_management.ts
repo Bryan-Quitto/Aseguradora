@@ -231,6 +231,23 @@ export interface UpdatePolicyData {
   wellness_rebate?: number;
 }
 
+/**
+ * Obtiene todas las pólizas.
+ * @returns Una promesa que resuelve con un array de pólizas o un error.
+ */
+export async function getAllPolicies(): Promise<{
+  data: Policy[] | null;
+  error: Error | null;
+}> {
+  const { data, error } = await supabase.from('policies').select('*');
+
+  if (error) {
+    console.error('Error al obtener todas las pólizas:', error.message);
+    return { data: null, error };
+  }
+  return { data: data as Policy[], error: null };
+}
+
 // --- Funciones para Insurance Products ---
 
 /**

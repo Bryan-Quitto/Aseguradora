@@ -3,42 +3,51 @@
 import { lazy } from 'react';
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
-import EditarUsuario from '../features/admin/EditarUsuario'; // Asegúrate de que esté exportado correctamente
 
 /* ***Layouts**** */
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
-const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout'))); // Asegúrate de que esta ruta sea correcta para tu proyecto
+const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
 // Dashboard (general)
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
 
 // Dashboard del Administrador
 const DashboardAdmin = Loadable(lazy(() => import('../features/admin/Dashboard_administrador')));
+const AdminPolicyList = Loadable(lazy(() => import('../features/admin/AdminPolicyList')));
+const AdminEditPolicy = Loadable(lazy(() => import('../features/admin/AdminEditPolicy'))); // ASUME que tienes o crearás este componente
+const EditarUsuario = Loadable(lazy(() => import('../features/admin/EditarUsuario'))); // Usamos lazy loading aquí
+const ListarUsuarios = Loadable(lazy(() => import('../features/admin/ListarUsuarios'))); // Usamos lazy loading aquí
+const CrearUsuarios = Loadable(lazy(() => import('../features/admin/CrearUsuarios'))); // ¡Añadido! lazy loading para CrearUsuarios
+const ListarSoloUsuarios = Loadable(lazy(() => import('../features/admin/ListarSoloUsuarios')));
+const ListarSoloAgentes = Loadable(lazy(() => import('../features/admin/ListarSoloAgentes')));
+const ListarSoloAdmins = Loadable(lazy(() => import('../features/admin/ListarSoloAdmins')));
+
 
 // Dashboard del Agente
 const DashboardAgent = Loadable(lazy(() => import('../features/agents/pages/Dashboard_agente')));
 
-// Dashboard del Cliente
-const DashboardClient = Loadable(lazy(() => import('../features/clients/pages/Dashboard_cliente')));
-
 // Componentes de Pólizas para Agentes
 const AgentPolicyList = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyList')));
+const AdminPolicyDetail = Loadable(lazy(() => import('../features/admin/AdminPolicyDetail'))); // ¡Añade esta línea!
 const AgentPolicyForm = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyForm')));
 const AgentPolicyDetail = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyDetail')));
-const AgentEditPolicy = Loadable(lazy(() => import('../features/agents/pages/AgentEditPolicy'))); // lazy loading
+const AgentEditPolicy = Loadable(lazy(() => import('../features/agents/pages/AgentEditPolicy')));
 
 // Componente de Solicitudes para Agentes
 const AgentApplicationList = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationList')));
 const AgentApplicationDetail = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationDetail')));
 
+// Dashboard del Cliente
+const DashboardClient = Loadable(lazy(() => import('../features/clients/pages/Dashboard_cliente')));
+
 // Componentes de Pólizas para Clientes
 const ClientPolicyList = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyList')));
 const ClientPolicyForm = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyForm')));
 const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyDetail')));
-const ClientEditPolicy = Loadable(lazy(() => import('../features/clients/pages/ClientEditPolicy'))); // lazy loading
+const ClientEditPolicy = Loadable(lazy(() => import('../features/clients/pages/ClientEditPolicy')));
 
 
-// utilities
+// utilities (mantengo estas imports pero considera eliminarlas si no las usas en tus rutas)
 const Typography = Loadable(lazy(() => import("../components/typography/BasicTypography")));
 const Table = Loadable(lazy(() => import("../views/tables/Table")));
 const Form = Loadable(lazy(() => import("../components/forms/BasicForm")));
@@ -76,12 +85,6 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
     return children;
 };
 
-// Importa el wrapper para editar usuario
-import EditarUsuarioWrapper from '../features/admin/ListarUsuarios'; // Asegúrate de que esté exportado correctamente
-import ListarSoloUsuarios from '../features/admin/ListarSoloUsuarios'; // Nueva importación
-import ListarSoloAgentes from '../features/admin/ListarSoloAgentes';
-import ListarSoloAdmins from '../features/admin/ListarSoloAdmins';
-
 const Router = [
     LandingRoutes,
     {
@@ -93,22 +96,25 @@ const Router = [
                 path: '/admin/dashboard',
                 element: (
                     <PrivateRoute allowedRoles={['admin']}>
-                        <DashboardAdmin />
+                        <DashboardAdmin /> {/* Este es el layout, con un <Outlet /> dentro */}
                     </PrivateRoute>
                 ),
                 children: [
-                    { path: 'list-users', element: <DashboardAdmin /> },
-                    { path: 'create-users', element: <DashboardAdmin /> },
-                    { path: '', element: <DashboardAdmin /> },
-                    { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> },
+                    { path: '', element: <Navigate to="list-users" /> }, // Redirige por defecto a listar usuarios
+                    { path: 'list-users', element: <ListarUsuarios /> }, // Usamos ListarUsuarios directamente
+                    { path: 'create-users', element: <CrearUsuarios /> }, // Usamos CrearUsuarios directamente
+                    { path: 'edit-user/:id', element: <EditarUsuario /> }, // Usamos EditarUsuario directamente
                     { path: 'list-only-users', element: <ListarSoloUsuarios /> },
                     { path: 'list-only-agents', element: <ListarSoloAgentes /> },
-                    { path: 'list-only-admins', element: <ListarSoloAdmins /> }
+                    { path: 'list-only-admins', element: <ListarSoloAdmins /> },
+                    { path: 'policies', element: <AdminPolicyList /> },
+                    { path: 'policies/:id', element: <AdminPolicyDetail /> }, // ¡Añade esta línea!
+                    { path: 'policies/:id/edit', element: <AdminEditPolicy /> }, //  ✅ ¡AÑADE ESTA LÍNEA!
                 ]
             },
             // Rutas para AGENTE
             {
-                path: '/agent/dashboard', // Mantén el dashboard general del agente
+                path: '/agent/dashboard',
                 element: (
                     <PrivateRoute allowedRoles={['agent']}>
                         <DashboardAgent />
@@ -116,21 +122,18 @@ const Router = [
                 ),
                 children: [
                     { path: 'policies/new', element: <AgentPolicyForm /> },
-                    { path: 'policies/:id', element: <AgentPolicyDetail /> }, // Ruta de detalle sigue aquí
+                    { path: 'policies/:id', element: <AgentPolicyDetail /> },
                     { path: 'policies', element: <AgentPolicyList /> },
                     { path: 'applications', element: <AgentApplicationList /> },
                     { path: 'applications/:id', element: <AgentApplicationDetail /> },
                     { path: '', element: <Navigate to="policies" /> },
                 ]
             },
-            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA AGENTES (NUEVA UBICACIÓN)
-            // Esta ruta se define FUERA de los `children` de `DashboardAgent`
-            // para evitar la colisión con `:id` en el mismo nivel de enrutamiento.
+            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA AGENTES
             {
-                path: '/agent/dashboard/policies/:policyId/edit', // La misma URL que antes
+                path: '/agent/dashboard/policies/:policyId/edit',
                 element: (
                     <PrivateRoute allowedRoles={['agent']}>
-                        {/* Renderizamos directamente AgentEditPolicy aquí, sin el DashboardAgent como layout */}
                         <AgentEditPolicy />
                     </PrivateRoute>
                 ),
@@ -138,7 +141,7 @@ const Router = [
 
             // Rutas para CLIENTE
             {
-                path: '/client/dashboard', // Mantén el dashboard general del cliente
+                path: '/client/dashboard',
                 element: (
                     <PrivateRoute allowedRoles={['client']}>
                         <DashboardClient />
@@ -146,24 +149,23 @@ const Router = [
                 ),
                 children: [
                     { path: 'policies/new', element: <ClientPolicyForm /> },
-                    { path: 'policies/:id', element: <ClientPolicyDetail /> }, // Ruta de detalle sigue aquí
+                    { path: 'policies/:id', element: <ClientPolicyDetail /> },
                     { path: 'policies', element: <ClientPolicyList /> },
                     { path: '', element: <Navigate to="policies" /> },
                 ]
             },
-            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA CLIENTES (NUEVA UBICACIÓN)
+            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA CLIENTES
             {
-                path: '/client/dashboard/policies/:policyId/edit', // La misma URL que antes
+                path: '/client/dashboard/policies/:policyId/edit',
                 element: (
                     <PrivateRoute allowedRoles={['client']}>
-                        {/* Renderizamos directamente ClientEditPolicy aquí */}
                         <ClientEditPolicy />
                     </PrivateRoute>
                 ),
             },
 
             {
-                path: '/auth/dashboard',
+                path: '/auth/dashboard', // Esta ruta parece duplicada o redundante si ya tienes /admin/dashboard
                 element: (
                     <PrivateRoute allowedRoles={['admin']}>
                         <DashboardAdmin />

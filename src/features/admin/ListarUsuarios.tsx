@@ -189,6 +189,10 @@ export default function ListarUsuarios() {
     return <div className="text-center p-10 text-red-600">Error: {error}</div>;
   }
 
+  // Contamos el número de columnas para el `colSpan` dinámicamente
+  // Nombres, Apellidos, Email, Cédula/Pasaporte, Rol, Estado, Acciones = 7 columnas
+  const numberOfColumns = 7;
+
   return (
     <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 top-0">
       <div className="flex justify-between items-center mb-6 ">
@@ -206,74 +210,79 @@ export default function ListarUsuarios() {
         </Button>
       </div>
 
-      <Table hoverable>
-        <Table.Head>
-          <Table.HeadCell>Nombres</Table.HeadCell>
-          <Table.HeadCell>Apellidos</Table.HeadCell>
-          <Table.HeadCell>Email</Table.HeadCell>
-          <Table.HeadCell>Cédula/Pasaporte</Table.HeadCell>
-          <Table.HeadCell>Rol</Table.HeadCell>
-          <Table.HeadCell>Estado</Table.HeadCell>
-          <Table.HeadCell>Acciones</Table.HeadCell>
-        </Table.Head>
-        <Table.Body className="divide-y">
-          {filteredUsers.length === 0 ? (
-            <Table.Row>
-              <Table.Cell colSpan={7} className="text-center text-gray-500">
-                No se encontraron usuarios.
-              </Table.Cell>
-            </Table.Row>
-          ) : (
-            filteredUsers.map((user) => (
-              <Table.Row key={user.user_id} className="bg-white">
-                <Table.Cell className="font-medium text-gray-900">
-                  {`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim() || 'N/A'}
-                </Table.Cell>
-                <Table.Cell className="font-medium text-gray-900">
-                  {`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim() || 'N/A'}
-                </Table.Cell>
-                <Table.Cell>{user.email || 'N/A'}</Table.Cell>
-                <Table.Cell>
-                  {user.tipo_identificacion && user.numero_identificacion
-                    ? `${user.tipo_identificacion}: ${user.numero_identificacion}`
-                    : 'N/A'}
-                </Table.Cell>
-                <Table.Cell>
-                  <span className={`px-3 py-1 rounded-full text-sm ${user.role === 'admin' ? 'bg-green-100 text-green-800' : user.role === 'inactive' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
-                    {user.role}
-                  </span>
-                </Table.Cell>
-                <Table.Cell>
-                  <span className={`px-3 py-1 rounded-full text-sm ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {user.status === 'active' ? 'Activo' : 'Inactivo'}
-                  </span>
-                </Table.Cell>
-                <Table.Cell>
-                  <div className="flex gap-2">
-                    <Button
-                      size="xs"
-                      color="blue"
-                      disabled={!user.email || !currentUserEmail}
-                      onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
-                    >
-                      Contactar
-                    </Button>
-                    {user.status === 'active' ? (
-                      <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
-                        Desactivar
-                      </Button>
-                    ) : (
-                      <Button size="xs" color="success" onClick={() => handleActivateUser(user.user_id, user.full_name)}>
-                        Activar
-                      </Button>
-                    )}
-                  </div>
+      <div className="overflow-x-auto relative z-0">
+        <Table hoverable className="min-w-full table-auto">
+          <Table.Head>
+            <Table.HeadCell className="whitespace-nowrap">Nombres</Table.HeadCell>
+            <Table.HeadCell className="whitespace-nowrap">Apellidos</Table.HeadCell>
+            <Table.HeadCell className="whitespace-nowrap">Email</Table.HeadCell>
+            <Table.HeadCell className="whitespace-nowrap">Cédula/Pasaporte</Table.HeadCell>
+            {/* ✅ ELIMINADA: <Table.HeadCell className="whitespace-nowrap">Teléfono</Table.HeadCell> */}
+            <Table.HeadCell className="whitespace-nowrap">Rol</Table.HeadCell>
+            <Table.HeadCell className="whitespace-nowrap">Estado</Table.HeadCell>
+            <Table.HeadCell className="whitespace-nowrap">Acciones</Table.HeadCell>
+          </Table.Head>
+          <Table.Body className="divide-y">
+            {filteredUsers.length === 0 ? (
+              <Table.Row>
+                {/* ✅ AJUSTADO: colSpan ahora es 7 (o numberOfColumns) */}
+                <Table.Cell colSpan={numberOfColumns} className="text-center text-gray-500 whitespace-nowrap">
+                  No se encontraron usuarios.
                 </Table.Cell>
               </Table.Row>
-            ))
-          )}
-        </Table.Body>
-      </Table>
+            ) : (
+              filteredUsers.map((user) => (
+                <Table.Row key={user.user_id} className="bg-white">
+                  <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
+                    {`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim() || 'N/A'}
+                  </Table.Cell>
+                  <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
+                    {`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim() || 'N/A'}
+                  </Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">{user.email || 'N/A'}</Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">
+                    {user.tipo_identificacion && user.numero_identificacion
+                      ? `${user.tipo_identificacion}: ${user.numero_identificacion}`
+                      : 'N/A'}
+                  </Table.Cell>
+                  {/* ✅ ELIMINADA: <Table.Cell className="whitespace-nowrap">{user.phone_number || 'N/A'}</Table.Cell> */}
+                  <Table.Cell className="whitespace-nowrap">
+                    <span className={`px-3 py-1 rounded-full text-sm ${user.role === 'admin' ? 'bg-green-100 text-green-800' : user.role === 'inactive' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                      {user.role}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">
+                    <span className={`px-3 py-1 rounded-full text-sm ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {user.status === 'active' ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">
+                    <div className="flex gap-2">
+                      <Button
+                        size="xs"
+                        color="blue"
+                        disabled={!user.email || !currentUserEmail}
+                        onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
+                      >
+                        Contactar
+                      </Button>
+                      {user.status === 'active' ? (
+                        <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
+                          Desactivar
+                        </Button>
+                      ) : (
+                        <Button size="xs" color="success" onClick={() => handleActivateUser(user.user_id, user.full_name)}>
+                          Activar
+                        </Button>
+                      )}
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              ))
+            )}
+          </Table.Body>
+        </Table>
+      </div> {/* Fin del div con overflow-x-auto */}
 
       {/* Modal Personalizado */}
       <CustomModal

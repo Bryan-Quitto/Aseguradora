@@ -99,6 +99,14 @@ const SidebarContent: MenuItem[] = [
         isPro: false,
         requiredRole: "admin",
       },
+      {
+        name: "Gestionar pólizas", // Nuevo botón para Administrador
+        icon: "solar:document-text-line-duotone", // Icono de documento o lista
+        id: uniqueId(),
+        url: "/admin/dashboard/policies", // URL para la lista de pólizas del admin
+        isPro: false,
+        requiredRole: "admin",
+      },
     ],
   },
   {
@@ -126,7 +134,7 @@ const SidebarContent: MenuItem[] = [
         icon: "solar:checklist-minimalistic-line-duotone", // Icono para solicitudes
         id: uniqueId(),
         url: "/agent/dashboard/applications",
-        isPro: false, 
+        isPro: false,
         requiredRole: "agent",
       },
     ],
