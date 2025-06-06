@@ -121,7 +121,7 @@ export default function ClientEditPolicy() {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl border border-blue-100 mx-auto">
-      <h2 className="text-3xl font-bold text-blue-700 mb-6">Editar Póliza: {policy.policy_number}</h2>
+      <h2 className="text-3xl font-bold text-blue-700 mb-6">Editar Póliza: {productName}</h2>
 
       {isRejected && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">

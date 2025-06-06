@@ -137,7 +137,7 @@ export default function AgentEditPolicy() {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl border border-blue-100 mx-auto">
-      <h2 className="text-3xl font-bold text-blue-700 mb-6">Editar Póliza: {policy.policy_number}</h2>
+      <h2 className="text-3xl font-bold text-blue-700 mb-6">Editar Póliza: {productName}</h2>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
