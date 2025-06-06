@@ -3,12 +3,18 @@ import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { listOnlyAgentes } from './hooks/listUsers';
 import { UserProfile } from './hooks/administrador_backend';
+import { enviarCorreo } from '../../utils/enviarCorreo';
+import { supabase } from 'src/supabase/client';
 
 export default function ListarSoloAgentes() {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [modalTitle, setModalTitle] = useState('');
 
   useEffect(() => {
     async function fetchUsers() {
@@ -22,6 +28,13 @@ export default function ListarSoloAgentes() {
       setLoading(false);
     }
     fetchUsers();
+
+    // Obtener email del usuario actual
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserEmail(user?.email ?? null);
+    };
+    getCurrentUser();
   }, []);
 
   const filteredUsers = useMemo(() => {
@@ -39,6 +52,25 @@ export default function ListarSoloAgentes() {
              identification.includes(lowerCaseSearchTerm);
     });
   }, [users, searchTerm]);
+
+  const handleEnviarCorreo = async (to_email: string, name: string) => {
+    if (!currentUserEmail) {
+      setModalTitle('Error');
+      setModalMessage('No se pudo obtener el email del usuario actual.');
+      setShowModal(true);
+      return;
+    }
+    try {
+      await enviarCorreo(currentUserEmail, to_email, name);
+      setModalTitle('Éxito');
+      setModalMessage('Correo enviado correctamente.');
+      setShowModal(true);
+    } catch (error) {
+      setModalTitle('Error');
+      setModalMessage('Error enviando el correo.');
+      setShowModal(true);
+    }
+  };
 
   if (loading) {
     return <div className="text-center p-10">Cargando agentes...</div>;
@@ -100,9 +132,19 @@ export default function ListarSoloAgentes() {
                     </span>
                   </Table.Cell>
                   <Table.Cell>
-                    <Button size="xs" color="failure">
-                      Desactivar
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="xs"
+                        color="blue"
+                        disabled={!user.email || !currentUserEmail}
+                        onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
+                      >
+                        Contactar
+                      </Button>
+                      <Button size="xs" color="failure">
+                        Desactivar
+                      </Button>
+                    </div>
                   </Table.Cell>
                 </Table.Row>
               ))
@@ -110,6 +152,18 @@ export default function ListarSoloAgentes() {
           </Table.Body>
         </Table>
       </div>
+      {/* Modal simple */}
+      {showModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+          <div className="bg-white p-6 rounded shadow-lg">
+            <h3 className="font-bold mb-2">{modalTitle}</h3>
+            <p>{modalMessage}</p>
+            <div className="mt-4 flex justify-end">
+              <Button size="xs" onClick={() => setShowModal(false)}>Cerrar</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllUserProfiles, UserProfile, activateUserProfile, deactivateUserProfile } from 'src/features/admin/hooks/administrador_backend';
 import { useNavigate } from 'react-router-dom';
-import EditarUsuario from '../../features/admin/EditarUsuario'; // Asegúrate de que esté exportado correctamente
+import { enviarCorreo } from '../../utils/enviarCorreo'; // Usa el utilitario centralizado
+import { supabase } from 'src/supabase/client';
 
 // Componente de Modal Personalizado para reemplazar alert/confirm
 interface CustomModalProps {
@@ -55,15 +56,16 @@ export default function ListarUsuarios() {
   const [searchTerm, setSearchTerm] = useState('');
   const [view, setView] = useState<'list' | 'edit'>('list');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
 
   // Estados para el modal personalizado
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
   const [modalType, setModalType] = useState<'alert' | 'confirm'>('alert');
-  const [modalAction, setModalAction] = useState<(() => void) | null>(null); // Acción a ejecutar en confirm
+  const [modalAction, setModalAction] = useState<(() => void) | null>(null);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -80,6 +82,14 @@ export default function ListarUsuarios() {
 
   useEffect(() => {
     fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserEmail(user?.email ?? null);
+    };
+    getCurrentUser();
   }, []);
 
   // Filtrar usuarios basado en el término de búsqueda
@@ -117,7 +127,7 @@ export default function ListarUsuarios() {
         setModalTitle('Éxito');
         setModalMessage(`Usuario ${data.full_name || 'N/A'} desactivado.`);
         setModalType('alert');
-        fetchUsers(); // Volver a cargar los usuarios para reflejar el cambio
+        fetchUsers();
       }
     });
     setShowModal(true);
@@ -137,7 +147,7 @@ export default function ListarUsuarios() {
         setModalTitle('Éxito');
         setModalMessage(`Usuario ${data.full_name || 'N/A'} activado.`);
         setModalType('alert');
-        fetchUsers(); // Volver a cargar los usuarios para reflejar el cambio
+        fetchUsers();
       }
     });
     setShowModal(true);
@@ -146,6 +156,29 @@ export default function ListarUsuarios() {
   const handleEdit = (userId: string) => {
     setSelectedUserId(userId);
     setView('edit');
+  };
+
+  // Usar el utilitario centralizado para enviar correo formal
+  const handleEnviarCorreo = async (to_email: string, name: string) => {
+    if (!currentUserEmail) {
+      setModalTitle('Error');
+      setModalMessage('No se pudo obtener el email del usuario actual.');
+      setModalType('alert');
+      setShowModal(true);
+      return;
+    }
+    try {
+      await enviarCorreo(currentUserEmail, to_email, name);
+      setModalTitle('Éxito');
+      setModalMessage('Correo enviado correctamente.');
+      setModalType('alert');
+      setShowModal(true);
+    } catch (error) {
+      setModalTitle('Error');
+      setModalMessage('Error enviando el correo.');
+      setModalType('alert');
+      setShowModal(true);
+    }
   };
 
   if (loading) {
@@ -217,9 +250,14 @@ export default function ListarUsuarios() {
                 </Table.Cell>
                 <Table.Cell>
                   <div className="flex gap-2">
-                    {/* <Button size="xs" color="light" onClick={() => handleUpdateUser(user.user_id)}>
-                      Editar
-                    </Button> */}
+                    <Button
+                      size="xs"
+                      color="blue"
+                      disabled={!user.email || !currentUserEmail}
+                      onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
+                    >
+                      Contactar
+                    </Button>
                     {user.status === 'active' ? (
                       <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
                         Desactivar
