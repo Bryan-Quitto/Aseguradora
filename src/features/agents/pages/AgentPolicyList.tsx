@@ -140,41 +140,52 @@ export default function AgentPolicyList() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {policies.map((policy) => (
-                <tr key={policy.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {policy.policy_number}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {clientNames.get(policy.client_id) || 'Cargando...'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {productNames.get(policy.product_id) || 'Cargando...'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    ${policy.premium_amount.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                      policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link
-                      to={`/agent/dashboard/policies/${policy.id}`}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Ver Detalles
-                    </Link>
-                    {/* Aquí podrías añadir un botón para editar si lo deseas */}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+  {policies.map((policy) => {
+    // Mueve el console.log AQUÍ, ANTES del 'return' del JSX de la fila
+    console.log('Rendering policy link, policy ID:', policy.id);
+    return (
+      <tr key={policy.id} className="hover:bg-gray-50">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          {policy.policy_number}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+          {clientNames.get(policy.client_id) || 'Cargando...'}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+          {productNames.get(policy.product_id) || 'Cargando...'}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+          ${policy.premium_amount.toFixed(2)}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm">
+          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+            policy.status === 'active' ? 'bg-green-100 text-green-800' :
+            policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+            policy.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+            policy.status === 'expired' ? 'bg-gray-400 text-gray-900' :
+            'bg-red-100 text-red-800'
+          }`}>
+            {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
+          </span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <Link
+            to={`/agent/dashboard/policies/${policy.id}`}
+            className="text-blue-600 hover:text-blue-900 mr-4"
+          >
+            Ver Detalles
+          </Link>
+          <Link
+  to={`/agent/dashboard/policies/${policy.id}/edit`} // <--- ¡CAMBIO AQUÍ!
+  className="text-indigo-600 hover:text-indigo-900"
+>
+  Editar
+</Link>
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
           </table>
         </div>
       )}

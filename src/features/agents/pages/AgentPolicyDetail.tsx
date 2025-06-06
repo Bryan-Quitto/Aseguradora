@@ -3,10 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import { Policy, getPolicyById, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
 import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
 
-interface AgentPolicyDetailProps {
-  policyId: string; // El ID de la póliza se pasa como prop
-}
-
 /**
  * Componente para mostrar los detalles de una póliza específica para un agente.
  */
@@ -86,7 +82,7 @@ export default function AgentPolicyDetail() {
 
   if (error) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex flex-col justify-center items-center h-64">
         <p className="text-red-600 text-xl">{error}</p>
         <Link to="/agent/dashboard/policies" className="mt-4 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">
           Volver a Pólizas
@@ -97,7 +93,7 @@ export default function AgentPolicyDetail() {
 
   if (!policy) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex flex-col justify-center items-center h-64">
         <p className="text-gray-600 text-xl">No se encontraron detalles para esta póliza.</p>
         <Link to="/agent/dashboard/policies" className="mt-4 inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">
           Volver a Pólizas
@@ -155,10 +151,89 @@ export default function AgentPolicyDetail() {
           )}
         </div>
 
-        {/* Sección de Detalles del Contrato (si existen) */}
+        {/* --- Sección de Detalles Adicionales del Seguro (Dinámica) --- */}
+        {product && (
+          <div className="md:col-span-2 bg-purple-50 p-6 rounded-lg shadow-sm">
+            <h3 className="text-xl font-semibold text-purple-800 mb-4">Detalles Adicionales del Seguro ({product.name})</h3>
+            {product.type === 'life' && (
+              // Detalles específicos para seguros de vida
+              <div>
+                <p className="mb-2"><strong className="font-medium">Monto de Cobertura:</strong> ${policy.coverage_amount?.toFixed(2) || 'N/A'}</p>
+                <p className="mb-2"><strong className="font-medium">AD&D Incluido:</strong> {policy.ad_d_included ? 'Sí' : 'No'}</p>
+                {policy.ad_d_included && <p className="mb-2"><strong className="font-medium">Cobertura AD&D:</strong> ${policy.ad_d_coverage?.toFixed(2) || 'N/A'}</p>}
+                <p className="mb-2"><strong className="font-medium">Edad al Inscribirse:</strong> {policy.age_at_inscription || 'N/A'}</p>
+                <p className="mb-2"><strong className="font-medium">Número de Beneficiarios:</strong> {policy.num_beneficiaries || 'N/A'}</p>
+                {policy.beneficiaries && policy.beneficiaries.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-medium text-lg mb-2">Beneficiarios:</h4>
+                    <ul className="list-disc list-inside ml-4">
+                      {policy.beneficiaries.map((beneficiary, index) => (
+                        <li key={index} className="mb-1">
+                          {beneficiary.name} ({beneficiary.relationship}) - {beneficiary.percentage}%
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {policy.num_dependents && policy.num_dependents > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-medium text-lg mb-2">Dependientes (Vida):</h4>
+                    <p className="mb-2"><strong className="font-medium">Número de Dependientes:</strong> {policy.num_dependents}</p>
+                    {policy.dependents_details && policy.dependents_details.length > 0 && (
+                      <ul className="list-disc list-inside ml-4">
+                        {policy.dependents_details.map((dependent, index) => (
+                          <li key={index} className="mb-1">
+                            {dependent.name} ({dependent.relationship}) - Nacimiento: {dependent.birth_date}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {product.type === 'health' && (
+              // Detalles específicos para seguros de salud
+              <div>
+                <p className="mb-2"><strong className="font-medium">Deducible:</strong> ${policy.deductible?.toFixed(2) || 'N/A'}</p>
+                <p className="mb-2"><strong className="font-medium">Coaseguro:</strong> {policy.coinsurance ? `${policy.coinsurance}%` : 'N/A'}</p>
+                <p className="mb-2"><strong className="font-medium">Máximo Anual:</strong> ${policy.max_annual?.toFixed(2) || 'N/A'}</p>
+                <p className="mb-2"><strong className="font-medium">Cobertura Dental:</strong> {policy.has_dental ? 'Sí' : 'No'} {policy.has_dental_premium ? '(Premium)' : (policy.has_dental_basic ? '(Básico)' : '')}</p>
+                <p className="mb-2"><strong className="font-medium">Cobertura Visión:</strong> {policy.has_vision ? 'Sí' : 'No'} {policy.has_vision_full ? '(Completa)' : (policy.has_vision_basic ? '(Básico)' : '')}</p>
+                {policy.wellness_rebate && policy.wellness_rebate > 0 && (
+                  <p className="mb-2"><strong className="font-medium">Reembolso Bienestar:</strong> ${policy.wellness_rebate.toFixed(2)}/mes</p>
+                )}
+                {policy.num_dependents_health && policy.num_dependents_health > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-medium text-lg mb-2">Dependientes (Salud):</h4>
+                    <p className="mb-2"><strong className="font-medium">Número de Dependientes:</strong> {policy.num_dependents_health}</p>
+                    {policy.dependents_details_health && policy.dependents_details_health.length > 0 && (
+                      <ul className="list-disc list-inside ml-4">
+                        {policy.dependents_details_health.map((dependent, index) => (
+                          <li key={index} className="mb-1">
+                            {dependent.name} ({dependent.relationship}) - Nacimiento: {dependent.birth_date}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Puedes añadir más bloques `product.type === 'other'` para otros tipos de seguro */}
+            {product.type === 'other' && (
+              <div>
+                <p className="text-gray-600">No hay detalles específicos para este tipo de producto.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Sección de Detalles del Contrato (si existen) - Mantenido para JSON genérico */}
         {policy.contract_details && Object.keys(policy.contract_details).length > 0 && (
           <div className="md:col-span-2 bg-purple-50 p-6 rounded-lg shadow-sm">
-            <h3 className="text-xl font-semibold text-purple-800 mb-4">Detalles Adicionales del Contrato</h3>
+            <h3 className="text-xl font-semibold text-purple-800 mb-4">Detalles Adicionales del Contrato (JSON Crudo)</h3>
             <pre className="bg-purple-100 p-4 rounded-md text-sm overflow-x-auto font-mono">
               {JSON.stringify(policy.contract_details, null, 2)}
             </pre>

@@ -151,7 +151,7 @@ const Register = () => {
         password: formData.password,
         options: {
           data: {
-            // **AQUÍ ES DONDE PASAMOS TODOS LOS DATOS A raw_user_meta_data**
+            // AQUÍ ES DONDE PASAMOS TODOS LOS DATOS A raw_user_meta_data
             primer_apellido: formData.primerApellido,
             segundo_apellido: formData.segundoApellido,
             primer_nombre: formData.primerNombre,
@@ -168,12 +168,13 @@ const Register = () => {
             peso: parseFloat(formData.peso) || null, // Convertir a número, o null si no es válido
             role: 'client', // Importante: Envía el rol desde el frontend
           },
-          emailRedirectTo: `${window.location.origin}/DashboardClient` // URL a la que redirigir después de la confirmación
+          emailRedirectTo: `${window.location.origin}/client/dashboard` // URL a la que redirigir después de la confirmación
         }
       });
 
       if (signUpError) {
         console.error("Error al registrar usuario:", signUpError.message);
+        // Si el correo ya está registrado y confirmado, Supabase devolverá un error 400.
         if (signUpError.status === 400 && /already registered|duplicate/i.test(signUpError.message)) {
           setError("Este correo ya está registrado. Por favor, inicia sesión o usa la opción de recuperar contraseña.");
         } else if (signUpError.message.includes("Password should be at least 6 characters")) {
@@ -185,30 +186,20 @@ const Register = () => {
         return;
       }
 
-      // Con esta estrategia, tu trigger handle_new_user se encargará de
-      // la inserción en 'profiles' y 'clients'.
-      // Por lo tanto, no necesitamos las siguientes llamadas a la base de datos desde el frontend:
-      // - supabase.from('profiles').update(...)
-      // - supabase.from('clients').insert(...)
-
-      // Verificamos si Supabase Auth retornó un usuario. Si la confirmación de email está activa,
-      // es posible que user sea null aquí, pero el registro igual se inició.
+      // Si signUpData.user es null, significa que el usuario necesita confirmación por email,
+      // o que el email ya existía pero no estaba confirmado y se ha reenviado el email de confirmación.
       const userId = signUpData.user?.id;
 
       if (!userId) {
-        // Este escenario significa que Supabase Auth inició el registro (ej. envió un email de confirmación),
-        // pero no devolvió un usuario activo inmediatamente.
         setSuccess("Registro iniciado. Por favor, revisa tu correo electrónico para verificar tu cuenta y completar tu perfil.");
         setLoading(false);
         return;
       }
 
-      // Si el usuario ya existe pero no confirmado, o si ya se envió un correo,
-      // Supabase.auth.signUp devolverá un 'user' en data.user si ya estaba confirmado,
-      // o null si requiere confirmación y es un nuevo registro/ya fue enviado el email.
-
-      // Si llegamos hasta aquí y hay un userId, significa que el registro en auth.users
-      // fue exitoso y el trigger se encargó de las inserciones en profiles y clients.
+      // Este bloque se ejecutaría si la confirmación de email estuviera deshabilitada en Supabase
+      // o si, por alguna razón, el usuario es confirmado instantáneamente al registrarse.
+      // En un flujo típico con confirmación de email, el usuario_id solo estaría disponible
+      // después de que el usuario haga clic en el enlace de verificación del correo electrónico.
       setSuccess("¡Registro exitoso! Por favor, revisa tu correo electrónico para verificar tu cuenta. Serás redirigido a la página de inicio.");
       setTimeout(() => {
         navigate('/auth/login');
@@ -218,7 +209,7 @@ const Register = () => {
       console.error("Excepción durante el registro:", e);
       setError(`Ocurrió un error inesperado: ${e.message}`);
     } finally {
-      setLoading(false); // End loading
+      setLoading(false); // Finalizar carga
     }
   };
 

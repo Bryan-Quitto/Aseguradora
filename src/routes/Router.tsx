@@ -25,15 +25,17 @@ const DashboardClient = Loadable(lazy(() => import('../features/clients/pages/Da
 const AgentPolicyList = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyList')));
 const AgentPolicyForm = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyForm')));
 const AgentPolicyDetail = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyDetail')));
-// Componente de Solicitudes para Agentes (Nueva Importación)
-const AgentApplicationList = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationList')));
-const AgentApplicationDetail = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationDetail'))); // Nueva Importación
+const AgentEditPolicy = Loadable(lazy(() => import('../features/agents/pages/AgentEditPolicy'))); // lazy loading
 
+// Componente de Solicitudes para Agentes
+const AgentApplicationList = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationList')));
+const AgentApplicationDetail = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationDetail')));
 
 // Componentes de Pólizas para Clientes
 const ClientPolicyList = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyList')));
 const ClientPolicyForm = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyForm')));
 const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyDetail')));
+const ClientEditPolicy = Loadable(lazy(() => import('../features/clients/pages/ClientEditPolicy'))); // lazy loading
 
 
 // utilities
@@ -67,7 +69,6 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
 
     const currentUserRole = userRole;
 
-    // Asegurarse de que currentUserRole no sea null antes de usar includes
     if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
         return <Navigate to="/access-denied" />;
     }
@@ -100,41 +101,67 @@ const Router = [
                     { path: 'create-users', element: <DashboardAdmin /> },
                     { path: '', element: <DashboardAdmin /> },
                     { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> },
-                    { path: 'list-only-users', element: <ListarSoloUsuarios /> }, // Nueva ruta
+                    { path: 'list-only-users', element: <ListarSoloUsuarios /> },
                     { path: 'list-only-agents', element: <ListarSoloAgentes /> },
                     { path: 'list-only-admins', element: <ListarSoloAdmins /> }
                 ]
             },
+            // Rutas para AGENTE
             {
-                path: '/agent/dashboard',
+                path: '/agent/dashboard', // Mantén el dashboard general del agente
                 element: (
                     <PrivateRoute allowedRoles={['agent']}>
                         <DashboardAgent />
                     </PrivateRoute>
                 ),
                 children: [
-                    { path: 'policies', element: <AgentPolicyList /> },
                     { path: 'policies/new', element: <AgentPolicyForm /> },
-                    { path: 'policies/:id', element: <AgentPolicyDetail /> },
-                    { path: 'applications', element: <AgentApplicationList /> }, // Ruta para la lista de solicitudes
-                    { path: 'applications/:id', element: <AgentApplicationDetail /> }, // Ruta para el detalle de la solicitud
-                    { path: '', element: <Navigate to="policies" /> }, // Redirige a /agent/dashboard/policies por defecto
+                    { path: 'policies/:id', element: <AgentPolicyDetail /> }, // Ruta de detalle sigue aquí
+                    { path: 'policies', element: <AgentPolicyList /> },
+                    { path: 'applications', element: <AgentApplicationList /> },
+                    { path: 'applications/:id', element: <AgentApplicationDetail /> },
+                    { path: '', element: <Navigate to="policies" /> },
                 ]
             },
+            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA AGENTES (NUEVA UBICACIÓN)
+            // Esta ruta se define FUERA de los `children` de `DashboardAgent`
+            // para evitar la colisión con `:id` en el mismo nivel de enrutamiento.
             {
-                path: '/client/dashboard',
+                path: '/agent/dashboard/policies/:policyId/edit', // La misma URL que antes
+                element: (
+                    <PrivateRoute allowedRoles={['agent']}>
+                        {/* Renderizamos directamente AgentEditPolicy aquí, sin el DashboardAgent como layout */}
+                        <AgentEditPolicy />
+                    </PrivateRoute>
+                ),
+            },
+
+            // Rutas para CLIENTE
+            {
+                path: '/client/dashboard', // Mantén el dashboard general del cliente
                 element: (
                     <PrivateRoute allowedRoles={['client']}>
                         <DashboardClient />
                     </PrivateRoute>
                 ),
                 children: [
-                    { path: 'policies', element: <ClientPolicyList /> },
                     { path: 'policies/new', element: <ClientPolicyForm /> },
-                    { path: 'policies/:id', element: <ClientPolicyDetail /> },
-                    { path: '', element: <Navigate to="policies" /> }, // Redirige a /client/dashboard/policies por defecto
+                    { path: 'policies/:id', element: <ClientPolicyDetail /> }, // Ruta de detalle sigue aquí
+                    { path: 'policies', element: <ClientPolicyList /> },
+                    { path: '', element: <Navigate to="policies" /> },
                 ]
             },
+            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA CLIENTES (NUEVA UBICACIÓN)
+            {
+                path: '/client/dashboard/policies/:policyId/edit', // La misma URL que antes
+                element: (
+                    <PrivateRoute allowedRoles={['client']}>
+                        {/* Renderizamos directamente ClientEditPolicy aquí */}
+                        <ClientEditPolicy />
+                    </PrivateRoute>
+                ),
+            },
+
             {
                 path: '/auth/dashboard',
                 element: (
@@ -156,6 +183,6 @@ const Router = [
     }
 ];
 
-const router = createBrowserRouter(Router)
+const router = createBrowserRouter(Router);
 
 export default router;

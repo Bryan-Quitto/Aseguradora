@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import { Policy, getPoliciesByClientId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
-// import { AgentProfile, getAgentProfileById } from '../../agents/hooks/agente_backend'; // REMOVED: Not needed in ClientPolicyList
 
 /**
  * Componente para listar las pólizas contratadas por un cliente.
@@ -14,21 +13,25 @@ export default function ClientPolicyList() {
   const [error, setError] = useState<string | null>(null); // Estado de error
   const [productNames, setProductNames] = useState<Map<string, string>>(new Map()); // Mapa para almacenar nombres de productos
 
-  // REMOVED UNUSED STATES FROM ClientPolicyDetail THAT WERE COPIED HERE
-  // const [policy, setPolicy] = useState<Policy | null>(null);
-  // const [product, setProduct] = useState<InsuranceProduct | null>(null);
-  // const [agent, setAgent] = useState<AgentProfile | null>(null);
-  // const [contractDetailsParsed, setContractDetailsParsed] = useState<Record<string, any> | null>(null);
-
+  // --- DEBUGGING: Log cuando el componente se renderiza ---
+  console.log('ClientPolicyList: Componente ClientPolicyList renderizado.');
 
   useEffect(() => {
+    // --- DEBUGGING: Log cuando el useEffect se dispara ---
+    console.log('ClientPolicyList: useEffect disparado.');
+
     /**
      * Función asíncrona para cargar las pólizas del cliente y los nombres de los productos asociados.
      */
     const fetchPoliciesAndDetails = async () => {
+      // --- DEBUGGING: Log el ID del usuario ---
+      console.log('ClientPolicyList: user ID:', user?.id);
+
       if (!user?.id) {
         setError('No se pudo cargar el ID del cliente.');
         setLoading(false);
+        // --- DEBUGGING: Log error por falta de user ID ---
+        console.error('ClientPolicyList: user ID no proporcionado, no se pueden cargar pólizas.');
         return;
       }
 
@@ -39,25 +42,30 @@ export default function ClientPolicyList() {
       const { data: policiesData, error: policiesError } = await getPoliciesByClientId(user.id);
 
       if (policiesError) {
-        console.error('Error al obtener pólizas del cliente:', policiesError);
+        console.error('ClientPolicyList: Error al obtener pólizas del cliente:', policiesError);
         setError('Error al cargar tus pólizas. Por favor, inténtalo de nuevo.');
         setLoading(false);
         return;
       }
 
       if (policiesData) {
+        // --- DEBUGGING: Log las pólizas cargadas ---
+        console.log('ClientPolicyList: Pólizas cargadas:', policiesData);
         setPolicies(policiesData);
 
         // Crear un conjunto para IDs únicos de productos
         const uniqueProductIds = new Set(policiesData.map(p => p.product_id));
+        // --- DEBUGGING: Log IDs de productos únicos ---
+        console.log('ClientPolicyList: IDs de productos únicos:', Array.from(uniqueProductIds));
+
 
         // Cargar nombres de productos
-        const newProductNames = new Map<string, string>(productNames); // Use the existing productNames state
+        const newProductNames = new Map<string, string>(productNames);
         for (const productId of uniqueProductIds) {
-          if (!newProductNames.has(productId)) { // Evitar recargar si ya está en el mapa
+          if (!newProductNames.has(productId)) {
             const { data: productData, error: productError } = await getInsuranceProductById(productId);
             if (productError) {
-              console.error(`Error al obtener producto ${productId}:`, productError);
+              console.error(`ClientPolicyList: Error al obtener producto ${productId}:`, productError);
               newProductNames.set(productId, 'Producto Desconocido');
             } else if (productData) {
               newProductNames.set(productId, productData.name);
@@ -65,8 +73,11 @@ export default function ClientPolicyList() {
           }
         }
         setProductNames(newProductNames);
+        // --- DEBUGGING: Log nombres de productos cargados ---
+        console.log('ClientPolicyList: Nombres de productos cargados:', newProductNames);
       }
       setLoading(false);
+      console.log('ClientPolicyList: Carga de pólizas finalizada.');
     };
 
     fetchPoliciesAndDetails();
@@ -127,7 +138,7 @@ export default function ClientPolicyList() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {policies.map((policy: Policy) => ( // Added explicit type annotation for 'policy'
+              {policies.map((policy: Policy) => (
                 <tr key={policy.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {policy.policy_number}
@@ -142,6 +153,8 @@ export default function ClientPolicyList() {
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       policy.status === 'active' ? 'bg-green-100 text-green-800' :
                       policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      policy.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      policy.status === 'expired' ? 'bg-gray-400 text-gray-900' :
                       'bg-red-100 text-red-800'
                     }`}>
                       {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
@@ -152,8 +165,14 @@ export default function ClientPolicyList() {
                       to={`/client/dashboard/policies/${policy.id}`}
                       className="text-blue-600 hover:text-blue-900 mr-4"
                     >
-                      Ver Detalles
+                      Ver detalles
                     </Link>
+                    <Link
+  to={`/client/dashboard/policies/${policy.id}/edit`} // <--- ¡CAMBIO AQUÍ!
+  className="text-indigo-600 hover:text-indigo-900"
+>
+  Editar
+</Link>
                   </td>
                 </tr>
               ))}
