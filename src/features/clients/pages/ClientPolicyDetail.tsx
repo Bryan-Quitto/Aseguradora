@@ -238,7 +238,7 @@ if (!policyData) {
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-blue-700">Detalles de Mi Póliza: {policy.policy_number}</h2>
+        <h2 className="text-3xl font-bold text-blue-700">Detalles de Mi Póliza: {product ? product.name : 'Cargando...'}</h2>
         <Link
           to="/client/dashboard/policies"
           className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition duration-300 shadow-md"
@@ -289,20 +289,6 @@ if (!policyData) {
             <div className="md:col-span-2 bg-yellow-50 p-6 rounded-lg shadow-sm">
                 {renderSpecificPolicyDetails()}
             </div>
-        )}
-      </div>
-
-      {/* Botones de acción (ej. editar, cancelar, etc.) */}
-      <div className="mt-8 flex justify-end gap-4">
-        {/* Aquí podrías añadir botones para acciones del cliente, como solicitar cancelación o renovación,
-            solo si la póliza está activa y lo permite */}
-        {policy.status === 'active' && (
-            <button
-                // Ejemplo de un botón de acción
-                className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
-            >
-                Solicitar Modificación
-            </button>
         )}
       </div>
     </div>

@@ -1,6 +1,6 @@
 // src/features/clients/components/DashboardCliente.tsx (or wherever DashboardCliente is defined)
 import React from 'react';
-import { Outlet, Link, useParams } from 'react-router-dom'; // Importa Outlet
+import { Outlet, Link, useParams, useLocation } from 'react-router-dom'; // Importa Outlet
 import { useAuth } from 'src/contexts/AuthContext'; // Asumo que el perfil es para mostrar el saludo inicial.
 
 // No necesitas importar ClientPolicyList, ClientPolicyForm, ClientPolicyDetail aquí,
@@ -10,15 +10,17 @@ import { useAuth } from 'src/contexts/AuthContext'; // Asumo que el perfil es pa
 // import ClientPolicyDetail from './ClientPolicyDetail';
 
 export default function DashboardCliente() {
-  // Solo necesitas el perfil para el mensaje de bienvenida en la ruta raíz de DashboardCliente.
-  const { profile } = useAuth();
-  const fullName = profile
-    ? `${profile.primer_nombre || ''} ${profile.primer_apellido || ''}`.trim()
-    : '';
 
-  // `policyId` de useParams solo sería relevante si DashboardCliente fuera el que maneja el useParams,
-  // pero en tu setup, ClientPolicyDetail lo maneja. Así que, si no lo usas aquí, puedes quitarlo.
-  // const { id: policyId } = useParams<{ id: string }>();
+    const location = useLocation();
+  
+    const { profile } = useAuth(); // Obtén el perfil del usuario
+  
+    const { id: policyId } = useParams<{ id: string }>(); // Obtiene el ID de la póliza de la URL
+  
+    // Construye el nombre completo
+    const fullName = profile
+      ? `${profile.primer_nombre || ''} ${profile.primer_apellido || ''}`.trim()
+      : '';
 
   return (
     <div className="min-h-screen bg-blue-50 flex flex-col">

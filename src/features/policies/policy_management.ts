@@ -187,7 +187,7 @@ export interface UpdatePolicyData {
   status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
   premium_amount?: number;
   payment_frequency?: 'monthly' | 'quarterly' | 'annually';
-  contract_details?: string | null;
+  contract_details?: Record<string, any> | null; // <-- Cambiado a Record<string, any> | null
 
   // ▶︎ Seguros de Vida:
   coverage_amount?: number;
