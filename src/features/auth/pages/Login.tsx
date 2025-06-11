@@ -69,8 +69,11 @@ const Login = () => {
     } else if (profile.role === 'client') {
       console.log('Usuario es cliente, redirigiendo a /client/dashboard');
       navigate('/client/dashboard');
+    } else if (profile.role === 'superadministrator') { // ¡Nueva condición para el rol superadministrator!
+      console.log('Usuario es superadministrador, redirigiendo a /admin/dashboard');
+      navigate('/admin/dashboard');
     } else {
-      console.log('Usuario NO es admin, agente o cliente, redirigiendo a /dashboard');
+      console.log('Usuario NO es admin, agente, cliente o superadministrador, redirigiendo a /dashboard');
       navigate('/dashboard');
     }
   };

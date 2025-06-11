@@ -1,273 +1,279 @@
-import { supabase } from '../../supabase/client';
+import { createClient } from '@supabase/supabase-js';
+
+// Declaraciones globales de Supabase (si es que no están disponibles de otra manera)
+declare const __app_id: string | undefined;
+declare const __firebase_config: string | undefined;
+declare const __initial_auth_token: string | undefined;
+
+// Instancia del cliente de Supabase (inicialización simplificada para este archivo de utilidades)
+let supabase: any = null;
+
+// Inicializa Supabase una vez
+const initializeSupabase = () => {
+    if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+};
+initializeSupabase(); // Llama a la inicialización al cargar el módulo
+
+// Interfaces para Beneficiarios y Dependientes (reflejando la estructura usada en los formularios)
+export interface Beneficiary {
+    id: string; // Hacemos id opcional para el manejo en el formulario antes de la DB
+    relation: string;
+    custom_relation?: string;
+    first_name1: string;
+    first_name2?: string;
+    last_name1: string;
+    last_name2?: string;
+    id_card: string;
+    percentage: number | ''; // Permite número o cadena vacía para la entrada de formulario
+}
+
+export interface Dependent {
+    id: string; // Hacemos id opcional para el manejo en el formulario antes de la DB
+    relation: string;
+    custom_relation?: string;
+    first_name1: string;
+    first_name2?: string;
+    last_name1: string;
+    last_name2?: string;
+    id_card: string;
+    age: number | ''; // Permite número o cadena vacía para la entrada de formulario
+}
+
 
 // Interfaces para los tipos de datos de las tablas
 export interface InsuranceProduct {
-  id: string;
-  name: string;
-  type: 'life' | 'health' | 'other';
-  description: string | null;
-  coverage_details: Record<string, any> | null; // JSONB de detalles de cobertura
-  base_premium: number;
-  currency: string;
-  terms_and_conditions: string | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+    id: string;
+    name: string;
+    type: 'life' | 'health' | 'other';
+    description: string | null;
+    default_term_months: number | null;
+    min_term_months: number | null;
+    max_term_months: number | null;
+    
+    coverage_details: {
+        coverage_amount?: number;
+        ad_d_included?: boolean;
+        ad_d_coverage_amount?: number;
+        wellness_rebate_percentage?: number;
+        max_age_for_inscription?: number;
+        max_beneficiaries?: number; // Asegúrate de que esta propiedad exista en tu Supabase schema si la usas
+        deductible?: number;
+        coinsurance_percentage?: number;
+        max_annual_out_of_pocket?: number;
+        includes_dental_basic?: boolean;
+        includes_dental_premium?: boolean;
+        includes_vision_basic?: boolean;
+        includes_vision_full?: boolean;
+        max_dependents?: number; // Asegúrate de que esta propiedad exista en tu Supabase schema si la usas
+        [key: string]: any; // Permite otras propiedades en JSONB
+    };
+    base_premium: number;
+    currency: string;
+    terms_and_conditions: string | null;
+    is_active: boolean;
+    admin_notes: string | null;
+    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
+    created_at: string;
+    updated_at: string;
 }
 
-// Interfaces extendidas para “Policy” que incluyen los nuevos campos
-// Interfaz base para una Póliza, tal como podría estar en la base de datos.
-// Los campos específicos de cada tipo de seguro son opcionales aquí,
-// ya que una póliza genérica no los tendrá todos.
+// Interfaz `Policy` unificada y precisa.
 export interface Policy {
-  id: string;
-  policy_number: string;
-  client_id: string;
-  agent_id: string | null;
-  product_id: string;
-  start_date: string; // Formato 'YYYY-MM-DD'
-  end_date: string; // Formato 'YYYY-MM-DD'
-  status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
-  premium_amount: number;
-  payment_frequency: 'monthly' | 'quarterly' | 'annually';
-  contract_details: string | null; // Texto libre o null
+    id: string;
+    policy_number: string;
+    client_id: string;
+    agent_id: string | null;
+    product_id: string;
+    start_date: string;
+    end_date: string;
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    premium_amount: number;
+    payment_frequency: 'monthly' | 'quarterly' | 'annually';
+    contract_details: string | null;
 
-  // — Campos opcionales agregados para distintos tipos de seguro:
+    coverage_amount: number | null;
+    ad_d_included: boolean | null;
+    ad_d_coverage: number | null;
+    beneficiaries: Beneficiary[] | null;
+    num_beneficiaries: number | null;
+    
+    deductible: number | null;
+    coinsurance: number | null;
+    max_annual: number | null;
+    has_dental: boolean | null;
+    has_dental_basic: boolean | null;
+    has_dental_premium: boolean | null;
+    has_vision: boolean | null;
+    has_vision_basic: boolean | null;
+    has_vision_full: boolean | null;
+    dependents_details: Dependent[] | null;
+    num_dependents: number | null;
 
-  // ▶︎ Seguros de Vida:
-  coverage_amount?: number; // Monto de cobertura (vida o AD&D)
-  ad_d_included?: boolean; // Si AD&D está incluido o no
-  ad_d_coverage?: number; // Monto de cobertura AD&D
-  beneficiaries?: Array<{
-    name: string;
-    relationship: string;
-    percentage: number;
-  }>; // Lista de beneficiarios (JSONB)
-  age_at_inscription?: number; // Edad al inscribirse (vida suplementaria, AD&D)
-  num_beneficiaries?: number; // Añadido para controlar el número de beneficiarios en el formulario
+    age_at_inscription: number | null;
+    wellness_rebate: number | null;
+    max_age_inscription: number | null;
 
-  // ▶︎ Vida Dependientes (común para algunos planes de vida y salud con dependientes):
-  num_dependents?: number; // Número de dependientes
-  dependents_details?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>; // Datos de cada dependiente (JSONB)
-  dependent_type_counts?: { spouse: number; children: number }; // Añadido para controlar el conteo de tipos de dependientes
-
-  // ▶︎ Seguros de Salud:
-  deductible?: number; // Deducible anual
-  coinsurance?: number; // Porcentaje de coaseguro
-  max_annual?: number; // Máximo desembolsable anual
-  has_dental?: boolean; // Si hay cobertura dental (básica o premium)
-  has_vision?: boolean; // Si hay cobertura de visión
-
-  num_dependents_health?: number; // Número de dependientes en plan salud
-  dependents_details_health?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>; // Datos de dependientes en plan salud (JSONB)
-  has_dental_basic?: boolean; // Plan salud: dental básica incluida
-  wants_dental_premium?: boolean; // Si solicitó dental premium
-  has_dental_premium?: boolean; // Si dental premium está incluido
-  has_vision_basic?: boolean; // Plan salud: visión básica incluida
-  wants_vision?: boolean; // Si solicitó visión
-  has_vision_full?: boolean; // Si visión completa está incluida
-  wellness_rebate?: number; // Reembolso mensual por programa de bienestar
-
-  created_at: string;
-  updated_at: string;
+    created_at: string;
+    updated_at: string;
 }
 
-// Interfaz base para la CREACIÓN de una nueva póliza.
-// Define los campos que SIEMPRE son necesarios para crear CUALQUIER póliza.
-// Los campos específicos de cada tipo de seguro siguen siendo opcionales aquí.
+// Interfaz para la CREACIÓN de una nueva póliza.
 export interface CreatePolicyData {
-  policy_number: string;
-  client_id: string;
-  agent_id?: string | null; // `agent_id` es opcional si el backend lo maneja o si el usuario no siempre lo proporciona
-  product_id: string;
-  start_date: string;
-  end_date: string;
-  status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected'; // `status` podría tener un valor por defecto
-  premium_amount: number;
-  payment_frequency: 'monthly' | 'quarterly' | 'annually';
-  contract_details?: string | null;
+    policy_number: string;
+    client_id: string;
+    agent_id: string | null;
+    product_id: string;
+    start_date: string;
+    end_date: string;
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    premium_amount: number;
+    payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
+    contract_details: string | null;
 
-  // Los campos específicos de cada tipo de seguro, como los de Vida, Salud, etc.,
-  // siguen siendo opcionales en esta interfaz base.
-  // Será la interfaz específica del tipo de seguro la que los haga obligatorios si es necesario.
+    coverage_amount?: number | null;
+    ad_d_included?: boolean | null;
+    ad_d_coverage?: number | null;
+    beneficiaries?: Beneficiary[] | null;
+    num_beneficiaries?: number | null;
 
-  // ▶︎ Seguros de Vida:
-  coverage_amount?: number;
-  ad_d_included?: boolean;
-  ad_d_coverage?: number;
-  beneficiaries?: Array<{
-    name: string;
-    relationship: string;
-    percentage: number;
-  }>;
-  age_at_inscription?: number;
-  num_beneficiaries?: number;
+    deductible?: number | null;
+    coinsurance?: number | null;
+    max_annual?: number | null;
+    has_dental?: boolean | null;
+    has_dental_basic?: boolean | null;
+    has_dental_premium?: boolean | null;
+    has_vision?: boolean | null;
+    has_vision_basic?: boolean | null;
+    has_vision_full?: boolean | null;
+    dependents_details?: Dependent[] | null;
+    num_dependents?: number | null;
 
-  // ▶︎ Vida Dependientes:
-  num_dependents?: number;
-  dependents_details?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>;
-  dependent_type_counts?: { spouse: number; children: number };
-
-  // ▶︎ Seguros de Salud:
-  deductible?: number;
-  coinsurance?: number;
-  max_annual?: number;
-  has_dental?: boolean;
-  has_vision?: boolean;
-  num_dependents_health?: number;
-  dependents_details_health?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>;
-  has_dental_basic?: boolean;
-  wants_dental_premium?: boolean;
-  has_dental_premium?: boolean;
-  has_vision_basic?: boolean;
-  wants_vision?: boolean;
-  has_vision_full?: boolean;
-  wellness_rebate?: number;
-}
-
-
-// NUEVA INTERFAZ ESPECÍFICA para la creación de Pólizas de Vida Suplementaria.
-// Hereda de CreatePolicyData y hace OBLIGATORIOS los campos relevantes para este tipo de seguro.
-export interface CreateVidaSuplementariaPolicyData extends CreatePolicyData {
-  coverage_amount: number;
-  ad_d_included: boolean;
-  ad_d_coverage: number; // Aunque sea 0 si `ad_d_included` es false, el campo debe estar presente.
-  beneficiaries: Array<{
-    name: string;
-    relationship: string;
-    percentage: number;
-  }>;
-  age_at_inscription: number;
-  num_beneficiaries: number;
-}
-
-export interface CreatePlanPremierPolicyData extends CreatePolicyData {
-  deductible: number;
-  coinsurance: number;
-  max_annual: number;
-  has_dental: boolean; // Obligatorio para Premier
-  has_vision: boolean; // Obligatorio para Premier
-  has_dental_premium: boolean; // Obligatorio para Premier
-  has_vision_full: boolean; // Obligatorio para Premier
-  wellness_rebate: number;
-  num_dependents: number; // El número de dependientes es requerido para definir la estructura
-  // dependents_details: Array<{ // Si siempre hay detalles cuando num_dependents > 0
-  //   name: string;
-  //   birth_date: string;
-  //   relationship: string;
-  // }>;
-  // Nota: dependents_details se deja como opcional porque su obligatoriedad
-  // depende de si num_dependents es > 0, lo cual se maneja en la lógica del formulario.
+    age_at_inscription?: number | null;
+    wellness_rebate?: number | null;
+    max_age_inscription?: number | null;
 }
 
 // Interfaz para la actualización de una póliza (todos los campos opcionales)
 export interface UpdatePolicyData {
-  policy_number?: string;
-  client_id?: string;
-  agent_id?: string | null;
-  product_id?: string;
-  start_date?: string;
-  end_date?: string;
-  status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
-  premium_amount?: number;
-  payment_frequency?: 'monthly' | 'quarterly' | 'annually';
-  contract_details?: Record<string, any> | null; // <-- Cambiado a Record<string, any> | null
+    policy_number?: string;
+    client_id?: string;
+    agent_id?: string | null;
+    product_id?: string;
+    start_date?: string;
+    end_date?: string;
+    status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    premium_amount?: number;
+    payment_frequency?: 'monthly' | 'quarterly' | 'annually' | null;
+    contract_details?: string | null;
 
-  // ▶︎ Seguros de Vida:
-  coverage_amount?: number;
-  ad_d_included?: boolean;
-  ad_d_coverage?: number;
-  beneficiaries?: Array<{
-    name: string;
-    relationship: string;
-    percentage: number;
-  }>;
-  age_at_inscription?: number;
-  num_beneficiaries?: number; // Añadido también para actualización
+    coverage_amount?: number | null;
+    ad_d_included?: boolean | null;
+    ad_d_coverage?: number | null;
+    beneficiaries?: Beneficiary[] | null;
+    num_beneficiaries?: number | null;
 
-  // ▶︎ Vida Dependientes:
-  num_dependents?: number;
-  dependents_details?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>;
-  dependent_type_counts?: { spouse: number; children: number }; // Añadido también para actualización
+    deductible?: number | null;
+    coinsurance?: number | null;
+    max_annual?: number | null;
+    has_dental?: boolean | null;
+    has_dental_basic?: boolean | null;
+    has_dental_premium?: boolean | null;
+    has_vision?: boolean | null;
+    has_vision_basic?: boolean | null;
+    has_vision_full?: boolean | null;
+    dependents_details?: Dependent[] | null;
+    num_dependents?: number | null;
 
-  // ▶︎ Seguros de Salud: (NO TOCADO SEGÚN SOLICITUD)
-  deductible?: number;
-  coinsurance?: number;
-  max_annual?: number;
-  num_dependents_health?: number;
-  dependents_details_health?: Array<{
-    name: string;
-    birth_date: string;
-    relationship: string;
-  }>;
-  has_dental?: boolean;
-  has_dental_basic?: boolean;
-  wants_dental_premium?: boolean;
-  has_dental_premium?: boolean;
-  has_vision?: boolean;
-  has_vision_basic?: boolean;
-  wants_vision?: boolean;
-  has_vision_full?: boolean;
-  wellness_rebate?: number;
+    age_at_inscription?: number | null;
+    wellness_rebate?: number | null;
+    max_age_inscription?: number | null;
+    
+    updated_at?: string; 
 }
 
-/**
- * Obtiene todas las pólizas.
- * @returns Una promesa que resuelve con un array de pólizas o un error.
- */
-export async function getAllPolicies(): Promise<{
-  data: Policy[] | null;
-  error: Error | null;
-}> {
-  const { data, error } = await supabase.from('policies').select('*');
+// Interfaces para Perfiles de Usuario (clientes y agentes)
+export interface ClientProfile {
+    user_id: string;
+    primer_nombre: string | null;
+    segundo_nombre: string | null;
+    primer_apellido: string | null;
+    segundo_apellido: string | null;
+    full_name: string | null;
+    email: string | null;
+    phone_number: string | null;
+    // Asumiendo que 'role' existe en la tabla 'profiles'
+    role: 'client' | 'agent' | 'admin' | string; 
+}
 
-  if (error) {
-    console.error('Error al obtener todas las pólizas:', error.message);
-    return { data: null, error };
-  }
-  return { data: data as Policy[], error: null };
+export interface AgentProfile {
+    user_id: string;
+    primer_nombre: string | null;
+    segundo_nombre: string | null;
+    primer_apellido: string | null;
+    segundo_apellido: string | null;
+    full_name: string | null;
+    email: string | null;
+    phone_number: string | null;
+    // Asumiendo que 'role' existe en la tabla 'profiles'
+    role: 'client' | 'agent' | 'admin' | string;
 }
 
 // --- Funciones para Insurance Products ---
+
+export async function getAllPolicies(): Promise<{
+    data: Policy[] | null;
+    error: Error | null;
+}> {
+    const { data, error } = await supabase.from('policies').select('*');
+
+    if (error) {
+        console.error('Error al obtener todas las pólizas:', error.message);
+        return { data: null, error };
+    }
+    const policiesData = data as Policy[];
+    policiesData.forEach(policy => {
+        if (typeof policy.beneficiaries === 'string') {
+            try {
+                policy.beneficiaries = JSON.parse(policy.beneficiaries);
+            } catch (e) {
+                console.error("Error parsing beneficiaries JSON in list:", e);
+                policy.beneficiaries = null;
+            }
+        }
+        if (typeof policy.dependents_details === 'string') {
+            try {
+                policy.dependents_details = JSON.parse(policy.dependents_details);
+            } catch (e) {
+                console.error("Error parsing dependents_details JSON in list:", e);
+                policy.dependents_details = null;
+            }
+        }
+    });
+    return { data: policiesData, error: null };
+}
 
 /**
  * Obtiene todos los productos de seguro activos.
  * @returns Una promesa que resuelve con un array de InsuranceProduct o un error.
  */
 export async function getActiveInsuranceProducts(): Promise<{
-  data: InsuranceProduct[] | null;
-  error: Error | null;
+    data: InsuranceProduct[] | null;
+    error: Error | null;
 }> {
-  const { data, error } = await supabase
-    .from('insurance_products')
-    .select('*')
-    .eq('is_active', true);
+    const { data, error } = await supabase
+        .from('insurance_products')
+        .select('*')
+        .eq('is_active', true);
 
-  if (error) {
-    console.error('Error al obtener productos de seguro:', error.message);
-    return { data: null, error };
-  }
-  return { data: data as InsuranceProduct[], error: null };
+    if (error) {
+        console.error('Error al obtener productos de seguro:', error.message);
+        return { data: null, error };
+    }
+    return { data: data as InsuranceProduct[], error: null };
 }
 
 /**
@@ -276,22 +282,22 @@ export async function getActiveInsuranceProducts(): Promise<{
  * @returns Una promesa que resuelve con el InsuranceProduct o un error.
  */
 export async function getInsuranceProductById(
-  product_id: string
+    product_id: string
 ): Promise<{ data: InsuranceProduct | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('insurance_products')
-    .select('*')
-    .eq('id', product_id)
-    .single();
+    const { data, error } = await supabase
+        .from('insurance_products')
+        .select('*')
+        .eq('id', product_id)
+        .single();
 
-  if (error) {
-    console.error(
-      `Error al obtener producto de seguro con ID ${product_id}:`,
-      error.message
-    );
-    return { data: null, error };
-  }
-  return { data: data as InsuranceProduct, error: null };
+    if (error) {
+        console.error(
+            `Error al obtener producto de seguro con ID ${product_id}:`,
+            error.message
+        );
+        return { data: null, error };
+    }
+    return { data: data as InsuranceProduct, error: null };
 }
 
 // --- Funciones para Policies ---
@@ -302,19 +308,29 @@ export async function getInsuranceProductById(
  * @returns Una promesa que resuelve con la póliza creada o un error.
  */
 export async function createPolicy(
-  policyData: CreatePolicyData
+    policyData: CreatePolicyData
 ): Promise<{ data: Policy | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('policies')
-    .insert(policyData)
-    .select()
-    .single();
+    const dataToSend: any = { ...policyData };
+    // Asegurarse de que los arrays JSONB se envíen como strings JSON
+    if (dataToSend.beneficiaries) {
+        dataToSend.beneficiaries = JSON.stringify(dataToSend.beneficiaries);
+    }
+    if (dataToSend.dependents_details) {
+        dataToSend.dependents_details = JSON.stringify(dataToSend.dependents_details);
+    }
 
-  if (error) {
-    console.error('Error al crear póliza:', error.message);
-    return { data: null, error };
-  }
-  return { data: data as Policy, error: null };
+    const { data, error } = await supabase
+        .from('policies')
+        .insert([dataToSend])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error al crear póliza:', error.message);
+        return { data: null, error };
+    }
+    // Supabase devuelve el JSONB como objeto directamente al seleccionar, por lo que no es necesario parsear aquí.
+    return { data: data as Policy, error: null };
 }
 
 /**
@@ -323,19 +339,37 @@ export async function createPolicy(
  * @returns Una promesa que resuelve con la póliza o un error.
  */
 export async function getPolicyById(
-  policy_id: string
+    policy_id: string
 ): Promise<{ data: Policy | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('policies')
-    .select('*')
-    .eq('id', policy_id)
-    .single();
+    const { data, error } = await supabase
+        .from('policies')
+        .select('*')
+        .eq('id', policy_id)
+        .single();
 
-  if (error) {
-    console.error(`Error al obtener póliza con ID ${policy_id}:`, error.message);
-    return { data: null, error };
-  }
-  return { data: data as Policy, error: null };
+    if (error) {
+        console.error(`Error al obtener póliza con ID ${policy_id}:`, error.message);
+        return { data: null, error };
+    }
+    const policyData = data as Policy;
+    if (typeof policyData.beneficiaries === 'string') {
+        try {
+            policyData.beneficiaries = JSON.parse(policyData.beneficiaries);
+        } catch (e) {
+            console.error("Error parsing beneficiaries JSON:", e);
+            policyData.beneficiaries = null;
+        }
+    }
+    if (typeof policyData.dependents_details === 'string') {
+        try {
+            policyData.dependents_details = JSON.parse(policyData.dependents_details);
+        } catch (e) {
+            console.error("Error parsing dependents_details JSON:", e);
+            policyData.dependents_details = null;
+        }
+    }
+
+    return { data: policyData, error: null };
 }
 
 /**
@@ -344,21 +378,40 @@ export async function getPolicyById(
  * @returns Una promesa que resuelve con un array de pólizas o un error.
  */
 export async function getPoliciesByAgentId(
-  agent_id: string
+    agent_id: string
 ): Promise<{ data: Policy[] | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('policies')
-    .select('*')
-    .eq('agent_id', agent_id);
+    const { data, error } = await supabase
+        .from('policies')
+        .select('*')
+        .eq('agent_id', agent_id);
 
-  if (error) {
-    console.error(
-      `Error al obtener pólizas para el agente ${agent_id}:`,
-      error.message
-    );
-    return { data: null, error };
-  }
-  return { data: data as Policy[], error: null };
+    if (error) {
+        console.error(
+            `Error al obtener pólizas para el agente ${agent_id}:`,
+            error.message
+        );
+        return { data: null, error };
+    }
+    const policiesData = data as Policy[];
+    policiesData.forEach(policy => {
+        if (typeof policy.beneficiaries === 'string') {
+            try {
+                policy.beneficiaries = JSON.parse(policy.beneficiaries);
+            } catch (e) {
+                console.error("Error parsing beneficiaries JSON in list:", e);
+                policy.beneficiaries = null;
+            }
+        }
+        if (typeof policy.dependents_details === 'string') {
+            try {
+                policy.dependents_details = JSON.parse(policy.dependents_details);
+            } catch (e) {
+                console.error("Error parsing dependents_details JSON in list:", e);
+                policy.dependents_details = null;
+            }
+        }
+    });
+    return { data: policiesData, error: null };
 }
 
 /**
@@ -367,21 +420,40 @@ export async function getPoliciesByAgentId(
  * @returns Una promesa que resuelve con un array de pólizas o un error.
  */
 export async function getPoliciesByClientId(
-  client_id: string
+    client_id: string
 ): Promise<{ data: Policy[] | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('policies')
-    .select('*')
-    .eq('client_id', client_id);
+    const { data, error } = await supabase
+        .from('policies')
+        .select('*')
+        .eq('client_id', client_id);
 
-  if (error) {
-    console.error(
-      `Error al obtener pólizas para el cliente ${client_id}:`,
-      error.message
-    );
-    return { data: null, error };
-  }
-  return { data: data as Policy[], error: null };
+    if (error) {
+        console.error(
+            `Error al obtener pólizas para el cliente ${client_id}:`,
+            error.message
+        );
+        return { data: null, error };
+    }
+    const policiesData = data as Policy[];
+    policiesData.forEach(policy => {
+        if (typeof policy.beneficiaries === 'string') {
+            try {
+                policy.beneficiaries = JSON.parse(policy.beneficiaries);
+            } catch (e) {
+                console.error("Error parsing beneficiaries JSON in list:", e);
+                policy.beneficiaries = null;
+            }
+        }
+        if (typeof policy.dependents_details === 'string') {
+            try {
+                policy.dependents_details = JSON.parse(policy.dependents_details);
+            } catch (e) {
+                console.error("Error parsing dependents_details JSON in list:", e);
+                policy.dependents_details = null;
+            }
+        }
+    });
+    return { data: policiesData, error: null };
 }
 
 /**
@@ -391,24 +463,32 @@ export async function getPoliciesByClientId(
  * @returns Una promesa que resuelve con la póliza actualizada o un error.
  */
 export async function updatePolicy(
-  policy_id: string,
-  updates: UpdatePolicyData
+    policy_id: string,
+    updates: UpdatePolicyData
 ): Promise<{ data: Policy | null; error: Error | null }> {
-  const { data, error } = await supabase
-    .from('policies')
-    .update(updates)
-    .eq('id', policy_id)
-    .select()
-    .single();
+    const dataToSend: any = { ...updates };
+    if (dataToSend.beneficiaries !== undefined && dataToSend.beneficiaries !== null) {
+        dataToSend.beneficiaries = JSON.stringify(dataToSend.beneficiaries);
+    }
+    if (dataToSend.dependents_details !== undefined && dataToSend.dependents_details !== null) {
+        dataToSend.dependents_details = JSON.stringify(dataToSend.dependents_details);
+    }
 
-  if (error) {
-    console.error(
-      `Error al actualizar póliza con ID ${policy_id}:`,
-      error.message
-    );
-    return { data: null, error };
-  }
-  return { data: data as Policy, error: null };
+    const { data, error } = await supabase
+        .from('policies')
+        .update(dataToSend)
+        .eq('id', policy_id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error(
+            `Error al actualizar póliza con ID ${policy_id}:`,
+            error.message
+        );
+        return { data: null, error };
+    }
+    return { data: data as Policy, error: null };
 }
 
 /**
@@ -417,19 +497,91 @@ export async function updatePolicy(
  * @returns Una promesa que resuelve si la eliminación fue exitosa o con un error.
  */
 export async function deletePolicy(
-  policy_id: string
+    policy_id: string
 ): Promise<{ success: boolean; error: Error | null }> {
-  const { error } = await supabase
-    .from('policies')
-    .delete()
-    .eq('id', policy_id);
+    const { error } = await supabase
+        .from('policies')
+        .delete()
+        .eq('id', policy_id);
 
-  if (error) {
-    console.error(
-      `Error al eliminar póliza con ID ${policy_id}:`,
-      error.message
-    );
-    return { success: false, error };
-  }
-  return { success: true, error: null };
+    if (error) {
+        console.error(
+            `Error al eliminar póliza con ID ${policy_id}:`,
+            error.message
+        );
+        return { success: false, error };
+    }
+    return { success: true, error: null };
+}
+
+// --- Funciones para Perfiles de Usuario (clientes y agentes) ---
+
+/**
+ * Obtiene un perfil de cliente por su ID.
+ * @param userId El ID del usuario.
+ * @returns Una promesa que resuelve con el ClientProfile o un error.
+ */
+export async function getClientProfileById(userId: string): Promise<{ data: ClientProfile | null; error: Error | null }> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email, phone_number, role')
+        .eq('user_id', userId)
+        .single();
+    if (error) {
+        console.error(`Error al obtener perfil de cliente con ID ${userId}:`, error.message);
+        return { data: null, error };
+    }
+    return { data: data as ClientProfile, error: null };
+}
+
+/**
+ * Obtiene un perfil de agente por su ID.
+ * @param userId El ID del usuario.
+ * @returns Una promesa que resuelve con el AgentProfile o un error.
+ */
+export async function getAgentProfileById(userId: string): Promise<{ data: AgentProfile | null; error: Error | null }> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email, phone_number, role')
+        .eq('user_id', userId)
+        .single();
+    if (error) {
+        console.error(`Error al obtener perfil de agente con ID ${userId}:`, error.message);
+        return { data: null, error };
+    }
+    return { data: data as AgentProfile, error: null };
+}
+
+/**
+ * Obtiene todos los perfiles de usuarios que tienen el rol de 'client'.
+ * @returns Una promesa que resuelve con un array de ClientProfile o un error.
+ */
+export async function getAllClientProfiles(): Promise<{ data: ClientProfile[] | null; error: Error | null }> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email')
+        .eq('role', 'client'); // Asume que tienes una columna 'role' en tu tabla de perfiles
+
+    if (error) {
+        console.error('Error al obtener perfiles de clientes:', error.message);
+        return { data: null, error };
+    }
+    return { data: data as ClientProfile[], error: null };
+}
+
+/**
+ * Obtiene todos los perfiles de usuarios que tienen el rol de 'agent'.
+ * @returns Una promesa que resuelve con un array de AgentProfile o un error.
+ */
+export async function getAllAgentProfiles(): Promise<{ data: AgentProfile[] | null; error: Error | null }> {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email')
+        .eq('role', 'agent'); // Asume que tienes una columna 'role' en tu tabla de perfiles
+
+    if (error) {
+        console.error('Error al obtener perfiles de agentes:', error.message);
+        return { data: null, error };
+    }
+    return { data: data as AgentProfile[], error: null };
 }

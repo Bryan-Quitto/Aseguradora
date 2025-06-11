@@ -6,7 +6,7 @@ import BlankLayout from 'src/layouts/blank/BlankLayout';
 // authentication
 const Login = Loadable(lazy(() => import('./pages/Login')));
 const Register = Loadable(lazy(() => import('src/features/auth/pages/Register')));
-const AuthDashboard = Loadable(lazy(() => import('src/views/auth/Dashboard')));
+// const AuthDashboard = Loadable(lazy(() => import('src/views/auth/Dashboard'))); // ✅ Eliminar o comentar esta importación si no la usas
 const Error = Loadable(lazy(() => import('src/views/auth/error/Error')));
 const AuthCallback = Loadable(lazy(() => import('./hooks/AuthCallback')));
 
@@ -14,12 +14,13 @@ const AuthRoutes = {
   path: '/auth',
   element: <BlankLayout />,
   children: [
-    { path: 'dashboard', element: <AuthDashboard /> },
+    // ✅ CAMBIO CLAVE AQUÍ: Eliminar la ruta 'dashboard' que causa conflicto
+    // { path: 'dashboard', element: <AuthDashboard /> }, 
     { path: 'login', element: <Login /> },
     { path: 'register', element: <Register /> },
     { path: 'callback', element: <AuthCallback /> },
     { path: '404', element: <Error /> },
-    { path: '*', element: <Navigate to="/auth/404" /> },
+    { path: '*', element: <Navigate to="/auth/404" /> }, // Esto redirige cualquier otra ruta /auth/* a 404
   ],
 };
 

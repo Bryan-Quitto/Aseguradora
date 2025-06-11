@@ -1,218 +1,290 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from 'src/contexts/AuthContext'; // Asegúrate de que la ruta a AuthContext sea correcta
-import {
-  InsuranceProduct,
-  getActiveInsuranceProducts,
-  // createPolicy ya no se llama directamente aquí, sino desde los sub-formularios
-} from '../../policies/policy_management';
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { useAuth } from 'src/contexts/AuthContext'; // Asume que tienes un contexto de autenticación
 
-// Importaciones de los formularios de póliza específicos para el cliente
-import AdyDStandaloneFormCliente from '../services/seguro_vida/AdyDStandaloneFormCliente';
-import VidaBasicaFormCliente from '../services/seguro_vida/VidaBasicaFormCliente';
-import VidaDependientesFormCliente from '../services/seguro_vida/VidaDependientesFormCliente';
-import VidaSuplementariaFormCliente from '../services/seguro_vida/VidaSuplementariaFormCliente';
-import PlanBasicoFormCliente from '../services/seguros_salud/PlanBasicoFormCliente';
-import PlanFamiliarFormCliente from '../services/seguros_salud/PlanFamiliarFormCliente';
-import PlanIntermedioFormCliente from '../services/seguros_salud/PlanIntermedioFormCliente';
-import PlanPremierFormCliente from '../services/seguros_salud/PlanPremierFormCliente';
+// Importa los nuevos formularios genéricos adaptados para el cliente
+import ClientGenericLifePolicyForm from './ClientGenericLifePolicyForm';
+import ClientGenericHealthPolicyForm from './ClientGenericHealthPolicyForm';
+
+// Define la interfaz para los productos de seguro, coincidiendo con tu tabla 'insurance_products'
+interface InsuranceProduct {
+    id: string;
+    name: string;
+    type: 'life' | 'health' | 'other';
+    description: string | null;
+    duration_months: number | null;
+    coverage_details: {
+        coverage_amount?: number;
+        ad_d_included?: boolean;
+        ad_d_coverage_amount?: number;
+        wellness_rebate_percentage?: number;
+        max_age_for_inscription?: number;
+        max_beneficiaries?: number;
+        deductible?: number;
+        coinsurance_percentage?: number;
+        max_annual_out_of_pocket?: number;
+        includes_dental_basic?: boolean;
+        includes_dental_premium?: boolean;
+        includes_vision_basic?: boolean;
+        includes_vision_full?: boolean;
+        max_dependents?: number;
+        [key: string]: any;
+    };
+    base_premium: number;
+    currency: string;
+    terms_and_conditions: string | null;
+    is_active: boolean;
+    admin_notes: string | null;
+    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
+    created_at: string;
+    updated_at: string;
+}
+
+// Interfaz para los perfiles de agente (para selección aleatoria)
+interface AgentProfile {
+    user_id: string;
+    full_name: string;
+    email: string;
+}
+
+// Declara las variables globales proporcionadas por el entorno Canvas (si aplica)
+declare const __app_id: string | undefined;
+declare const __firebase_config: string | undefined;
+declare const __initial_auth_token: string | undefined;
+
+// Instancia del cliente de Supabase
+let supabase: any = null;
 
 /**
- * Componente para el formulario de contratación de una nueva póliza por parte del cliente.
- * Permite al cliente seleccionar un tipo de producto y luego carga el formulario específico para sus detalles.
+ * Función para obtener productos de seguro activos desde Supabase.
+ */
+async function getActiveInsuranceProducts(): Promise<{ data: InsuranceProduct[] | null; error: any }> {
+    if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    const { data, error } = await supabase
+        .from('insurance_products')
+        .select('*')
+        .eq('is_active', true);
+    return { data, error };
+}
+
+/**
+ * Función para obtener agentes activos desde Supabase.
+ */
+async function getActiveAgents(): Promise<{ data: AgentProfile[] | null; error: any }> {
+    if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, full_name, email')
+        .eq('role', 'agent')
+        .eq('status', 'active'); // Solo agentes con estado 'active'
+    return { data, error };
+}
+
+
+/**
+ * Componente principal para que un cliente pueda contratar una nueva póliza.
+ * Permite al cliente seleccionar un producto de seguro y luego renderiza el formulario
+ * genérico correspondiente (Vida o Salud) para completar los detalles de la póliza.
  */
 export default function ClientPolicyForm() {
-  const navigate = useNavigate();
-  const { user } = useAuth(); // Obtiene el objeto user del cliente autenticado
+    const { user } = useAuth(); // Obtener el usuario autenticado (cliente)
 
-  const [products, setProducts] = useState<InsuranceProduct[]>([]); // Lista de productos de seguro activos
-  const [loading, setLoading] = useState<boolean>(true); // Estado de carga inicial
-  const [error, setError] = useState<string | null>(null); // Estado de error
+    const [products, setProducts] = useState<InsuranceProduct[]>([]);
+    const [agents, setAgents] = useState<AgentProfile[]>([]); // Lista de agentes activos
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<InsuranceProduct | null>(null);
 
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null); // ID del producto seleccionado
-  const [selectedProductName, setSelectedProductName] = useState<string | null>(null); // Nombre del producto seleccionado
-  const [selectedProductDetails, setSelectedProductDetails] = useState<InsuranceProduct | null>(null); // Objeto completo del producto seleccionado
-  const [successMessage, setSuccessMessage] = useState<string | null>(null); // Mensaje de éxito
-  
-  // Mapeo de nombres de productos a sus componentes de formulario específicos para el cliente
-  // Asegúrate de que las claves coincidan con el 'name' de tus InsuranceProduct
-  const FORM_COMPONENTS_MAP: { [key: string]: React.ComponentType<any> } = useMemo(() => ({
-    "Seguro por muerte accidental y desmembramiento (AD&D)": AdyDStandaloneFormCliente,
-    "Seguro de Vida Básico": VidaBasicaFormCliente,
-    "Seguro de Vida con Dependientes": VidaDependientesFormCliente,
-    "Seguro de Vida Suplementario": VidaSuplementariaFormCliente,
-    "Seguro de Salud Plan Básico": PlanBasicoFormCliente,
-    "Seguro de Salud Plan Familiar": PlanFamiliarFormCliente,
-    "Seguro de Salud Plan Intermedio": PlanIntermedioFormCliente,
-    "Seguro de Salud Plan Premier": PlanPremierFormCliente,
-    // Agrega aquí otros mapeos para tus productos de seguro
-  }), []);
-
-  useEffect(() => {
     /**
-     * Función asíncrona para cargar los productos de seguro activos al inicio.
+     * Hook useEffect para inicializar el cliente de Supabase y cargar los productos y agentes.
      */
-    const fetchActiveProducts = async () => {
-      setLoading(true);
-      setError(null);
+    useEffect(() => {
+        const initializeAndFetch = async () => {
+            try {
+                // Inicialización de Supabase si no está globalmente disponible
+                if (!supabase) {
+                    const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+                    const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+                    supabase = createClient(supabaseUrl, supabaseAnonKey);
+                    console.log("Cliente de Supabase inicializado en ClientPolicyForm.");
+                }
 
-      const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
-      if (productsError) {
-        console.error('Error al cargar productos de seguro:', productsError);
-        setError('Error al cargar los productos de seguro disponibles.');
-        setLoading(false);
-        return;
-      }
-      if (productsData) {
-        setProducts(productsData);
-      }
-      setLoading(false);
+                // Cargar productos de seguro activos
+                setLoading(true);
+                setError(null);
+                const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
+                if (productsError) {
+                    console.error('Error al cargar productos de seguro:', productsError);
+                    setError('Error al cargar los productos de seguro: ' + productsError.message);
+                } else if (productsData) {
+                    setProducts(productsData);
+                }
+
+                // Cargar agentes activos
+                const { data: agentsData, error: agentsError } = await getActiveAgents();
+                if (agentsError) {
+                    console.error('Error al cargar agentes:', agentsError);
+                    setError(prev => prev ? prev + '; Error al cargar agentes.' : 'Error al cargar agentes: ' + agentsError.message);
+                } else if (agentsData) {
+                    setAgents(agentsData);
+                }
+
+            } catch (err: any) {
+                console.error("Error al inicializar o cargar datos:", err);
+                setError("Error fatal al cargar datos: " + err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        initializeAndFetch();
+    }, []);
+
+    /**
+     * Selecciona un agente aleatorio de la lista de agentes disponibles.
+     * @returns El ID del agente seleccionado o null si no hay agentes.
+     */
+    const selectRandomAgentId = (): string | null => {
+        if (agents.length === 0) {
+            return null;
+        }
+        const randomIndex = Math.floor(Math.random() * agents.length);
+        return agents[randomIndex].user_id;
     };
 
-    fetchActiveProducts();
-  }, []);
+    /**
+     * Maneja el cambio en la selección del producto de seguro.
+     */
+    const handleProductSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const productId = e.target.value;
+        setSelectedProductId(productId);
 
-  /**
-   * Maneja el cambio en la selección del producto de seguro desde el dropdown.
-   * Actualiza el ID, nombre y los detalles completos del producto seleccionado.
-   */
-  const handleProductSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const productId = e.target.value;
-    setSelectedProductId(productId);
+        const product = products.find(p => p.id === productId);
+        setSelectedProduct(product || null);
+        setError(null);
+    };
 
-    // Encuentra el objeto de producto completo para obtener su nombre y otros detalles
-    const product = products.find(p => p.id === productId);
-    if (product) {
-      setSelectedProductName(product.name);
-      setSelectedProductDetails(product); // Guardar el objeto completo del producto
-    } else {
-      setSelectedProductName(null);
-      setSelectedProductDetails(null);
+    /**
+     * Resetea la selección del producto para volver al selector.
+     */
+    const resetProductSelection = () => {
+        setSelectedProductId(null);
+        setSelectedProduct(null);
+        setError(null);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <p className="text-blue-600 text-xl">Cargando productos y agentes disponibles...</p>
+            </div>
+        );
     }
-  };
 
-  /**
-   * Resetea la selección del producto, permitiendo al cliente volver al selector inicial.
-   */
-  const resetProductSelection = () => {
-    setSelectedProductId(null);
-    setSelectedProductName(null);
-    setSelectedProductDetails(null);
-    setError(null); // Limpiar cualquier error previo al cambiar de selección
-  };
+    if (error) {
+        return (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative m-4" role="alert">
+                <strong className="font-bold">¡Error!</strong>
+                <span className="block sm:inline"> {error}</span>
+                <button onClick={resetProductSelection} className="ml-4 text-sm underline">Reintentar</button>
+            </div>
+        );
+    }
 
-  if (loading) {
+    if (!user || !user.id) {
+        return (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative m-4" role="alert">
+                <strong className="font-bold">Advertencia:</strong>
+                <span className="block sm:inline"> No se pudo obtener el ID del cliente. Asegúrese de estar autenticado.</span>
+            </div>
+        );
+    }
+
+    // Selecciona un agente aleatorio SOLO cuando un producto va a ser mostrado
+    const assignedAgentId = selectedProduct ? selectRandomAgentId() : null;
+
+    if (selectedProduct && !assignedAgentId) {
+        return (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative m-4" role="alert">
+                <strong className="font-bold">¡Error!</strong>
+                <span className="block sm:inline"> No hay agentes activos disponibles para asignación. No se puede crear la póliza en este momento.</span>
+                <button onClick={resetProductSelection} className="ml-4 text-sm underline">Volver a selección</button>
+            </div>
+        );
+    }
+
     return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-blue-600 text-xl">Cargando productos de seguro...</p>
-      </div>
-    );
-  }
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-blue-100">
+            <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">Contratar Nueva Póliza</h2>
 
-  // Determinar el componente de formulario específico a renderizar
-  const FormToRender = selectedProductName ? FORM_COMPONENTS_MAP[selectedProductName] : null;
-
-  return (
-    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-3xl border border-blue-100">
-      <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">Contratar Nueva Póliza</h2>
-
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-          <strong className="font-bold">¡Error!</strong>
-          <span className="block sm:inline"> {error}</span>
-        </div>
-      )}
-
-      {!selectedProductId ? ( // Mostrar el selector de producto si aún no se ha seleccionado uno
-        <div className="space-y-6">
-          <div>
-            <label htmlFor="product_id" className="block text-sm font-medium text-gray-700 mb-1">
-              Selecciona un Producto de Seguro
-            </label>
-            <select
-              id="product_id"
-              name="product_id"
-              value={selectedProductId || ''}
-              onChange={handleProductSelectChange}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="">-- Selecciona un producto --</option>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} ({product.type === 'life' ? 'Vida' : product.type === 'health' ? 'Salud' : 'Otro'}) - ${product.base_premium.toFixed(2)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      ) : ( // Mostrar el formulario específico una vez que un producto ha sido seleccionado
-        <div>
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-800">Formulario para: {selectedProductName}</h3>
-            <button
-              type="button"
-              onClick={resetProductSelection}
-              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
-            >
-              Volver a la selección de producto
-            </button>
-          </div>
-          {/* Detalles del Producto Seleccionado (visible solo cuando un producto está seleccionado) */}
-          {selectedProductDetails && (
-            <div className="bg-blue-50 p-4 rounded-md shadow-sm mb-6">
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">Información del Producto:</h3>
-              <p><strong className="font-medium">Nombre:</strong> {selectedProductDetails.name}</p>
-              <p><strong className="font-medium">Tipo:</strong> {selectedProductDetails.type.charAt(0).toUpperCase() + selectedProductDetails.type.slice(1)}</p>
-              <p><strong className="font-medium">Prima Base:</strong> ${selectedProductDetails.base_premium.toFixed(2)}</p>
-              <p><strong className="font-medium">Descripción:</strong> {selectedProductDetails.description || 'N/A'}</p>
-              {selectedProductDetails.coverage_details && Object.keys(selectedProductDetails.coverage_details).length > 0 && (
-                <div className="mt-2">
-                  <strong className="font-medium">Cobertura:</strong>
-                  <pre className="bg-blue-100 p-2 rounded-md text-xs overflow-x-auto font-mono mt-1">
-                    {JSON.stringify(selectedProductDetails.coverage_details, null, 2)}
-                  </pre>
+            {!selectedProduct ? ( // Mostrar selector de producto si no hay uno seleccionado
+                <div className="space-y-6">
+                    {/* Campo Producto de Seguro */}
+                    <div>
+                        <label htmlFor="product_id" className="block text-sm font-medium text-gray-700 mb-1">
+                            Selecciona un Producto de Seguro
+                        </label>
+                        <select
+                            id="product_id"
+                            name="product_id"
+                            value={selectedProductId || ''}
+                            onChange={handleProductSelectChange}
+                            required
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        >
+                            <option value="">-- Selecciona un producto --</option>
+                            {products.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                    {product.name} ({product.type.charAt(0).toUpperCase() + product.type.slice(1)})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
-              )}
-            </div>
-          )}
-
-          {FormToRender ? (
-            // Renderiza el componente de formulario específico y le pasa las props necesarias
-            // Cada formulario específico será responsable de manejar su propio estado,
-            // llamar a `createPolicy`, y manejar la navegación/mensajes de éxito.
-            <FormToRender
-              clientId={user?.id}
-              productId={selectedProductId}
-              basePremium={selectedProductDetails?.base_premium} // Pasa la prima base
-              onSuccess={() => {
-                // Función de callback para cuando la póliza se crea exitosamente
-                setSuccessMessage('¡Solicitud de póliza enviada exitosamente! Un agente la revisará pronto.');
-                setTimeout(() => {
-                  navigate('/client/dashboard/policies'); // Redirigir al listado de pólizas del cliente
-                }, 3000);
-              }}
-              onError={(msg: string) => setError(msg)} // Función de callback para errores
-            />
-          ) : (
-            <div className="text-red-500 text-center py-4">
-              No se encontró un formulario específico para el producto seleccionado: **{selectedProductName}**.
-              Por favor, verifica el mapeo en `FORM_COMPONENTS_MAP`.
-            </div>
-          )}
+            ) : ( // Mostrar el formulario específico si un producto ha sido seleccionado
+                <div>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-semibold text-gray-800">Formulario para: {selectedProduct.name}</h3>
+                        <button
+                            type="button"
+                            onClick={resetProductSelection}
+                            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
+                        >
+                            Volver a la selección de producto
+                        </button>
+                    </div>
+                    {/* Renderizado condicional de formularios genéricos para el cliente */}
+                    {selectedProduct.type === 'life' && (
+                        <ClientGenericLifePolicyForm
+                            product={selectedProduct}
+                            clientId={user.id}
+                            agentId={assignedAgentId!} // Ya validamos que assignedAgentId no es null si selectedProduct existe
+                        />
+                    )}
+                    {selectedProduct.type === 'health' && (
+                        <ClientGenericHealthPolicyForm
+                            product={selectedProduct}
+                            clientId={user.id}
+                            agentId={assignedAgentId!} // Ya validamos que assignedAgentId no es null si selectedProduct existe
+                        />
+                    )}
+                    {/* Mensaje si el tipo de producto no está soportado */}
+                    {selectedProduct.type !== 'life' && selectedProduct.type !== 'health' && (
+                        <div className="text-red-500 text-center">
+                            Tipo de producto no soportado para la contratación en línea: {selectedProduct.type}.
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
-      )}
-
-      {/* Los botones de acción ahora estarán dentro de los formularios específicos o manejados por ellos */}
-      <div className="flex justify-end gap-4 mt-6">
-        <button
-          type="button"
-          onClick={() => navigate('/client/dashboard')}
-          className="inline-flex justify-center py-2 px-6 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300"
-        >
-          Volver al Dashboard
-        </button>
-      </div>
-    </div>
-  );
+    );
 }

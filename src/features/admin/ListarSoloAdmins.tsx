@@ -134,9 +134,12 @@ export default function ListarSoloAdmins() {
                     >
                       Contactar
                     </Button>
-                    <Button size="xs" color="failure">
-                      Desactivar
-                    </Button>
+                    {/* CAMBIO AQUÍ: Oculta el botón "Desactivar" si el rol es 'superadministrator' */}
+                    {user.role !== 'superadministrator' && (
+                      <Button size="xs" color="failure">
+                        Desactivar
+                      </Button>
+                    )}
                   </div>
                 </Table.Cell>
               </Table.Row>

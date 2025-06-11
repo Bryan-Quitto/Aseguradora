@@ -1,89 +1,182 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+
 // @ts-ignore
+
 import { lazy } from 'react';
+
 import { Navigate, createBrowserRouter } from "react-router-dom";
+
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 
 /* ***Layouts**** */
+
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
+
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
+
+
 // Dashboard (general)
+
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
 
+
+
 // Dashboard del Administrador
+
 const DashboardAdmin = Loadable(lazy(() => import('../features/admin/Dashboard_administrador')));
+
 const AdminPolicyList = Loadable(lazy(() => import('../features/admin/AdminPolicyList')));
+
 const AdminEditPolicy = Loadable(lazy(() => import('../features/admin/AdminEditPolicy'))); // ASUME que tienes o crearás este componente
-const EditarUsuario = Loadable(lazy(() => import('../features/admin/EditarUsuario'))); // Usamos lazy loading aquí
+
+const AdminCreateInsurance = Loadable(lazy(() => import('../features/admin/AdminCreateInsurance')));
+
+// Usamos EditarUsuarioWrapper para que maneje los props del modal y el userId
+
+import { EditarUsuarioWrapper } from '../features/admin/EditarUsuario'; // Importa el wrapper
+
 const ListarUsuarios = Loadable(lazy(() => import('../features/admin/ListarUsuarios'))); // Usamos lazy loading aquí
+
 const CrearUsuarios = Loadable(lazy(() => import('../features/admin/CrearUsuarios'))); // ¡Añadido! lazy loading para CrearUsuarios
+
 const ListarSoloUsuarios = Loadable(lazy(() => import('../features/admin/ListarSoloUsuarios')));
+
 const ListarSoloAgentes = Loadable(lazy(() => import('../features/admin/ListarSoloAgentes')));
+
 const ListarSoloAdmins = Loadable(lazy(() => import('../features/admin/ListarSoloAdmins')));
+
+const AdminPolicyForm = Loadable(lazy(() => import('../features/admin/AdminPolicyForm')));
+
+const AdminInsuranceList = Loadable(lazy(() => import('../features/admin/AdminInsuranceList')));
+
+// ✅ NUEVA LÍNEA: Importación del componente AdminEditInsurance
+
+const AdminEditInsurance = Loadable(lazy(() => import('../features/admin/AdminEditInsurance')));
+
+
+
 
 
 // Dashboard del Agente
+
 const DashboardAgent = Loadable(lazy(() => import('../features/agents/pages/Dashboard_agente')));
 
+
+
 // Componentes de Pólizas para Agentes
+
 const AgentPolicyList = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyList')));
-const AdminPolicyDetail = Loadable(lazy(() => import('../features/admin/AdminPolicyDetail'))); // ¡Añade esta línea!
+
+const AdminPolicyDetail = Loadable(lazy(() => import('../features/admin/AdminPolicyDetail')));
+
 const AgentPolicyForm = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyForm')));
+
 const AgentPolicyDetail = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyDetail')));
+
 const AgentEditPolicy = Loadable(lazy(() => import('../features/agents/pages/AgentEditPolicy')));
 
 // Componente de Solicitudes para Agentes
+
 const AgentApplicationList = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationList')));
+
 const AgentApplicationDetail = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationDetail')));
 
+
+
 // Dashboard del Cliente
+
 const DashboardClient = Loadable(lazy(() => import('../features/clients/pages/Dashboard_cliente')));
 
+
+
 // Componentes de Pólizas para Clientes
+
 const ClientPolicyList = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyList')));
+
 const ClientPolicyForm = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyForm')));
+
 const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyDetail')));
-const ClientEditPolicy = Loadable(lazy(() => import('../features/clients/pages/ClientEditPolicy')));
+
+
+
 
 
 // utilities (mantengo estas imports pero considera eliminarlas si no las usas en tus rutas)
+
 const Typography = Loadable(lazy(() => import("../components/typography/BasicTypography")));
+
 const Table = Loadable(lazy(() => import("../views/tables/Table")));
+
 const Form = Loadable(lazy(() => import("../components/forms/BasicForm")));
+
 const Alert = Loadable(lazy(() => import("../components/alerts/BasicAlerts")));
 
+
+
 // Importa las rutas de autenticación y de la landing page desde sus nuevos archivos
+
 import AuthRoutes from '../features/auth/auth.routes';
+
 import LandingRoutes from '../features/landing/landing.routes';
 
+
+
 // Componente para la redirección condicional después del login
+
 import { useAuth } from '../contexts/AuthContext'; // Importa useAuth desde la nueva ubicación
 
+
+
 interface PrivateRouteProps {
-    children: React.ReactNode;
-    allowedRoles?: string[];
+
+    children: React.ReactNode;
+
+    allowedRoles?: string[];
+
 }
 
+
+
 const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
-    const { user, loading, userRole } = useAuth();
 
-    if (loading) {
-        return <div>Cargando...</div>;
-    }
+    const { user, loading, userRole } = useAuth();
 
-    if (!user) {
-        return <Navigate to="/auth/login" />;
-    }
 
-    const currentUserRole = userRole;
 
-    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
-        return <Navigate to="/access-denied" />;
-    }
+    if (loading) {
 
-    return children;
+        return <div>Cargando...</div>;
+
+    }
+
+
+
+    if (!user) {
+
+        return <Navigate to="/auth/login" />;
+
+    }
+
+
+
+    const currentUserRole = userRole;
+
+
+
+    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
+
+        return <Navigate to="/access-denied" />;
+
+    }
+
+
+
+    return children;
+
 };
+
+
 
 const Router = [
     LandingRoutes,
@@ -95,21 +188,26 @@ const Router = [
             {
                 path: '/admin/dashboard',
                 element: (
-                    <PrivateRoute allowedRoles={['admin']}>
-                        <DashboardAdmin /> {/* Este es el layout, con un <Outlet /> dentro */}
+                    // ****** CAMBIO CLAVE AQUÍ ******
+                    <PrivateRoute allowedRoles={['admin', 'superadministrator']}>
+                        <DashboardAdmin />
                     </PrivateRoute>
                 ),
                 children: [
                     { path: '', element: <Navigate to="list-users" /> }, // Redirige por defecto a listar usuarios
-                    { path: 'list-users', element: <ListarUsuarios /> }, // Usamos ListarUsuarios directamente
-                    { path: 'create-users', element: <CrearUsuarios /> }, // Usamos CrearUsuarios directamente
-                    { path: 'edit-user/:id', element: <EditarUsuario /> }, // Usamos EditarUsuario directamente
+                    { path: 'list-users', element: <ListarUsuarios /> },
+                    { path: 'create-users', element: <CrearUsuarios /> },
+                    { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> },
                     { path: 'list-only-users', element: <ListarSoloUsuarios /> },
                     { path: 'list-only-agents', element: <ListarSoloAgentes /> },
                     { path: 'list-only-admins', element: <ListarSoloAdmins /> },
                     { path: 'policies', element: <AdminPolicyList /> },
-                    { path: 'policies/:id', element: <AdminPolicyDetail /> }, // ¡Añade esta línea!
-                    { path: 'policies/:id/edit', element: <AdminEditPolicy /> }, //  ✅ ¡AÑADE ESTA LÍNEA!
+                    { path: 'policies/:id', element: <AdminPolicyDetail /> },
+                    { path: 'policies/:id/edit', element: <AdminEditPolicy /> },
+                    { path: 'create-insurance', element: <AdminCreateInsurance /> },
+                    { path: 'policies/new', element: <AdminPolicyForm /> },
+                    { path: 'insurance-products', element: <AdminInsuranceList /> },
+                    { path: 'insurance-products/:id/edit', element: <AdminEditInsurance /> },
                 ]
             },
             // Rutas para AGENTE
@@ -154,20 +252,12 @@ const Router = [
                     { path: '', element: <Navigate to="policies" /> },
                 ]
             },
-            // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA CLIENTES
-            {
-                path: '/client/dashboard/policies/:policyId/edit',
-                element: (
-                    <PrivateRoute allowedRoles={['client']}>
-                        <ClientEditPolicy />
-                    </PrivateRoute>
-                ),
-            },
 
+            // Probable ruta duplicada/redundante que deberías revisar
             {
-                path: '/auth/dashboard', // Esta ruta parece duplicada o redundante si ya tienes /admin/dashboard
+                path: '/auth/dashboard',
                 element: (
-                    <PrivateRoute allowedRoles={['admin']}>
+                    <PrivateRoute allowedRoles={['admin']}> {/* También podrías añadir 'superadministrator' aquí si esta ruta es relevante */}
                         <DashboardAdmin />
                     </PrivateRoute>
                 ),

@@ -1,353 +1,445 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Policy, getPolicyById, updatePolicy, UpdatePolicyData } from '../policies/policy_management'; // Importa UpdatePolicyData
+import { useParams, Link, useNavigate } from 'react-router-dom';
 
+// Importa los componentes de lista de beneficiarios y dependientes y sus interfaces
+import BeneficiaryInputList from '../policies/components/BeneficiaryInputList';
+import { Beneficiary } from '../policies/components/BeneficiaryInput';
+import DependentInputList from '../policies/components/DependentInputList';
+import { Dependent } from '../policies/components/DependentInput';
+
+// Importa las funciones de manejo de datos y las interfaces desde el archivo central
+import {
+    Policy,
+    InsuranceProduct,
+    getPolicyById,
+    getInsuranceProductById,
+    ClientProfile,
+    AgentProfile,
+    getClientProfileById,
+    getAgentProfileById,
+    updatePolicy, // Importar la función updatePolicy
+} from '../policies/policy_management';
+
+
+/**
+ * Componente para que un administrador edite los detalles de una póliza específica.
+ */
 export default function AdminEditPolicy() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const [policy, setPolicy] = useState<Policy | null>(null);
-  const [formData, setFormData] = useState<UpdatePolicyData>({}); // Estado para los datos del formulario
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+    const { id: policyId } = useParams<{ id: string }>();
+    const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!id) {
-      setError("No se proporcionó un ID de póliza para editar.");
-      setLoading(false);
-      return;
-    }
+    const [policy, setPolicy] = useState<Policy | null>(null);
+    const [product, setProduct] = useState<InsuranceProduct | null>(null);
+    const [client, setClient] = useState<ClientProfile | null>(null);
+    const [agent, setAgent] = useState<AgentProfile | null>(null);
 
-    const fetchPolicy = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const { data, error: fetchError } = await getPolicyById(id);
-        if (fetchError) {
-          setError(`Error al cargar la póliza: ${fetchError.message}`);
-        } else if (data) {
-          setPolicy(data);
-          // Inicializa formData con los valores actuales de la póliza
-          // spread operator para copiar todas las propiedades de 'data'
-          setFormData({
-            policy_number: data.policy_number,
-            client_id: data.client_id,
-            agent_id: data.agent_id,
-            product_id: data.product_id,
-            start_date: data.start_date,
-            end_date: data.end_date,
-            status: data.status,
-            premium_amount: data.premium_amount,
-            payment_frequency: data.payment_frequency,
-            coverage_amount: data.coverage_amount,
-            ad_d_included: data.ad_d_included,
-            ad_d_coverage: data.ad_d_coverage,
-            beneficiaries: data.beneficiaries,
-            age_at_inscription: data.age_at_inscription,
-            num_beneficiaries: data.num_beneficiaries,
-            num_dependents: data.num_dependents,
-            dependents_details: data.dependents_details,
-            dependent_type_counts: data.dependent_type_counts,
-            deductible: data.deductible,
-            coinsurance: data.coinsurance,
-            max_annual: data.max_annual,
-            has_dental: data.has_dental,
-            has_vision: data.has_vision,
-            num_dependents_health: data.num_dependents_health,
-            dependents_details_health: data.dependents_details_health,
-            has_dental_basic: data.has_dental_basic,
-            wants_dental_premium: data.wants_dental_premium,
-            has_dental_premium: data.has_dental_premium,
-            has_vision_basic: data.has_vision_basic,
-            wants_vision: data.wants_vision,
-            has_vision_full: data.has_vision_full,
-            wellness_rebate: data.wellness_rebate,
-            // Si tienes campos de auto, añádelos aquí también
-            // vehicle_make: data.vehicle_make,
-            // vehicle_model: data.vehicle_model,
-            // vehicle_year: data.vehicle_year,
-            // vehicle_vin: data.vehicle_vin,
-            // collision_coverage: data.collision_coverage,
-            // comprehensive_coverage: data.comprehensive_coverage,
-          });
-        } else {
-          setError('Póliza no encontrada para editar.');
+    const [status, setStatus] = useState<Policy['status']>('pending');
+    const [contractDetails, setContractDetails] = useState<string>('');
+    const [ageAtInscription, setAgeAtInscription] = useState<string>('');
+    // Estos estados siempre serán arrays, por lo que su tipo no necesita incluir 'null'
+    const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+    const [dependents, setDependents] = useState<Dependent[]>([]);
+
+    const [loading, setLoading] = useState<boolean>(true);
+    const [saving, setSaving] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchPolicyData = async () => {
+            if (!policyId) {
+                setError('ID de póliza no proporcionado.');
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+
+            try {
+                const { data: policyData, error: policyError } = await getPolicyById(policyId);
+                if (policyError) {
+                    console.error(`Error al obtener póliza con ID ${policyId}:`, policyError);
+                    setError('Error al cargar los detalles de la póliza. Por favor, inténtalo de nuevo.');
+                    setLoading(false);
+                    return;
+                }
+                if (!policyData) {
+                    setError('Póliza no encontrada.');
+                    setLoading(false);
+                    return;
+                }
+
+                setPolicy(policyData);
+                setStatus(policyData.status);
+                setContractDetails(policyData.contract_details || '');
+                setAgeAtInscription(policyData.age_at_inscription?.toString() || '');
+                // Asegúrate de que si beneficiaries o dependents_details son null, se establezcan como un array vacío
+                setBeneficiaries(policyData.beneficiaries || []);
+                setDependents(policyData.dependents_details || []);
+
+                const { data: productData, error: productError } = await getInsuranceProductById(policyData.product_id);
+                if (productError) {
+                    console.error(`Error al obtener producto con ID ${policyData.product_id}:`, productError);
+                    setProduct(null);
+                } else {
+                    setProduct(productData);
+                }
+
+                const { data: clientData, error: clientError } = await getClientProfileById(policyData.client_id);
+                if (clientError) {
+                    console.error(`Error al obtener cliente con ID ${policyData.client_id}:`, clientError);
+                    setClient(null);
+                } else {
+                    setClient(clientData);
+                }
+
+                if (policyData.agent_id) {
+                    const { data: agentData, error: agentError } = await getAgentProfileById(policyData.agent_id);
+                    if (agentError) {
+                        console.error(`Error al obtener agente con ID ${policyData.agent_id}:`, agentError);
+                        setAgent(null);
+                    } else {
+                        setAgent(agentData);
+                    }
+                } else {
+                    setAgent(null);
+                }
+
+            } catch (err: any) {
+                console.error("Error general al cargar datos de póliza:", err);
+                setError(`Error inesperado: ${err.message}`);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchPolicyData();
+    }, [policyId]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setMessage(null);
+        setError(null);
+
+        if (!policyId) {
+            setError("Error: ID de póliza no disponible para guardar.");
+            setSaving(false);
+            return;
         }
-      } catch (e: any) {
-        setError('Ocurrió un error inesperado: ' + e.message);
-      } finally {
-        setLoading(false);
-      }
+
+        if (!policy) {
+            setError("Error: Póliza no cargada para guardar.");
+            setSaving(false);
+            return;
+        }
+        if (!product) {
+            setError("Error: Producto de seguro no cargado. No se pueden validar los campos específicos.");
+            setSaving(false);
+            return;
+        }
+
+        // CAMBIO CLAVE: Declarar el tipo de estas variables para que puedan ser null
+        let updatedBeneficiaries: Beneficiary[] | null = beneficiaries;
+        let updatedDependents: Dependent[] | null = dependents;
+        let updatedNumBeneficiaries: number | null = beneficiaries.length;
+        let updatedNumDependents: number | null = dependents.length;
+
+        if (product.type === 'life') {
+            const totalBeneficiaryPercentage = beneficiaries.reduce((sum, b) => {
+                const percentage = typeof b.percentage === 'number' ? b.percentage : 0;
+                return sum + percentage;
+            }, 0);
+
+            if (beneficiaries.length === 0) {
+                setError("Debe añadir al menos un beneficiario para una póliza de vida.");
+                setSaving(false);
+                return;
+            }
+            if (totalBeneficiaryPercentage !== 100) {
+                setError(`La suma de los porcentajes de los beneficiarios debe ser 100%. Actualmente es ${totalBeneficiaryPercentage}%.`);
+                setSaving(false);
+                return;
+            }
+            if (product.coverage_details?.max_beneficiaries !== null && product.coverage_details?.max_beneficiaries !== 0 && beneficiaries.length > (product.coverage_details?.max_beneficiaries ?? Infinity)) {
+                setError(`El número de beneficiarios excede el límite permitido por el producto (${product.coverage_details.max_beneficiaries}).`);
+                setSaving(false);
+                return;
+            }
+            updatedBeneficiaries = beneficiaries;
+            updatedNumBeneficiaries = beneficiaries.length;
+            // Para pólizas de vida, los dependientes deben ser null
+            updatedDependents = null;
+            updatedNumDependents = null;
+
+        } else if (product.type === 'health') {
+            if (product.coverage_details?.max_dependents !== null && dependents.length > (product.coverage_details?.max_dependents ?? Infinity)) {
+                setError(`El número de dependientes excede el límite permitido por el producto (${product.coverage_details.max_dependents}).`);
+                setSaving(false);
+                return;
+            }
+            if (product.coverage_details?.max_dependents === 0 && dependents.length > 0) {
+                setError("Este producto de seguro de salud no permite dependientes.");
+                setSaving(false);
+                return;
+            }
+            updatedDependents = dependents;
+            updatedNumDependents = dependents.length;
+            // Para pólizas de salud, los beneficiarios deben ser null
+            updatedBeneficiaries = null;
+            updatedNumBeneficiaries = null;
+        }
+
+        const updatedPolicyData = {
+            status: status,
+            contract_details: contractDetails,
+            age_at_inscription: ageAtInscription ? parseInt(ageAtInscription) : null,
+            beneficiaries: updatedBeneficiaries,
+            num_beneficiaries: updatedNumBeneficiaries,
+            dependents_details: updatedDependents,
+            num_dependents: updatedNumDependents,
+        };
+
+        try {
+            const { error: updateError } = await updatePolicy(policyId!, updatedPolicyData);
+
+            if (updateError) {
+                throw updateError;
+            }
+
+            setMessage("Póliza actualizada exitosamente.");
+            navigate(`/admin/dashboard/policies/${policyId}`); // Navega de vuelta a los detalles o a la lista
+
+        } catch (err: any) {
+            console.error("Error al actualizar póliza:", err);
+            setError(`Error al actualizar póliza: ${err.message}`);
+        } finally {
+            setSaving(false);
+        }
     };
 
-    fetchPolicy();
-  }, [id]);
+    const capitalize = (s: string | null | undefined): string => {
+        if (!s) return 'N/A';
+        return s.charAt(0).toUpperCase() + s.slice(1);
+    };
 
-  // Manejador de cambios para los campos del formulario
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type, checked } = e.target as HTMLInputElement;
+    const policyMaxBeneficiaries: number | null = product?.coverage_details?.max_beneficiaries ?? null;
+    const policyMaxDependents: number | null = product?.coverage_details?.max_dependents ?? null;
 
-    // Manejo de valores booleanos para checkboxes
-    if (type === 'checkbox') {
-      setFormData(prev => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+    if (loading) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <p className="text-blue-600 text-xl">Cargando detalles de la póliza...</p>
+            </div>
+        );
     }
-  };
 
-  // Manejador de cambios para contract_details (si es JSONB)
-  const handleContractDetailsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    try {
-      const parsed = JSON.parse(e.target.value);
-      setFormData(prev => ({ ...prev, contract_details: parsed }));
-    } catch (err) {
-      setFormData(prev => ({ ...prev, contract_details: null }));
+    if (error && !policy) {
+        return (
+            <div className="flex flex-col justify-center items-center h-64">
+                <p className="text-red-600 text-xl mb-4">{error}</p>
+                <Link to="/admin/dashboard/policies" className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">
+                    Volver a Pólizas
+                </Link>
+            </div>
+        );
     }
-  };
 
-  // Manejador de envío del formulario
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!id) return;
-
-    setSubmitting(true);
-    setSuccess(null);
-    setError(null);
-
-    try {
-      // Elimina campos undefined o null que no deben enviarse para actualización (opcional, pero buena práctica)
-      const updatesToSend = Object.fromEntries(
-        Object.entries(formData).filter(([, value]) => value !== undefined)
-      );
-
-      const { data, error: updateError } = await updatePolicy(id, updatesToSend);
-      if (updateError) {
-        setError(`Error al actualizar la póliza: ${updateError.message}`);
-      } else if (data) {
-        setPolicy(data); // Actualiza la póliza localmente con los datos guardados
-        setSuccess('Póliza actualizada exitosamente!');
-        // Opcional: navegar de vuelta a los detalles o a la lista después de un tiempo
-        // setTimeout(() => navigate(`/admin/dashboard/policies/${id}`), 2000);
-      }
-    } catch (e: any) {
-      setError('Ocurrió un error inesperado al actualizar: ' + e.message);
-    } finally {
-      setSubmitting(false);
+    if (!policy) {
+        return (
+            <div className="flex flex-col justify-center items-center h-64">
+                <p className="text-gray-600 text-xl mb-4">No se encontraron detalles para esta póliza.</p>
+                <Link to="/admin/dashboard/policies" className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-300">
+                    Volver a Pólizas
+                </Link>
+            </div>
+        );
     }
-  };
 
-  if (loading) {
     return (
-      <div className="flex justify-center items-center h-48">
-        <p className="text-blue-600 text-lg">Cargando póliza para editar...</p>
-      </div>
-    );
-  }
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold text-blue-700">Editar Póliza: {policy.policy_number}</h2>
+                {/* Único botón de Volver a Pólizas */}
+                <Link
+                    to="/admin/dashboard/policies" // Navega a la lista de pólizas
+                    className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition duration-300 shadow-md"
+                >
+                    Volver a Pólizas
+                </Link>
+            </div>
 
-  if (error && !policy) { // Muestra el error solo si no hay póliza cargada
-    return (
-      <div className="flex justify-center items-center h-48 flex-col">
-        <p className="text-red-500 text-lg">Error: {error}</p>
-        <button
-          onClick={() => navigate('/admin/dashboard/policies')}
-          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Volver a Pólizas
-        </button>
-      </div>
-    );
-  }
+            {message && (
+                <div
+                    className={`p-4 mb-4 rounded-lg text-white ${error ? 'bg-red-500' : 'bg-green-500'}`}
+                >
+                    {message}
+                </div>
+            )}
+            {error && !message && (
+                <div className="p-4 mb-4 rounded-lg text-white bg-red-500">
+                    {error}
+                </div>
+            )}
 
-  if (!policy) { // Si no hay póliza y no hay error, es que no se encontró
-    return (
-      <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl border border-blue-100 text-center mx-auto">
-        <h2 className="text-3xl font-bold text-blue-700 mb-6">Editar Póliza</h2>
-        <p className="text-gray-600">Póliza no encontrada para editar.</p>
-        <button
-          onClick={() => navigate('/admin/dashboard/policies')}
-          className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Volver a Pólizas
-        </button>
-      </div>
-    );
-  }
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-gray-700">
+                    <div className="bg-blue-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General de la Póliza</h3>
+                        <p className="mb-2"><strong className="font-medium">Número de Póliza:</strong> {policy.policy_number}</p>
+                        <p className="mb-2"><strong className="font-medium">Producto:</strong> {product ? product.name : 'Cargando...'}</p>
+                        <p className="mb-2"><strong className="font-medium">Tipo de Producto:</strong> {product ? capitalize(product.type) : 'Cargando...'}</p>
+                        <p className="mb-2"><strong className="font-medium">Fecha de Inicio:</strong> {policy.start_date}</p>
+                        <p className="mb-2"><strong className="font-medium">Fecha de Fin:</strong> {policy.end_date}</p>
+                        <p className="mb-2"><strong className="font-medium">Monto de Prima:</strong> ${policy.premium_amount.toFixed(2)}</p>
+                        <p className="mb-2"><strong className="font-medium">Frecuencia de Pago:</strong> {capitalize(policy.payment_frequency)}</p>
+                    </div>
 
-  return (
-    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
-      <h2 className="text-3xl font-bold text-blue-700 mb-8 text-center">Editar Póliza: {policy.policy_number}</h2>
+                    <div className="bg-teal-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-teal-800 mb-4">Cliente de la Póliza</h3>
+                        {client ? (
+                            <>
+                                <p className="mb-2"><strong className="font-medium">Nombre:</strong> {client.full_name || `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()}</p>
+                                <p className="mb-2"><strong className="font-medium">Email:</strong> <a href={`mailto:${client.email}`} className="text-blue-700 hover:underline">{client.email}</a></p>
+                                {client.phone_number && <p className="mb-2"><strong className="font-medium">Teléfono:</strong> {client.phone_number}</p>}
+                            </>
+                        ) : (
+                            <p className="text-gray-600">No se pudo cargar la información del cliente.</p>
+                        )}
+                    </div>
+                    <div className="bg-purple-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-purple-800 mb-4">Agente Asignado</h3>
+                        {policy.agent_id ? (
+                            agent ? (
+                                <>
+                                    <p className="mb-2"><strong className="font-medium">Nombre:</strong> {agent.full_name || `${agent.primer_nombre || ''} ${agent.primer_apellido || ''}`.trim()}</p>
+                                    <p className="mb-2"><strong className="font-medium">Email:</strong> <a href={`mailto:${agent.email}`} className="text-blue-700 hover:underline">{agent.email}</a></p>
+                                    {agent.phone_number && <p className="mb-2"><strong className="font-medium">Teléfono:</strong> {agent.phone_number}</p>}
+                                </>
+                            ) : (
+                                <p className="text-gray-600">No se pudo cargar la información del agente asignado.</p>
+                            )
+                        ) : (
+                            <p className="text-gray-600">Esta póliza aún no tiene un agente asignado.</p>
+                        )}
+                    </div>
+                </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Campo: policy_number */}
-          <div>
-            <label htmlFor="policy_number" className="block text-sm font-medium text-gray-700">Número de Póliza</label>
-            <input
-              type="text"
-              name="policy_number"
-              id="policy_number"
-              value={formData.policy_number || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
-          </div>
+                <h3 className="text-xl font-semibold text-gray-800 pt-4 border-t border-gray-200">Detalles Editables de la Póliza</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label htmlFor="status" className="block text-sm font-medium text-gray-700">Estado de la Póliza</label>
+                        <select
+                            id="status"
+                            value={status}
+                            onChange={(e) => setStatus(e.target.value as Policy['status'])}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        >
+                            <option value="pending">Pendiente</option>
+                            <option value="active">Activa</option>
+                            <option value="cancelled">Cancelada</option>
+                            <option value="expired">Expirada</option>
+                            <option value="rejected">Rechazada</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="ageAtInscription" className="block text-sm font-medium text-gray-700">Edad al Inscribirse</label>
+                        <input
+                            type="number"
+                            id="ageAtInscription"
+                            value={ageAtInscription}
+                            onChange={(e) => setAgeAtInscription(e.target.value)}
+                            min="0"
+                            required
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="Edad del asegurado"
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label htmlFor="contractDetails" className="block text-sm font-medium text-gray-700">Detalles del Contrato (Notas del Agente)</label>
+                        <textarea
+                            id="contractDetails"
+                            value={contractDetails}
+                            onChange={(e) => setContractDetails(e.target.value)}
+                            rows={4}
+                            className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="Notas específicas del contrato o cualquier detalle adicional para el agente."
+                        ></textarea>
+                    </div>
+                </div>
 
-          {/* Campo: status */}
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700">Estado</label>
-            <select
-              name="status"
-              id="status"
-              value={formData.status || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            >
-              <option value="pending">Pendiente</option>
-              <option value="active">Activa</option>
-              <option value="cancelled">Cancelada</option>
-              <option value="expired">Expirada</option>
-              <option value="rejected">Rechazada</option>
-            </select>
-          </div>
+                <h3 className="text-xl font-semibold text-gray-800 pt-4 border-t border-gray-200">Coberturas del Producto (Fijas)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-gray-100 p-4 rounded-md">
+                    {product?.type === 'life' && (
+                        <>
+                            <p><strong className="font-medium">Monto Cobertura Principal:</strong> ${policy.coverage_amount?.toFixed(2) || 'N/A'}</p>
+                            <p><strong className="font-medium">AD&D Incluido:</strong> {policy.ad_d_included ? 'Sí' : 'No'}</p>
+                            {policy.ad_d_included && <p><strong className="font-medium">Cobertura AD&D:</strong> ${policy.ad_d_coverage?.toFixed(2) || 'N/A'}</p>}
+                            <p><strong className="font-medium">Reembolso Bienestar:</strong> {policy.wellness_rebate ? `${policy.wellness_rebate}%` : 'N/A'}</p>
+                            <p><strong className="font-medium">Máx. Beneficiarios Permitidos:</strong> {policyMaxBeneficiaries === 0 ? 'Ilimitado' : policyMaxBeneficiaries || 'N/A'}</p>
+                        </>
+                    )}
+                    {product?.type === 'health' && (
+                        <>
+                            <p><strong className="font-medium">Deducible:</strong> ${policy.deductible?.toFixed(2) || 'N/A'}</p>
+                            <p><strong className="font-medium">Coaseguro:</strong> {policy.coinsurance || 'N/A'}%</p>
+                            <p><strong className="font-medium">Máx. Desembolsable Anual:</strong> ${policy.max_annual?.toFixed(2) || 'N/A'}</p>
+                            <p><strong className="font-medium">Reembolso Bienestar:</strong> {policy.wellness_rebate ? `${policy.wellness_rebate}%` : 'N/A'}</p>
+                            <p><strong className="font-medium">Dental Básico:</strong> {policy.has_dental_basic ? 'Sí' : 'No'}</p>
+                            <p><strong className="font-medium">Dental Premium:</strong> {policy.has_dental_premium ? 'Sí' : 'No'}</p>
+                            <p><strong className="font-medium">Visión Básico:</strong> {policy.has_vision_basic ? 'Sí' : 'No'}</p>
+                            <p><strong className="font-medium">Visión Completo:</strong> {policy.has_vision_full ? 'Sí' : 'No'}</p>
+                            <p><strong className="font-medium">Máx. Dependientes Permitidos:</strong> {policyMaxDependents === 0 ? 'No permitidos' : policyMaxDependents || 'N/A'}</p>
+                        </>
+                    )}
+                </div>
 
-          {/* Campo: start_date */}
-          <div>
-            <label htmlFor="start_date" className="block text-sm font-medium text-gray-700">Fecha de Inicio</label>
-            <input
-              type="date"
-              name="start_date"
-              id="start_date"
-              value={formData.start_date || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
-          </div>
+                {product?.type === 'life' && (
+                    <div className="pt-4 border-t border-gray-200">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4">Beneficiarios de la Póliza</h4>
+                        <BeneficiaryInputList
+                            beneficiaries={beneficiaries}
+                            onChange={setBeneficiaries}
+                            maxBeneficiaries={policyMaxBeneficiaries}
+                        />
+                    </div>
+                )}
+                {product?.type === 'health' && (
+                    <div className="pt-4 border-t border-gray-200">
+                        <h4 className="text-lg font-semibold text-gray-800 mb-4">Dependientes de la Póliza</h4>
+                        {policyMaxDependents !== null && policyMaxDependents === 0 ? (
+                            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative">
+                                <strong className="font-bold">Información:</strong>
+                                <span className="block sm:inline"> Este producto de seguro no permite dependientes.</span>
+                            </div>
+                        ) : (
+                            <DependentInputList
+                                dependents={dependents}
+                                onChange={setDependents}
+                                maxDependents={policyMaxDependents}
+                            />
+                        )}
+                    </div>
+                )}
 
-          {/* Campo: end_date */}
-          <div>
-            <label htmlFor="end_date" className="block text-sm font-medium text-gray-700">Fecha de Fin</label>
-            <input
-              type="date"
-              name="end_date"
-              id="end_date"
-              value={formData.end_date || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            />
-          </div>
-
-          {/* Campo: premium_amount */}
-          <div>
-            <label htmlFor="premium_amount" className="block text-sm font-medium text-gray-700">Monto Premium</label>
-            <input
-              type="number"
-              name="premium_amount"
-              id="premium_amount"
-              value={formData.premium_amount || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              step="0.01"
-              required
-            />
-          </div>
-
-          {/* Campo: payment_frequency */}
-          <div>
-            <label htmlFor="payment_frequency" className="block text-sm font-medium text-gray-700">Frecuencia de Pago</label>
-            <select
-              name="payment_frequency"
-              id="payment_frequency"
-              value={formData.payment_frequency || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              required
-            >
-              <option value="monthly">Mensual</option>
-              <option value="quarterly">Trimestral</option>
-              <option value="annually">Anual</option>
-            </select>
-          </div>
-
-          {/* Campo: coverage_amount (ejemplo de campo opcional/numérico) */}
-          <div>
-            <label htmlFor="coverage_amount" className="block text-sm font-medium text-gray-700">Monto de Cobertura</label>
-            <input
-              type="number"
-              name="coverage_amount"
-              id="coverage_amount"
-              value={formData.coverage_amount || ''}
-              onChange={handleChange}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              step="0.01"
-            />
-          </div>
-
-          {/* Campo: contract_details (Textarea para JSONB) */}
-          <div className="md:col-span-2">
-            <label htmlFor="contract_details" className="block text-sm font-medium text-gray-700">Detalles del Contrato (JSON o Texto)</label>
-            <textarea
-              name="contract_details"
-              id="contract_details"
-              value={typeof formData.contract_details === 'string' ? formData.contract_details : JSON.stringify(formData.contract_details, null, 2) || ''}
-              onChange={handleContractDetailsChange}
-              rows={5}
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono"
-              placeholder="Introduce detalles adicionales en formato JSON o texto plano..."
-            ></textarea>
-            <p className="mt-2 text-xs text-gray-500">
-              Si introduces un JSON válido, se guardará como objeto; de lo contrario, se guardará como texto.
-            </p>
-          </div>
-
-          {/* Puedes añadir más campos del formulario aquí, siguiendo el patrón */}
-          {/* Por ejemplo, para booleanos (checkbox): */}
-          {/*
-          <div className="flex items-center">
-            <input
-              id="ad_d_included"
-              name="ad_d_included"
-              type="checkbox"
-              checked={formData.ad_d_included || false}
-              onChange={handleChange}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="ad_d_included" className="ml-2 block text-sm text-gray-900">
-              AD&D Incluido
-            </label>
-          </div>
-          */}
-
+                <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+                    <button
+                        type="button" // Cambiado a type="button" para evitar envío de formulario
+                        onClick={() => navigate('/admin/dashboard/policies')} // Navega a la lista de pólizas
+                        className="px-6 py-3 border border-gray-300 rounded-md shadow-sm text-lg font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="px-6 py-3 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {saving ? 'Guardando...' : 'Guardar Cambios'}
+                    </button>
+                </div>
+            </form>
         </div>
-
-        {/* Mensajes de estado */}
-        {submitting && <p className="text-blue-600 mt-4">Guardando cambios...</p>}
-        {error && <p className="text-red-600 mt-4">{error}</p>}
-        {success && <p className="text-green-600 mt-4">{success}</p>}
-
-        {/* Botones de acción */}
-        <div className="mt-8 flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={() => navigate(`/admin/dashboard/policies/${id}`)}
-            className="px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            disabled={submitting}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-            disabled={submitting}
-          >
-            {submitting ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
+    );
 }

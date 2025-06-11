@@ -167,12 +167,6 @@ export default function ClientPolicyList() {
                     >
                       Ver detalles
                     </Link>
-                    <Link
-  to={`/client/dashboard/policies/${policy.id}/edit`} // <--- ¡CAMBIO AQUÍ!
-  className="text-indigo-600 hover:text-indigo-900"
->
-  Editar
-</Link>
                   </td>
                 </tr>
               ))}

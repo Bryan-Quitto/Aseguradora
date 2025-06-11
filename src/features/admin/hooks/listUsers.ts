@@ -17,6 +17,7 @@ export async function listUsers(): Promise<{ data: UserProfile[] | null; error: 
 
   return { data: data as UserProfile[], error: null };
 }
+
 export async function listOnlyUsuarios(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
@@ -30,6 +31,7 @@ export async function listOnlyUsuarios(): Promise<{ data: UserProfile[] | null; 
 
   return { data: data as UserProfile[], error: null };
 }
+
 export async function listOnlyAgentes(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
@@ -43,11 +45,13 @@ export async function listOnlyAgentes(): Promise<{ data: UserProfile[] | null; e
 
   return { data: data as UserProfile[], error: null };
 }
+
 export async function listOnlyAdmins(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
-    .eq('role', 'admin'); // Solo usuarios con rol 'admin'
+    // CAMBIO CLAVE: Usa el operador 'in' para incluir 'admin' y 'superadministrator'
+    .in('role', ['admin', 'superadministrator']); // <<-- ¡Este es el cambio!
 
   if (error) {
     console.error('Error al obtener solo administradores:', error.message);

@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useAuth } from 'src/contexts/AuthContext'; // Asume que tienes un contexto de autenticación
 
-// Importa los nuevos formularios genéricos
-import GenericLifePolicyForm from './GenericLifePolicyForm';
-import GenericHealthPolicyForm from './GenericHealthPolicyForm';
+// Importa los nuevos formularios genéricos adaptados para el administrador
+import AdminGenericLifePolicyForm from './AdminGenericLifePolicyForm';
+import AdminGenericHealthPolicyForm from './AdminGenericHealthPolicyForm';
 
 // Define la interfaz para los productos de seguro, coincidiendo con tu tabla 'insurance_products'
 interface InsuranceProduct {
@@ -69,13 +69,12 @@ async function getActiveInsuranceProducts(): Promise<{ data: InsuranceProduct[] 
 
 
 /**
- * Componente para el formulario de creación de una nueva póliza por un agente.
- * Permite al agente seleccionar un producto de seguro y luego renderiza el formulario
+ * Componente para el formulario de creación de una nueva póliza por un administrador.
+ * Permite al administrador seleccionar un producto de seguro y luego renderiza el formulario
  * genérico correspondiente (Vida o Salud) para completar los detalles de la póliza.
  */
-export default function AgentPolicyForm() {
-    // const navigate = useNavigate(); // Descomentar si se necesita navegación
-    const { user } = useAuth(); // Obtener el usuario autenticado (agente)
+export default function AdminPolicyForm() {
+    const { user } = useAuth(); // Obtener el usuario autenticado (administrador)
 
     const [products, setProducts] = useState<InsuranceProduct[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
@@ -94,7 +93,7 @@ export default function AgentPolicyForm() {
                     const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
                     const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
                     supabase = createClient(supabaseUrl, supabaseAnonKey);
-                    console.log("Cliente de Supabase inicializado en AgentPolicyForm.");
+                    console.log("Cliente de Supabase inicializado en AdminPolicyForm.");
                 }
 
                 // Cargar productos de seguro activos
@@ -162,7 +161,7 @@ export default function AgentPolicyForm() {
         return (
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative m-4" role="alert">
                 <strong className="font-bold">Advertencia:</strong>
-                <span className="block sm:inline"> No se pudo obtener el ID del agente. Asegúrese de estar autenticado.</span>
+                <span className="block sm:inline"> No se pudo obtener el ID del usuario. Asegúrese de estar autenticado.</span>
             </div>
         );
     }
@@ -209,10 +208,10 @@ export default function AgentPolicyForm() {
                     </div>
                     {/* Renderizado condicional de formularios genéricos */}
                     {selectedProduct.type === 'life' && (
-                        <GenericLifePolicyForm product={selectedProduct} agentId={user.id} />
+                        <AdminGenericLifePolicyForm product={selectedProduct} agentId={user.id} />
                     )}
                     {selectedProduct.type === 'health' && (
-                        <GenericHealthPolicyForm product={selectedProduct} agentId={user.id} />
+                        <AdminGenericHealthPolicyForm product={selectedProduct} agentId={user.id} />
                     )}
                     {/* Puedes añadir un mensaje si el tipo no está soportado */}
                     {selectedProduct.type !== 'life' && selectedProduct.type !== 'health' && (
