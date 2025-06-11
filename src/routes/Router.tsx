@@ -50,8 +50,6 @@ const AdminPolicyForm = Loadable(lazy(() => import('../features/admin/AdminPolic
 
 const AdminInsuranceList = Loadable(lazy(() => import('../features/admin/AdminInsuranceList')));
 
-// ✅ NUEVA LÍNEA: Importación del componente AdminEditInsurance
-
 const AdminEditInsurance = Loadable(lazy(() => import('../features/admin/AdminEditInsurance')));
 
 

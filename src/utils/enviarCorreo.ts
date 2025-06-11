@@ -10,10 +10,10 @@ import emailjs from 'emailjs-com';
 export async function enviarCorreo(from_email: string, to_email: string, name: string): Promise<void> {
   const message = `Estimado/a ${name},
 
-Le contacto desde el sistema de gestión de usuarios de SGSeguros para tratar asuntos administrativos relacionados con su cuenta. Si tiene alguna consulta o requiere información adicional, por favor no dude en responder a este correo.
+Le contacto desde el sistema de gestión de usuarios de Savalta para tratar asuntos administrativos relacionados con su cuenta. Si tiene alguna consulta o requiere información adicional, por favor no dude en responder a este correo.
 
 Saludos cordiales,
-Equipo SGSeguros`;
+Equipo Savalta`;
 
   await emailjs.send(
     'service_po5arne',        // Service ID

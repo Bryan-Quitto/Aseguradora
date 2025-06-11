@@ -16,7 +16,7 @@ const FullLayout: FC = () => {
       <Topbar />
       {/* Contenedor principal de la página. Asegúrate de que este div pueda crecer horizontalmente si es necesario. */}
       {/* Puedes agregar 'flex-grow' aquí si este div es parte de un flex column padre para que ocupe el espacio. */}
-      <div className={`flex w-full min-h-screen dark:bg-darkgray ${isLandingPage ? 'no-sidebar-layout' : ''}`}>
+      <div className={`flex w-full min-h-screen bg-blue-50 dark:bg-dark ${isLandingPage ? 'no-sidebar-layout' : ''}`}>
         <div className="page-wrapper flex w-full">
           {/* Header/sidebar */}
           {!isLandingPage && <Sidebar />} {/* Renderiza Sidebar condicionalmente */}
@@ -27,17 +27,12 @@ const FullLayout: FC = () => {
             {!isLandingPage && !isAdminDashboard && <Header />}
 
             {/* Contenedor del contenido del cuerpo. Aquí es donde se agrega el overflow-x-auto. */}
-            {/* ✅ AÑADIDO: overflow-x-auto */}
-            <div
-              className={`bg-lightgray dark:bg-dark h-full overflow-x-auto`} // <-- ¡AQUÍ ESTÁ EL CAMBIO!
-            >
+            <div className="h-full min-h-screen overflow-x-auto">
               {/* Body Content */}
-              <div
-                className={`w-full`} // Este 'w-full' asegura que el contenido interno de la página ocupe el 100% del ancho del contenedor, que ahora puede hacer scroll.
-              >
+              <div className="w-full">
                 <ScrollToTop>
-                  <div className="container py-30">
-                    <Outlet/> {/* Aquí se renderiza el contenido de tu ruta actual */}
+                  <div className="w-full px-4 py-8">
+                    <Outlet /> {/* Aquí se renderiza el contenido de tu ruta actual */}
                   </div>
                 </ScrollToTop>
               </div>
