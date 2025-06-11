@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { createClient } from '@supabase/supabase-js';
 
 // Importa los componentes de lista de beneficiarios y dependientes y sus interfaces
 import BeneficiaryInputList from '../../policies/components/BeneficiaryInputList';
@@ -8,153 +7,23 @@ import { Beneficiary } from '../../policies/components/BeneficiaryInput';
 import DependentInputList from '../../policies/components/DependentInputList';
 import { Dependent } from '../../policies/components/DependentInput';
 
-// Declaraciones globales de Supabase (si es que no están disponibles de otra manera)
-declare const __app_id: string | undefined;
-declare const __firebase_config: string | undefined;
-declare const __initial_auth_token: string | undefined;
-
-// Instancia del cliente de Supabase
-let supabase: any = null;
-
-// Interfaces de datos (asegúrate de que estas interfaces coincidan con tu esquema de Supabase)
-interface Policy {
-    id: string;
-    policy_number: string;
-    client_id: string;
-    agent_id: string | null;
-    product_id: string;
-    start_date: string;
-    end_date: string;
-    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
-    premium_amount: number;
-    payment_frequency: 'monthly' | 'quarterly' | 'annually';
-    contract_details: string | null;
-    created_at: string;
-    updated_at: string;
-    num_dependents: number | null;
-    dependents_details: Dependent[] | null;
-    beneficiaries: Beneficiary[] | null;
-    age_at_inscription: number | null;
-    ad_d_coverage: number | null;
-    ad_d_included: boolean | null;
-    coverage_amount: number | null;
-    wellness_rebate: number | null;
-    max_age_inscription: number | null;
-    num_beneficiaries: number | null;
-    deductible: number | null;
-    coinsurance: number | null;
-    max_annual: number | null;
-    has_dental: boolean | null;
-    has_dental_basic: boolean | null;
-    has_dental_premium: boolean | null;
-    has_vision: boolean | null;
-    has_vision_basic: boolean | null;
-    has_vision_full: boolean | null;
-    wants_dental_premium: boolean | null;
-    wants_vision: boolean | null;
-}
-
-interface InsuranceProduct {
-    id: string;
-    name: string;
-    type: 'life' | 'health' | 'other';
-    description: string | null;
-    duration_months: number | null;
-    coverage_details: {
-        coverage_amount?: number;
-        ad_d_included?: boolean;
-        ad_d_coverage_amount?: number;
-        wellness_rebate_percentage?: number;
-        max_age_for_inscription?: number;
-        max_beneficiaries?: number;
-        deductible?: number;
-        coinsurance_percentage?: number;
-        max_annual_out_of_pocket?: number;
-        includes_dental_basic?: boolean;
-        includes_dental_premium?: boolean;
-        includes_vision_basic?: boolean;
-        includes_vision_full?: boolean;
-        max_dependents?: number;
-        [key: string]: any;
-    };
-    base_premium: number;
-    currency: string;
-    terms_and_conditions: string | null;
-    is_active: boolean;
-    admin_notes: string | null;
-    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
-    created_at: string;
-    updated_at: string;
-}
-
-interface ClientProfile {
-    user_id: string;
-    primer_nombre: string | null;
-    segundo_nombre: string | null;
-    primer_apellido: string | null;
-    segundo_apellido: string | null;
-    full_name: string | null;
-    email: string | null;
-    phone_number: string | null;
-}
-
-/**
- * Función para obtener póliza por ID desde Supabase.
- */
-async function getPolicyById(policyId: string): Promise<{ data: Policy | null; error: any }> {
-    if (!supabase) {
-        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-        supabase = createClient(supabaseUrl, supabaseAnonKey);
-    }
-    const { data, error } = await supabase
-        .from('policies')
-        .select('*')
-        .eq('id', policyId)
-        .single();
-    return { data, error };
-}
-
-/**
- * Función para obtener producto de seguro por ID desde Supabase.
- */
-async function getInsuranceProductById(productId: string): Promise<{ data: InsuranceProduct | null; error: any }> {
-    if (!supabase) {
-        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-        supabase = createClient(supabaseUrl, supabaseAnonKey);
-    }
-    const { data, error } = await supabase
-        .from('insurance_products')
-        .select('*')
-        .eq('id', productId)
-        .single();
-    return { data, error };
-}
-
-/**
- * Función para obtener perfil de cliente por ID desde Supabase.
- */
-async function getClientProfileById(clientId: string): Promise<{ data: ClientProfile | null; error: any }> {
-    if (!supabase) {
-        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-        supabase = createClient(supabaseUrl, supabaseAnonKey);
-    }
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email, phone_number')
-        .eq('user_id', clientId)
-        .single();
-    return { data, error };
-}
-
+// Importa las funciones de manejo de datos y las interfaces desde un archivo centralizado
+// Es crucial que 'policy_management.ts' (o similar) exista y contenga estas definiciones y funciones.
+import {
+    Policy,
+    InsuranceProduct,
+    ClientProfile,
+    getPolicyById,
+    getInsuranceProductById,
+    getClientProfileById,
+    updatePolicy, // Función para actualizar la póliza
+} from '../../policies/policy_management'; // Asegúrate de que esta ruta sea correcta
 
 /**
  * Componente para que un agente edite los detalles de una póliza específica.
  */
 export default function AgentEditPolicy() {
-    // CAMBIO CLAVE AQUÍ: Usar 'policyId' directamente del useParams
+    // Usar 'policyId' directamente del useParams
     const { policyId } = useParams<{ policyId: string }>(); 
     const navigate = useNavigate(); // Para la navegación después de la edición
 
@@ -175,22 +44,9 @@ export default function AgentEditPolicy() {
     const [message, setMessage] = useState<string | null>(null);
 
     /**
-     * Hook useEffect para inicializar el cliente de Supabase y cargar los datos de la póliza.
+     * Hook useEffect para cargar los datos de la póliza.
      */
     useEffect(() => {
-        const initializeSupabaseClient = async () => {
-            try {
-                if (!supabase) {
-                    const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-                    const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
-                    supabase = createClient(supabaseUrl, supabaseAnonKey);
-                }
-            } catch (err: any) {
-                console.error("Error al inicializar Supabase:", err);
-                setError("Error al inicializar la aplicación. Verifique la configuración de Supabase.");
-            }
-        };
-
         const fetchPolicyData = async () => {
             if (!policyId) {
                 setError('ID de póliza no proporcionado.');
@@ -200,52 +56,58 @@ export default function AgentEditPolicy() {
 
             setLoading(true);
             setError(null);
+            setMessage(null); // Limpiar mensajes al cargar nueva póliza
 
-            // 1. Obtener los detalles de la póliza
-            const { data: policyData, error: policyError } = await getPolicyById(policyId);
-            if (policyError) {
-                console.error(`Error al obtener póliza con ID ${policyId}:`, policyError);
-                setError('Error al cargar los detalles de la póliza. Por favor, inténtalo de nuevo.');
+            try {
+                // 1. Obtener los detalles de la póliza
+                const { data: policyData, error: policyError } = await getPolicyById(policyId);
+                if (policyError) {
+                    console.error(`Error al obtener póliza con ID ${policyId}:`, policyError);
+                    setError('Error al cargar los detalles de la póliza. Por favor, inténtalo de nuevo.');
+                    setLoading(false);
+                    return;
+                }
+                if (!policyData) {
+                    setError('Póliza no encontrada.');
+                    setLoading(false);
+                    return;
+                }
+
+                setPolicy(policyData);
+                setStatus(policyData.status);
+                setContractDetails(policyData.contract_details || '');
+                setAgeAtInscription(policyData.age_at_inscription?.toString() || '');
+                setBeneficiaries(policyData.beneficiaries || []);
+                setDependents(policyData.dependents_details || []);
+
+                // 2. Obtener los detalles del producto asociado
+                const { data: productData, error: productError } = await getInsuranceProductById(policyData.product_id);
+                if (productError) {
+                    console.error(`Error al obtener producto con ID ${policyData.product_id}:`, productError);
+                    setProduct(null);
+                } else {
+                    setProduct(productData);
+                }
+
+                // 3. Obtener los detalles del cliente asociado
+                const { data: clientData, error: clientError } = await getClientProfileById(policyData.client_id);
+                if (clientError) {
+                    console.error(`Error al obtener cliente con ID ${policyData.client_id}:`, clientError);
+                    setClient(null);
+                } else {
+                    setClient(clientData);
+                }
+
+            } catch (err: any) {
+                console.error("Error general al cargar datos de póliza:", err);
+                setError(`Error inesperado al cargar la póliza: ${err.message}`);
+            } finally {
                 setLoading(false);
-                return;
             }
-            if (!policyData) {
-                setError('Póliza no encontrada.');
-                setLoading(false);
-                return;
-            }
-
-            setPolicy(policyData);
-            setStatus(policyData.status);
-            setContractDetails(policyData.contract_details || '');
-            setAgeAtInscription(policyData.age_at_inscription?.toString() || '');
-            setBeneficiaries(policyData.beneficiaries || []);
-            setDependents(policyData.dependents_details || []);
-
-            // 2. Obtener los detalles del producto asociado
-            const { data: productData, error: productError } = await getInsuranceProductById(policyData.product_id);
-            if (productError) {
-                console.error(`Error al obtener producto con ID ${policyData.product_id}:`, productError);
-                setProduct(null);
-            } else {
-                setProduct(productData);
-            }
-
-            // 3. Obtener los detalles del cliente asociado
-            const { data: clientData, error: clientError } = await getClientProfileById(policyData.client_id);
-            if (clientError) {
-                console.error(`Error al obtener cliente con ID ${policyData.client_id}:`, clientError);
-                setClient(null);
-            } else {
-                setClient(clientData);
-            }
-
-            setLoading(false);
         };
 
-        initializeSupabaseClient();
         fetchPolicyData();
-    }, [policyId]);
+    }, [policyId]); // Dependencia: re-ejecutar cuando cambie policyId
 
     /**
      * Maneja el envío del formulario para actualizar la póliza.
@@ -253,11 +115,11 @@ export default function AgentEditPolicy() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
-        setMessage(null);
-        setError(null);
+        setMessage(null); // Limpiar mensaje previo
+        setError(null); // Limpiar error previo
 
-        if (!supabase) {
-            setError("Error: Cliente de Supabase no inicializado.");
+        if (!policyId) {
+            setError("Error: ID de póliza no disponible para guardar.");
             setSaving(false);
             return;
         }
@@ -268,20 +130,19 @@ export default function AgentEditPolicy() {
         }
         // Validar que 'product' no sea null antes de acceder a sus propiedades
         if (!product) {
-            setError("Error: Producto de seguro no cargado.");
+            setError("Error: Producto de seguro no cargado. No se pueden validar los campos específicos.");
             setSaving(false);
             return;
         }
 
-
         // Validaciones específicas para cada tipo de póliza
-        let updatedBeneficiaries = policy.beneficiaries;
-        let updatedDependents = policy.dependents_details;
-        let updatedNumBeneficiaries = policy.num_beneficiaries;
-        let updatedNumDependents = policy.num_dependents;
+        // Las declaramos con tipo explícito `| null` para el caso de que deban ser nulas
+        let updatedBeneficiaries: Beneficiary[] | null = beneficiaries;
+        let updatedDependents: Dependent[] | null = dependents;
+        let updatedNumBeneficiaries: number | null = beneficiaries.length;
+        let updatedNumDependents: number | null = dependents.length;
 
         if (product.type === 'life') {
-            // Validar beneficiarios
             const totalBeneficiaryPercentage = beneficiaries.reduce((sum, b) => {
                 const percentage = typeof b.percentage === 'number' ? b.percentage : 0;
                 return sum + percentage;
@@ -297,20 +158,19 @@ export default function AgentEditPolicy() {
                 setSaving(false);
                 return;
             }
-            // Usar optional chaining y nullish coalescing para un acceso seguro
             if (product.coverage_details?.max_beneficiaries !== null && product.coverage_details?.max_beneficiaries !== 0 && beneficiaries.length > (product.coverage_details?.max_beneficiaries ?? Infinity)) {
                 setError(`El número de beneficiarios excede el límite permitido por el producto (${product.coverage_details.max_beneficiaries}).`);
                 setSaving(false);
                 return;
             }
+            // Para pólizas de vida, los dependientes deben ser null
             updatedBeneficiaries = beneficiaries;
             updatedNumBeneficiaries = beneficiaries.length;
-            updatedDependents = null; // Asegurar que sea null para pólizas de vida
-            updatedNumDependents = null; // Asegurar que sea null para pólizas de vida
+            updatedDependents = null; 
+            updatedNumDependents = null; 
 
         } else if (product.type === 'health') {
             // Validar dependientes
-            // Usar optional chaining y nullish coalescing para un acceso seguro
             if (product.coverage_details?.max_dependents !== null && dependents.length > (product.coverage_details?.max_dependents ?? Infinity)) {
                 setError(`El número de dependientes excede el límite permitido por el producto (${product.coverage_details.max_dependents}).`);
                 setSaving(false);
@@ -321,10 +181,11 @@ export default function AgentEditPolicy() {
                 setSaving(false);
                 return;
             }
+            // Para pólizas de salud, los beneficiarios deben ser null
             updatedDependents = dependents;
             updatedNumDependents = dependents.length;
-            updatedBeneficiaries = null; // Asegurar que sea null para pólizas de salud
-            updatedNumBeneficiaries = null; // Asegurar que sea null para pólizas de salud
+            updatedBeneficiaries = null; 
+            updatedNumBeneficiaries = null; 
         }
 
         // Preparar los datos para la actualización
@@ -340,17 +201,15 @@ export default function AgentEditPolicy() {
         };
 
         try {
-            const { error: updateError } = await supabase
-                .from('policies')
-                .update(updatedPolicyData)
-                .eq('id', policyId);
+            // Llamar a la función updatePolicy que encapsula la lógica de Supabase
+            const { error: updateError } = await updatePolicy(policyId, updatedPolicyData);
 
             if (updateError) {
                 throw updateError;
             }
 
             setMessage("Póliza actualizada exitosamente.");
-            // Opcional: Navegar de vuelta a la página de detalles después de guardar
+            // Navegar de vuelta a la página de detalles después de guardar
             navigate(`/agent/dashboard/policies/${policyId}`);
 
         } catch (err: any) {
@@ -366,6 +225,10 @@ export default function AgentEditPolicy() {
         if (!s) return 'N/A';
         return s.charAt(0).toUpperCase() + s.slice(1);
     };
+
+    // Determinar maxBeneficiaries y maxDependents para los componentes de lista
+    const policyMaxBeneficiaries: number | null = product?.coverage_details?.max_beneficiaries ?? null;
+    const policyMaxDependents: number | null = product?.coverage_details?.max_dependents ?? null;
 
     if (loading) {
         return (
@@ -397,19 +260,16 @@ export default function AgentEditPolicy() {
         );
     }
 
-    // Determinar maxBeneficiaries y maxDependents para los componentes de lista
-    const policyMaxBeneficiaries: number | null = product?.coverage_details?.max_beneficiaries ?? null;
-    const policyMaxDependents: number | null = product?.coverage_details?.max_dependents ?? null;
-
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold text-blue-700">Editar Póliza: {policy.policy_number}</h2>
+                {/* Botón para volver a la lista de pólizas (similar al del administrador) */}
                 <Link
-                    to={`/agent/dashboard/policies/${policyId}`}
+                    to="/agent/dashboard/policies" // Navega a la lista de pólizas
                     className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition duration-300 shadow-md"
                 >
-                    Volver a Detalles
+                    Volver a Pólizas
                 </Link>
             </div>
 
@@ -557,14 +417,23 @@ export default function AgentEditPolicy() {
                     </div>
                 )}
 
-                {/* Botón de Guardar Cambios */}
-                <button
-                    type="submit"
-                    disabled={saving}
-                    className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {saving ? 'Guardando...' : 'Guardar Cambios'}
-                </button>
+                {/* Botón de Guardar Cambios y Cancelar */}
+                <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200">
+                    <button
+                        type="button" // Cambiado a type="button" para evitar envío de formulario
+                        onClick={() => navigate('/agent/dashboard/policies')} // Navega a la lista de pólizas
+                        className="px-6 py-3 border border-gray-300 rounded-md shadow-sm text-lg font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="px-6 py-3 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {saving ? 'Guardando...' : 'Guardar Cambios'}
+                    </button>
+                </div>
             </form>
         </div>
     );
