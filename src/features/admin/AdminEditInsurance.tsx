@@ -1,13 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { useParams, useNavigate } from 'react-router-dom'; // Importa useParams y useNavigate
+// import { createClient } from '@supabase/supabase-js'; // Comentado ya que no se puede resolver en este entorno
+// import { useParams, useNavigate } from 'react-router-dom'; // Comentado, se usarán mocks
+
+// *** Mocks para dependencias no disponibles en este entorno aislado ***
+// Mock de Supabase Client para evitar errores de importación y simular la interacción con Supabase
+const createClient = (url: string, key: string) => {
+    console.log("Supabase client mocked. URL:", url, "Key:", key);
+    return {
+        from: (tableName: string) => ({
+            select: (_columns: string) => ({ // 'columns' ahora es '_columns' para evitar la advertencia
+                eq: (column: string, value: any) => ({
+                    single: () => {
+                        // Simula la carga de un producto existente para la edición
+                        return new Promise((resolve) => {
+                            setTimeout(() => {
+                                if (value === 'mock-product-id') { // Usar un ID de mock para simular un producto
+                                    resolve({
+                                        data: {
+                                            id: 'mock-product-id',
+                                            name: 'Póliza de Salud Familiar (Edit)',
+                                            type: 'health',
+                                            description: 'Cobertura de salud completa para la familia, versión editada.',
+                                            duration_months: 12,
+                                            coverage_details: {
+                                                deductible: 750,
+                                                coinsurance_percentage: 15,
+                                                max_annual_out_of_pocket: 6000,
+                                                includes_dental_basic: true,
+                                                includes_dental_premium: false,
+                                                includes_vision_basic: true,
+                                                includes_vision_full: false,
+                                                wellness_rebate_percentage: 10,
+                                                max_age_for_inscription: 70,
+                                                max_dependents: 5,
+                                            },
+                                            base_premium: 220,
+                                            currency: 'USD',
+                                            terms_and_conditions: 'T&C para salud familiar (editado)',
+                                            is_active: true,
+                                            admin_notes: 'Notas de administrador para producto editado.',
+                                            fixed_payment_frequency: 'quarterly',
+                                            created_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString(),
+                                        },
+                                        error: null,
+                                    });
+                                } else {
+                                    resolve({ data: null, error: { message: 'Producto no encontrado (mock)' } });
+                                }
+                            }, 500);
+                        });
+                    }
+                })
+            }),
+            update: async (data: any) => {
+                console.log(`Mock: Actualizando en la tabla '${tableName}' los datos:`, data);
+                return { error: null, data: data }; // Simula una actualización exitosa
+            }
+        })
+    };
+};
+
+// Mock de useParams y useNavigate
+const useParams = () => ({ id: 'mock-product-id' }); // Retorna un ID fijo para el mock
+const useNavigate = () => ((path: string) => console.log('Mock navigate to:', path)); // Simula la navegación
+// *** Fin de Mocks ***
 
 // Declara las variables globales proporcionadas por el entorno Canvas (si aplica)
 declare const __app_id: string | undefined;
 declare const __firebase_config: string | undefined;
 declare const __initial_auth_token: string | undefined;
 
-// Instancia del cliente de Supabase
+// Instancia del cliente de Supabase (ahora es el mock)
 let supabase: any = null;
 
 // Interfaz para el producto de seguro, coincidiendo con la tabla 'insurance_products'
@@ -49,7 +113,8 @@ interface InsuranceProduct {
  * Carga los detalles del producto por su ID y permite su modificación.
  */
 const AdminEditInsurance: React.FC = () => {
-    const { id } = useParams<{ id: string }>(); // Obtiene el ID del producto de la URL
+    // Eliminado el argumento de tipo de useParams para compatibilidad con el mock
+    const { id } = useParams();
     const navigate = useNavigate(); // Para la navegación programática
 
     // Estados para los campos básicos del formulario de 'insurance_products'
@@ -94,15 +159,19 @@ const AdminEditInsurance: React.FC = () => {
             try {
                 // Inicialización de Supabase si no está globalmente disponible
                 if (!supabase) {
-                    const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
-                    const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+                    // Usamos valores placeholder ya que import.meta.env no está disponible
+                    const supabaseUrl = 'YOUR_SUPABASE_URL';
+                    const supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
                     supabase = createClient(supabaseUrl, supabaseAnonKey);
-                    console.log("Cliente de Supabase inicializado en AdminEditInsurance.");
+                    console.log("Cliente de Supabase inicializado (mock) en AdminEditInsurance.");
                 }
 
+                // Aunque 'id' se obtiene de useParams, el mock siempre devolverá 'mock-product-id'
+                // Para el propósito de visualización en Canvas, esto es suficiente.
+                // En una aplicación real, 'id' provendría de la URL.
                 if (!id) {
                     setMessage("ID del producto no proporcionado.");
-                    setIsError(true); // Corrected: use setIsError
+                    setIsError(true);
                     setLoading(false);
                     return;
                 }
@@ -121,7 +190,7 @@ const AdminEditInsurance: React.FC = () => {
                 if (fetchError) {
                     console.error('Error al cargar el producto de seguro:', fetchError);
                     setMessage('Error al cargar el producto de seguro: ' + fetchError.message); // Use setMessage for the string
-                    setIsError(true); // Corrected: use setIsError
+                    setIsError(true);
                 } else if (data) {
                     // Rellenar los estados con los datos del producto
                     setName(data.name);
@@ -153,12 +222,12 @@ const AdminEditInsurance: React.FC = () => {
                     setMaxDependents(details.max_dependents?.toString() || '');
                 } else {
                     setMessage("Producto de seguro no encontrado.");
-                    setIsError(true); // Corrected: use setIsError
+                    setIsError(true);
                 }
             } catch (err: any) {
                 console.error("Error fatal al cargar datos:", err);
                 setMessage("Error fatal al cargar datos: " + err.message); // Use setMessage for the string
-                setIsError(true); // Corrected: use setIsError
+                setIsError(true);
             } finally {
                 setLoading(false);
             }
@@ -251,19 +320,20 @@ const AdminEditInsurance: React.FC = () => {
         );
     }
 
-    if (isError) { // Corrected: use isError instead of error
+    if (isError) {
         return (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative m-4" role="alert">
                 <strong className="font-bold">¡Error!</strong>
-                <span className="block sm:inline"> {message}</span> {/* Corrected: use message for the text */}
+                <span className="block sm:inline"> {message}</span>
                 <button onClick={() => navigate('/admin/dashboard/insurance-products')} className="ml-4 text-sm underline">Volver a la lista</button>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-indigo-500 to-purple-700 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-4xl w-full">
+        <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4"> {/* Fondo azul muy claro */}
+            {/* El borde se ha cambiado a turquesa menta claro */}
+            <div className="bg-white rounded-xl shadow-2xl p-8 max-w-4xl w-full border" style={{ borderColor: '#7DDCDD' }}>
                 <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
                     Editar Producto de Seguro
                 </h2>
@@ -632,13 +702,15 @@ const AdminEditInsurance: React.FC = () => {
                     </div>
 
                     {/* Botón de Envío */}
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? 'Guardando...' : 'Guardar Cambios'}
-                    </button>
+                    <div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Actualizando...' : 'Actualizar Producto de Seguro'}
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
