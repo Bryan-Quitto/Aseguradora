@@ -127,14 +127,21 @@ export default function AgentPolicyList() {
         </Link>
       </div>
 
-      {/* Barra de búsqueda */}
-      <div className="mb-6 flex justify-end">
+      {/* Barra de búsqueda ahora ocupa todo el ancho */}
+      <div className="mb-6">
         <input
           type="text"
           placeholder="Buscar por cédula..."
-          className="border border-gray-300 rounded-lg px-4 py-2 w-72 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
           value={searchCedula}
-          onChange={e => setSearchCedula(e.target.value)}
+          maxLength={10}
+          inputMode="numeric"
+          pattern="\d*"
+          onChange={e => {
+            // Solo permite números y máximo 10 caracteres
+            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setSearchCedula(value);
+          }}
         />
       </div>
 

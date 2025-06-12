@@ -125,15 +125,9 @@ export default function ListarUsuarios() {
             return users;
         }
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
-        return users.filter(user => {
-            const fullName = `${user.primer_nombre || ''} ${user.segundo_nombre || ''} ${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.toLowerCase();
-            const email = user.email?.toLowerCase() || '';
-            const identification = `${user.tipo_identificacion || ''} ${user.numero_identificacion || ''}`.toLowerCase();
-
-            return fullName.includes(lowerCaseSearchTerm) ||
-                email.includes(lowerCaseSearchTerm) ||
-                identification.includes(lowerCaseSearchTerm);
-        });
+        return users.filter(user =>
+            (user.numero_identificacion || '').toLowerCase().startsWith(lowerCaseSearchTerm)
+        );
     }, [users, searchTerm]);
 
     const handleDeleteUserClick = (userId: string, userName: string | null) => {
@@ -233,15 +227,23 @@ export default function ListarUsuarios() {
     const numberOfColumns = 7;
 
     return (
-        <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 top-0">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
+            <h2 className="text-2xl font-bold mb-4 text-blue-800">Lista General de Usuarios</h2>
             <div className="flex justify-between items-center mb-6 ">
                 <div className="w-1/3">
-                    <TextInput
-                        icon={HiSearch}
-                        placeholder="Buscar por nombre, apellido, email o cédula/pasaporte..."
-                        className="w-full"
+                    <input
+                        type="text"
+                        placeholder="Buscar por cédula..."
+                        className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        maxLength={10}
+                        inputMode="numeric"
+                        pattern="\d*"
+                        onChange={e => {
+                            // Solo permite números y máximo 10 caracteres
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setSearchTerm(value);
+                        }}
                     />
                 </div>
                 <Button color="blue" onClick={() => navigate('/admin/dashboard/create-users')}>
