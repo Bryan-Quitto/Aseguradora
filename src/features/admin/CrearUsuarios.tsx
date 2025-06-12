@@ -88,6 +88,18 @@ interface FormErrors {
   rol?: string;
 }
 
+// Función para limpiar espacios en blanco al inicio/final y entre palabras
+const limpiarEspacios = (valor: string) =>
+  valor.replace(/\s+/g, ' ').trim();
+
+// Función para permitir solo letras y solo una palabra (sin espacios)
+const soloUnaPalabra = (valor: string) => {
+  // Elimina todo lo que no sea letra
+  let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''));
+  // Solo toma la primera "palabra" (sin espacios)
+  return limpio.split(' ')[0] || '';
+};
+
 export default function CrearUsuarios() {
   const [formData, setFormData] = useState<FormData>({
     primerNombre: '',
@@ -135,37 +147,52 @@ export default function CrearUsuarios() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let newValue = value;
+
+    // Aplica limpieza y restricción solo a los campos de nombres y apellidos
+    if (
+      name === 'primerNombre' ||
+      name === 'segundoNombre' ||
+      name === 'primerApellido' ||
+      name === 'segundoApellido'
+    ) {
+      newValue = soloUnaPalabra(value);
+    } else {
+      // Para todos los demás campos, elimina espacios al inicio y final
+      newValue = limpiarEspacios(value);
+    }
+
+    setFormData(prev => ({ ...prev, [name]: newValue }));
 
     const newErrors = { ...errors };
 
     // Validaciones específicas por campo
     if (['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido'].includes(name)) {
-      if (value && !validateName(value)) { // Solo validar si hay valor
-        newErrors[name as keyof FormErrors] = 'Solo se permiten letras';
+      if (newValue && !/^[A-Za-zÁáÉéÍíÓóÚúÑñ]+$/.test(newValue)) {
+        newErrors[name as keyof FormErrors] = 'Solo se permiten letras, sin espacios';
       } else {
         delete newErrors[name as keyof FormErrors];
       }
     } else if (name === 'email') {
-      if (value && !validateEmail(value)) {
+      if (newValue && !validateEmail(newValue)) {
         newErrors.email = 'Email inválido';
       } else {
         delete newErrors.email;
       }
     } else if (name === 'numeroID') {
-      if (value && !validateNumber(value)) {
+      if (newValue && !validateNumber(newValue)) {
         newErrors.numeroID = 'Solo se permiten números';
       } else {
         delete newErrors.numeroID;
       }
     } else if (name === 'fechaNacimiento') {
-      if (value && !validateDate(value)) {
+      if (newValue && !validateDate(newValue)) {
         newErrors.fechaNacimiento = 'Formato AAAA-MM-DD requerido';
       } else {
         delete newErrors.fechaNacimiento;
       }
     } else if (['estatura', 'peso'].includes(name)) {
-      if (value && !validateDecimalNumber(value)) {
+      if (newValue && !validateDecimalNumber(newValue)) {
         newErrors[name as keyof FormErrors] = 'Solo números y un punto decimal';
       } else {
         delete newErrors[name as keyof FormErrors];
@@ -173,11 +200,11 @@ export default function CrearUsuarios() {
     }
 
     // Limpiar errores de campos condicionales si la opción "Otra" no está seleccionada
-    if (name === 'nacionalidad' && value !== 'Otra') {
+    if (name === 'nacionalidad' && newValue !== 'Otra') {
       delete newErrors.nacionalidadOtra;
       setFormData(prev => ({ ...prev, nacionalidadOtra: '' }));
     }
-    if (name === 'lugarNacimiento' && value !== 'Otra') {
+    if (name === 'lugarNacimiento' && newValue !== 'Otra') {
       delete newErrors.lugarNacimientoOtra;
       setFormData(prev => ({ ...prev, lugarNacimientoOtra: '' }));
     }
