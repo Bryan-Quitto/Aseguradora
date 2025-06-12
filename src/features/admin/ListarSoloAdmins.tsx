@@ -40,16 +40,9 @@ export default function ListarSoloAdmins() {
   const filteredUsers = useMemo(() => {
     if (!searchTerm) return users;
     const lower = searchTerm.toLowerCase();
-    return users.filter(user => {
-      const fullName = `${user.primer_nombre || ''} ${user.segundo_nombre || ''} ${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.toLowerCase();
-      const email = user.email?.toLowerCase() || '';
-      const identification = `${user.tipo_identificacion || ''} ${user.numero_identificacion || ''}`.toLowerCase();
-      return (
-        fullName.includes(lower) ||
-        email.includes(lower) ||
-        identification.includes(lower)
-      );
-    });
+    return users.filter(user =>
+      (user.numero_identificacion || '').toLowerCase().startsWith(lower)
+    );
   }, [users, searchTerm]);
 
   const handleEnviarCorreo = async (to_email: string, name: string) => {
@@ -79,12 +72,19 @@ export default function ListarSoloAdmins() {
       <h2 className="text-2xl font-bold mb-4 text-blue-800">Lista de Administradores</h2>
       <div className="flex justify-between items-center mb-6">
         <div className="w-1/3">
-          <TextInput
-            icon={HiSearch}
-            placeholder="Buscar por nombre, apellido, email o cédula/pasaporte..."
-            className="w-full"
+          <input
+            type="text"
+            placeholder="Buscar por cédula..."
+            className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            maxLength={10}
+            inputMode="numeric"
+            pattern="\d*"
+            onChange={e => {
+              // Solo permite números y máximo 10 caracteres
+              const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setSearchTerm(value);
+            }}
           />
         </div>
       </div>

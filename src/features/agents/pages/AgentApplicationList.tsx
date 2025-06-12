@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByAgentId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management'; // Ruta corregida
-import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend'; // Ruta corregida
+import { Policy, getPoliciesByAgentId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
+import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
 
-/**
- * Componente para listar las solicitudes de seguro que un agente debe revisar.
- * Este componente carga las pólizas con estado 'pending' y permite al agente
- * revisarlas y, en una futura implementación, cambiar su estado.
- */
 export default function AgentApplicationList() {
-  const { user } = useAuth(); // Desestructuramos solo 'user' ya que su ID es lo que necesitamos para las llamadas a la DB
+  const { user } = useAuth();
   const [pendingApplications, setPendingApplications] = useState<Policy[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
+  const [clientCedulas, setClientCedulas] = useState<Map<string, string>>(new Map()); // Nuevo estado para cédulas
   const [productNames, setProductNames] = useState<Map<string, string>>(new Map());
+  const [searchCedula, setSearchCedula] = useState(''); // Estado para búsqueda por cédula
 
   useEffect(() => {
     /**
@@ -52,21 +49,25 @@ export default function AgentApplicationList() {
         const uniqueClientIds = new Set(filteredApplications.map(p => p.client_id));
         const uniqueProductIds = new Set(filteredApplications.map(p => p.product_id));
 
-        // Cargar nombres de clientes
+        // Cargar nombres y cédulas de clientes
         const newClientNames = new Map<string, string>(clientNames);
+        const newClientCedulas = new Map<string, string>(clientCedulas);
         const clientPromises = Array.from(uniqueClientIds).map(async (clientId) => {
-          if (!newClientNames.has(clientId)) {
+          if (!newClientNames.has(clientId) || !newClientCedulas.has(clientId)) {
             const { data: clientData, error: clientError } = await getClientProfileById(clientId);
             if (clientError) {
               console.error(`Error al obtener cliente ${clientId}:`, clientError);
               newClientNames.set(clientId, 'Cliente Desconocido');
+              newClientCedulas.set(clientId, '');
             } else if (clientData) {
               newClientNames.set(clientId, clientData.full_name || `${clientData.primer_nombre || ''} ${clientData.primer_apellido || ''}`.trim() || 'Nombre no disponible');
+              newClientCedulas.set(clientId, clientData.numero_identificacion || '');
             }
           }
         });
-        await Promise.all(clientPromises); // Esperar a que se carguen todos los nombres de clientes
+        await Promise.all(clientPromises); // Esperar a que se carguen todos los nombres y cédulas de clientes
         setClientNames(newClientNames);
+        setClientCedulas(newClientCedulas);
 
         // Cargar nombres de productos
         const newProductNames = new Map<string, string>(productNames);
@@ -88,7 +89,14 @@ export default function AgentApplicationList() {
     };
 
     fetchPendingApplications();
-  }, [user?.id]); // La dependencia ahora es user?.id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Filtrar por cédula
+  const filteredApplications = pendingApplications.filter((app) => {
+    const cedula = clientCedulas.get(app.client_id) || '';
+    return searchCedula === '' || cedula.startsWith(searchCedula);
+  });
 
   if (loading) {
     return (
@@ -110,10 +118,27 @@ export default function AgentApplicationList() {
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-blue-700">Solicitudes de póliza pendientes</h2>
-        {/* Podrías añadir un botón para ver todas las pólizas, o para filtrar */}
       </div>
 
-      {pendingApplications.length === 0 ? (
+      {/* Barra de búsqueda por cédula, ahora ocupa todo el ancho */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Buscar por cédula..."
+          className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
+          value={searchCedula}
+          maxLength={10}
+          inputMode="numeric"
+          pattern="\d*"
+          onChange={e => {
+            // Solo permite números y máximo 10 caracteres
+            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setSearchCedula(value);
+          }}
+        />
+      </div>
+
+      {filteredApplications.length === 0 ? (
         <p className="text-lg text-gray-600 text-center py-10">
           No hay solicitudes de póliza pendientes de revisión en este momento.
         </p>
@@ -129,6 +154,9 @@ export default function AgentApplicationList() {
                   Cliente
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cédula
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Producto Solicitado
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -140,13 +168,16 @@ export default function AgentApplicationList() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {pendingApplications.map((app) => (
+              {filteredApplications.map((app) => (
                 <tr key={app.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {app.policy_number}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {clientNames.get(app.client_id) || 'Cargando...'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {clientCedulas.get(app.client_id) || 'Cargando...'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                     {productNames.get(app.product_id) || 'Cargando...'}

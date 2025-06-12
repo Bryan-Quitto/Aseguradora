@@ -171,7 +171,7 @@ export default function AdminInsuranceList() {
     }
 
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-7xl mx-auto border border-blue-100">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
             <h2 className="text-3xl font-bold text-blue-700 mb-8 text-center">Listado de seguros</h2>
 
             {products.length === 0 ? (
@@ -181,7 +181,7 @@ export default function AdminInsuranceList() {
             ) : (
                 <div className="overflow-x-auto relative shadow-md sm:rounded-lg">
                     <table className="w-full text-sm text-left text-gray-500">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                        <thead className="text-xs text-gray-700 uppercase bg-blue-50">
                             <tr>
                                 <th scope="col" className="py-3 px-6">Nombre</th>
                                 <th scope="col" className="py-3 px-6">Tipo</th>
