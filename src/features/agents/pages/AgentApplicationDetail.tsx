@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy } from '../../policies/policy_management';
 import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
-import { useAuth } from 'src/contexts/AuthContext'; // Para obtener el ID del agente si es necesario para acciones
+import { useAuth } from 'src/contexts/AuthContext';
+import { enviarLinkFirma } from 'src/utils/enviarLinkFirma';
+
 
 /**
  * Componente para mostrar los detalles de una solicitud de póliza pendiente
@@ -82,7 +84,7 @@ export default function AgentApplicationDetail() {
    * @param newStatus El nuevo estado de la póliza ('active' o 'rejected').
    */
   const handleStatusUpdate = async (newStatus: 'active' | 'rejected') => {
-    if (!application || !user?.id) {
+    if (!application || !user?.id || !client) {
       setError('No se pudo procesar la solicitud. Faltan datos.');
       return;
     }
@@ -98,19 +100,37 @@ export default function AgentApplicationDetail() {
       updated_at: new Date().toISOString(), // Actualizar la fecha de modificación
     };
 
-    const { data, error: updateError } = await updatePolicy(application.id, updates);
+    try {
+      const { data, error: updateError } = await updatePolicy(application.id, updates);
 
-    if (updateError) {
-      console.error(`Error al actualizar estado de la solicitud ${application.id}:`, updateError);
-      setError(`Error al ${newStatus === 'active' ? 'aprobar' : 'rechazar'} la solicitud: ${updateError.message}`);
-    } else if (data) {
-      setApplication(data); // Actualizar el estado local de la póliza
-      setActionMessage(`Solicitud ${data.policy_number} ${newStatus === 'active' ? 'aprobada' : 'rechazada'} exitosamente.`);
-      setTimeout(() => {
-        navigate('/agent/dashboard/applications'); // Redirigir al listado de solicitudes
-      }, 2000);
+      if (updateError) {
+        throw new Error(`Error al ${newStatus === 'active' ? 'aprobar' : 'rechazar'} la solicitud: ${updateError.message}`);
+      }
+
+      if (data) {
+        setApplication(data);
+
+        // Si la póliza fue aprobada, enviar el magic link para firma
+        if (newStatus === 'active' && client.email) {
+          const { success, message } = await enviarLinkFirma(client.email, data.id);
+
+          if (!success) {
+            setError(`La póliza fue aprobada pero hubo un error al enviar el enlace de firma: ${message}`);
+          } else {
+            setActionMessage(
+              `Solicitud ${data.policy_number} aprobada exitosamente. Se ha enviado un enlace de firma al correo ${client.email}`
+            );
+          }
+        } else if (newStatus === 'rejected') {
+          setActionMessage(`Solicitud ${data.policy_number} rechazada exitosamente.`);
+        }
+      }
+    } catch (error) {
+      console.error('Error en handleStatusUpdate:', error);
+      setError(error instanceof Error ? error.message : 'Error al procesar la solicitud');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (loading) {
@@ -173,11 +193,10 @@ export default function AgentApplicationDetail() {
           <p className="mb-2"><strong className="font-medium">Fecha de Fin Sugerida:</strong> {application.end_date}</p>
           <p className="mb-2"><strong className="font-medium">Monto de Prima Sugerido:</strong> ${application.premium_amount.toFixed(2)} {application.payment_frequency.charAt(0).toUpperCase() + application.payment_frequency.slice(1)}</p>
           <p className="mb-2"><strong className="font-medium">Estado Actual:</strong>
-            <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-              application.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+            <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${application.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
               application.status === 'active' ? 'bg-green-100 text-green-800' :
-              'bg-red-100 text-red-800'
-            }`}>
+                'bg-red-100 text-red-800'
+              }`}>
               {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
             </span>
           </p>

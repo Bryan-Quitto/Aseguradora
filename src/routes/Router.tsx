@@ -96,6 +96,8 @@ const ClientPolicyForm = Loadable(lazy(() => import('../features/clients/pages/C
 
 const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyDetail')));
 
+const ContractSignature = Loadable(lazy(() => import('../features/clients/pages/ContractSignature')));
+
 
 
 
@@ -128,9 +130,9 @@ import { useAuth } from '../contexts/AuthContext'; // Importa useAuth desde la n
 
 interface PrivateRouteProps {
 
-    children: React.ReactNode;
+    children: React.ReactNode;
 
-    allowedRoles?: string[];
+    allowedRoles?: string[];
 
 }
 
@@ -138,39 +140,39 @@ interface PrivateRouteProps {
 
 const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
 
-    const { user, loading, userRole } = useAuth();
+    const { user, loading, userRole } = useAuth();
 
 
 
-    if (loading) {
+    if (loading) {
 
-        return <div>Cargando...</div>;
+        return <div>Cargando...</div>;
 
-    }
-
-
-
-    if (!user) {
-
-        return <Navigate to="/auth/login" />;
-
-    }
+    }
 
 
 
-    const currentUserRole = userRole;
+    if (!user) {
+
+        return <Navigate to="/auth/login" />;
+
+    }
 
 
 
-    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
-
-        return <Navigate to="/access-denied" />;
-
-    }
+    const currentUserRole = userRole;
 
 
 
-    return children;
+    if (allowedRoles && currentUserRole && !allowedRoles.includes(currentUserRole)) {
+
+        return <Navigate to="/access-denied" />;
+
+    }
+
+
+
+    return children;
 
 };
 
@@ -257,6 +259,14 @@ const Router = [
                 element: (
                     <PrivateRoute allowedRoles={['admin']}> {/* También podrías añadir 'superadministrator' aquí si esta ruta es relevante */}
                         <DashboardAdmin />
+                    </PrivateRoute>
+                ),
+            },
+            {
+                path: 'contract-signature',
+                element: (
+                    <PrivateRoute>
+                        <ContractSignature />
                     </PrivateRoute>
                 ),
             },
