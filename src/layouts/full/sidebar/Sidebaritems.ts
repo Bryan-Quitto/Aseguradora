@@ -206,6 +206,14 @@ const SidebarContent: MenuItem[] = [
                 isPro: false,
                 requiredRole: "client",
             },
+            {
+                name: "Subir Documentacion",
+                icon: "solar:document-add-line-duotone",
+                id: uniqueId(),
+                url: "/client/dashboard/documents",
+                isPro: false,
+                requiredRole: "client",
+            },
         ],
     },
 ];

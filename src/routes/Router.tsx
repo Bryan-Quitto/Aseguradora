@@ -100,6 +100,7 @@ const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages
 
 const ContractSignature = Loadable(lazy(() => import('../features/clients/pages/ContractSignature')));
 
+const ClientDocumentUpload = Loadable(lazy(() => import('../features/clients/pages/ClientDocumentUpload')));
 
 
 
@@ -252,6 +253,7 @@ const Router = [
                     { path: 'policies/new', element: <ClientPolicyForm /> },
                     { path: 'policies/:id', element: <ClientPolicyDetail /> },
                     { path: 'policies', element: <ClientPolicyList /> },
+                    { path: 'documents', element: <ClientDocumentUpload /> },
                     { path: '', element: <Navigate to="policies" /> },
                 ]
             },

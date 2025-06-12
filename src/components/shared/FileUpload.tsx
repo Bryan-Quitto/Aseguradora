@@ -15,7 +15,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
   id,
   name,
   label,
-  accept = "image/*",
+  accept = "*/*",
   multiple = false,
   onChange,
   required = false,

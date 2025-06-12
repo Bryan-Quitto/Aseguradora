@@ -80,7 +80,7 @@ const ContractSignature = () => {
           id="signature"
           name="signature"
           label="Subir firma"
-          accept="image/*"
+          accept="image/*,application/pdf" // Modified this line
           onChange={handleSignatureUpload}
           required
         />
