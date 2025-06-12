@@ -71,6 +71,14 @@ const SidebarContent: MenuItem[] = [
                 requiredRole: "admin",
             },
             {
+                name: "Crear clientes",
+                icon: "solar:user-plus-rounded-linear",
+                id: uniqueId(),
+                url: "/admin/dashboard/create-clients",
+                isPro: false,
+                requiredRole: "admin",
+            },
+            {
                 name: "Listar usuarios",
                 icon: "solar:users-group-rounded-linear",
                 id: uniqueId(),

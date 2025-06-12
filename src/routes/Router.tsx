@@ -40,6 +40,8 @@ const ListarUsuarios = Loadable(lazy(() => import('../features/admin/ListarUsuar
 
 const CrearUsuarios = Loadable(lazy(() => import('../features/admin/CrearUsuarios'))); // ¡Añadido! lazy loading para CrearUsuarios
 
+const CrearClientes = Loadable(lazy(() => import('../features/admin/CrearClientes')));
+
 const ListarSoloUsuarios = Loadable(lazy(() => import('../features/admin/ListarSoloUsuarios')));
 
 const ListarSoloAgentes = Loadable(lazy(() => import('../features/admin/ListarSoloAgentes')));
@@ -197,6 +199,7 @@ const Router = [
                     { path: '', element: <Navigate to="list-users" /> }, // Redirige por defecto a listar usuarios
                     { path: 'list-users', element: <ListarUsuarios /> },
                     { path: 'create-users', element: <CrearUsuarios /> },
+                    { path: 'create-clients', element: <CrearClientes /> },
                     { path: 'edit-user/:id', element: <EditarUsuarioWrapper /> },
                     { path: 'list-only-users', element: <ListarSoloUsuarios /> },
                     { path: 'list-only-agents', element: <ListarSoloAgentes /> },

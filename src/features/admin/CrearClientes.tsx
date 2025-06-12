@@ -88,7 +88,7 @@ interface FormErrors {
   rol?: string;
 }
 
-export default function CrearUsuarios() {
+export default function CrearClientes() {
   const [formData, setFormData] = useState<FormData>({
     primerNombre: '',
     segundoNombre: '',
@@ -194,7 +194,7 @@ export default function CrearUsuarios() {
     const requiredFields: Array<keyof FormData> = [
       'primerNombre', 'primerApellido', 'email',
       'nacionalidad', 'tipoID', 'numeroID', 'lugarNacimiento', 'fechaNacimiento',
-      'sexo', 'estadoCivil', 'estatura', 'peso', 'rol'
+      'sexo', 'estadoCivil', 'estatura', 'peso'
     ];
 
     requiredFields.forEach(field => {
@@ -243,24 +243,24 @@ export default function CrearUsuarios() {
             estado_civil: formData.estadoCivil,
             estatura: parseFloat(formData.estatura) || null,
             peso: parseFloat(formData.peso) || null,
-            role: formData.rol, // Pasa el rol seleccionado a raw_user_meta_data
+            role: 'client', // Pasa el rol seleccionado a raw_user_meta_data
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`, // Asegúrate de que esta URL esté configurada en Supabase
         },
       });
 
       if (authError) {
-        console.error('Error al registrar usuario en Auth:', authError.message);
+        console.error('Error al registrar cliente en Auth:', authError.message);
         if (authError.message.includes("already registered")) {
-          setSubmissionMessage('El usuario con este email ya está registrado.');
+          setSubmissionMessage('El cliente con este email ya está registrado.');
         } else {
-          setSubmissionMessage(`Error al registrar usuario: ${authError.message}`);
+          setSubmissionMessage(`Error al registrar cliente: ${authError.message}`);
         }
         return;
       }
 
       // Si no hay error, Supabase ha enviado un correo al usuario.
-      setSubmissionMessage('Usuario creado exitosamente. Se ha enviado un correo electrónico al usuario para que establezca su contraseña y verifique su cuenta.');
+      setSubmissionMessage('Cliente creado exitosamente. Se ha enviado un correo electrónico al cliente para que establezca su contraseña y verifique su cuenta.');
       
       // Limpiar formulario después de éxito
       setFormData({
@@ -292,7 +292,7 @@ export default function CrearUsuarios() {
 
   return (
     <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
-      <h2 className="text-2xl font-bold text-blue-800 mb-6">Crear Nuevo Usuario</h2>
+      <h2 className="text-2xl font-bold text-blue-800 mb-6">Crear Nuevo Cliente</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Nombres y Apellidos */}
@@ -554,23 +554,6 @@ export default function CrearUsuarios() {
           </div>
         </div>
 
-        {/* Rol */}
-        <div className="space-y-2">
-          <Label htmlFor="rol" value="Rol" />
-          <Select
-            id="rol"
-            name="rol"
-            value={formData.rol}
-            onChange={handleInputChange}
-            required
-            color={errors.rol ? 'failure' : undefined}
-            helperText={errors.rol}
-          >
-            <option value="">Seleccionar rol</option>
-            <option value="admin">Administrador</option>
-            <option value="agent">Agente</option>
-          </Select>
-        </div>
 
         {submissionMessage && (
           <div className={`p-3 rounded-md text-sm ${submissionMessage.includes('Error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
@@ -584,7 +567,7 @@ export default function CrearUsuarios() {
             color="blue"
             disabled={Object.keys(errors).length > 0}
           >
-            Crear Usuario
+            Crear Cliente
           </Button>
         </div>
       </form>
