@@ -46,7 +46,7 @@ const COUNTRIES = NATIONALITIES.map(nationality => {
   }
 });
 
-// Interfaz para los datos del formulario
+// Interfaz para los datos del formulario (se elimina el campo 'rol')
 interface FormData {
   primerNombre: string;
   segundoNombre: string;
@@ -64,10 +64,9 @@ interface FormData {
   estadoCivil: string;
   estatura: string;
   peso: string;
-  rol: string;
 }
 
-// Interfaz para los errores del formulario
+// Interfaz para los errores del formulario (se elimina el campo 'rol')
 interface FormErrors {
   primerNombre?: string;
   segundoNombre?: string;
@@ -85,10 +84,9 @@ interface FormErrors {
   estadoCivil?: string;
   estatura?: string;
   peso?: string;
-  rol?: string;
 }
 
-export default function CrearClientes() {
+export default function CrearUsuarios() {
   const [formData, setFormData] = useState<FormData>({
     primerNombre: '',
     segundoNombre: '',
@@ -106,7 +104,6 @@ export default function CrearClientes() {
     estadoCivil: '',
     estatura: '',
     peso: '',
-    rol: ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -243,24 +240,24 @@ export default function CrearClientes() {
             estado_civil: formData.estadoCivil,
             estatura: parseFloat(formData.estatura) || null,
             peso: parseFloat(formData.peso) || null,
-            role: 'client', // Pasa el rol seleccionado a raw_user_meta_data
+            role: 'cliente', // Se asigna 'cliente' por defecto
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`, // Asegúrate de que esta URL esté configurada en Supabase
         },
       });
 
       if (authError) {
-        console.error('Error al registrar cliente en Auth:', authError.message);
+        console.error('Error al registrar usuario en Auth:', authError.message);
         if (authError.message.includes("already registered")) {
-          setSubmissionMessage('El cliente con este email ya está registrado.');
+          setSubmissionMessage('El usuario con este email ya está registrado.');
         } else {
-          setSubmissionMessage(`Error al registrar cliente: ${authError.message}`);
+          setSubmissionMessage(`Error al registrar usuario: ${authError.message}`);
         }
         return;
       }
 
       // Si no hay error, Supabase ha enviado un correo al usuario.
-      setSubmissionMessage('Cliente creado exitosamente. Se ha enviado un correo electrónico al cliente para que establezca su contraseña y verifique su cuenta.');
+      setSubmissionMessage('Usuario creado exitosamente. Se ha enviado un correo electrónico al usuario para que establezca su contraseña y verifique su cuenta.');
       
       // Limpiar formulario después de éxito
       setFormData({
@@ -280,7 +277,6 @@ export default function CrearClientes() {
         estadoCivil: '',
         estatura: '',
         peso: '',
-        rol: ''
       });
       setErrors({});
 
@@ -553,7 +549,6 @@ export default function CrearClientes() {
             />
           </div>
         </div>
-
 
         {submissionMessage && (
           <div className={`p-3 rounded-md text-sm ${submissionMessage.includes('Error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
