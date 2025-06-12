@@ -167,6 +167,14 @@ const SidebarContent: MenuItem[] = [
                 requiredRole: "agent",
             },
             {
+                name: "Crear cliente",
+                icon: "solar:user-plus-rounded-linear",
+                id: uniqueId(),
+                url: "/agent/dashboard/create-clients",
+                isPro: false,
+                requiredRole: "admin",
+            },
+            {
                 name: "Crear póliza",
                 icon: "solar:document-add-line-duotone",
                 id: uniqueId(),

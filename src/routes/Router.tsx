@@ -62,7 +62,9 @@ const AdminEditInsurance = Loadable(lazy(() => import('../features/admin/AdminEd
 
 const DashboardAgent = Loadable(lazy(() => import('../features/agents/pages/Dashboard_agente')));
 
+//Crear Cliente del Agente 
 
+const CrearCliente  = Loadable(lazy(() => import('../features/agents/pages/CrearCliente')));
 
 // Componentes de Pólizas para Agentes
 
@@ -128,6 +130,7 @@ import LandingRoutes from '../features/landing/landing.routes';
 // Componente para la redirección condicional después del login
 
 import { useAuth } from '../contexts/AuthContext'; // Importa useAuth desde la nueva ubicación
+import path from 'path';
 
 
 
@@ -229,6 +232,7 @@ const Router = [
                     { path: 'applications', element: <AgentApplicationList /> },
                     { path: 'applications/:id', element: <AgentApplicationDetail /> },
                     { path: '', element: <Navigate to="policies" /> },
+                    {path: 'create-client', element: <CrearCliente />},
                 ]
             },
             // RUTA ESPECÍFICA DE EDICIÓN DE PÓLIZAS PARA AGENTES
