@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByAgentId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management'; // Ruta corregida
-import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend'; // Ruta corregida
+import { Policy, getPoliciesByAgentId, getInsuranceProductById } from '../../policies/policy_management'; // Ruta corregida
+import { getClientProfileById } from '../../clients/hooks/cliente_backend'; // Ruta corregida
 
 /**
  * Componente para listar las solicitudes de seguro que un agente debe revisar.

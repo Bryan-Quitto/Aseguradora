@@ -225,7 +225,7 @@ export default function CrearUsuarios() {
     try {
       // 1. Crear el usuario en Supabase Auth sin contraseña
       // Supabase enviará un correo de verificación con un enlace mágico para que el usuario establezca su contraseña.
-      const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
+      const { error: authError } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
           data: {

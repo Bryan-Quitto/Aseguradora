@@ -151,15 +151,16 @@ const Router = [
                 path: '/client/dashboard',
                 element: (
                     <PrivateRoute allowedRoles={['client']}>
-                        <DashboardClient />
+                        {/* El elemento padre es simplemente el componente switcher */}
+                        <DashboardClient /> 
                     </PrivateRoute>
                 ),
                 children: [
+                    // Las rutas hijas se renderizarán dentro del <Outlet />
+                    { path: 'policies', element: <ClientPolicyList /> },
                     { path: 'policies/new', element: <ClientPolicyForm /> },
                     { path: 'policies/:id', element: <ClientPolicyDetail /> },
-                    { path: 'policies', element: <ClientPolicyList /> },
                     { path: 'documents', element: <ClientDocumentUpload /> },
-                    { path: '', element: <Navigate to="policies" /> },
                 ]
             },
 
