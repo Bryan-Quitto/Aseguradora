@@ -1,18 +1,99 @@
-import { useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase } from 'src/supabase/client';
-import FileUpload from 'src/components/shared/FileUpload';
+// src/pages/ContractSignature.tsx
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+import { supabase } from 'src/supabase/client'; // Asegúrate de que esta ruta sea correcta
+import FileUpload from 'src/components/shared/FileUpload'; // Asegúrate de que esta ruta sea correcta
+
+// Definición de la interfaz de la póliza (adaptada a tu tabla 'policies')
+// Esta interfaz debe coincidir con la definida en policy_management.ts
+interface Policy {
+  id: string;
+  policy_number: string; // Añadido, ya que existe en tu tabla 'policies'
+  name: string; // Nombre del producto o póliza
+  description: string; // Descripción del producto o póliza
+  client_email: string;
+  client_id: string; // ID del cliente (user_id de profiles)
+  status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature'; // Incluido 'awaiting_signature'
+  signature_url: string | null;
+  signed_at: string | null;
+  // Añade otras propiedades de tu póliza aquí si las necesitas para mostrar detalles
+}
 
 const ContractSignature = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Iniciar en loading para la carga de detalles
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [policyDetails, setPolicyDetails] = useState<Policy | null>(null); // Cambiado a policyDetails
   const location = useLocation();
-  const navigate = useNavigate();
+
+  const params = new URLSearchParams(location.search);
+  const policyId = params.get('contractId'); // Mantener 'contractId' para la URL, pero lo usaremos como policyId
+
+  // Hook para cargar los detalles de la póliza al cargar la página
+  useEffect(() => {
+    const fetchPolicyDetails = async () => {
+      if (!policyId) {
+        setError('ID de póliza no encontrado en la URL.');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Verificar si el usuario está autenticado. Si no, Supabase debería redirigirlo automáticamente
+        // si el magic link fue el método de inicio de sesión.
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          // Esto podría ocurrir si el magic link ya expiró o no fue usado para autenticar.
+          setError('No estás autenticado para firmar esta póliza. Por favor, asegúrate de usar el enlace completo del correo.');
+          setLoading(false);
+          return;
+        }
+
+        // Obtener detalles de la póliza desde Supabase (ahora de la tabla 'policies')
+        const { data, error: fetchError } = await supabase
+          .from('policies') // Apunta a 'policies'
+          .select('*')
+          .eq('id', policyId)
+          .single();
+
+        if (fetchError) throw fetchError;
+        if (!data) throw new Error('Póliza no encontrada.');
+
+        setPolicyDetails(data as Policy);
+
+        // Si la póliza ya está activa Y tiene una URL de firma, se considera firmada.
+        // Si ya está en estado 'active' y no tiene URL de firma (ej. fue activada manualmente por el agente),
+        // o si está en otros estados que no son 'pending' o 'awaiting_signature', no se permite firmar.
+        if (data.status === 'active' && data.signature_url) { 
+          setSuccess(true); // Ya está firmada
+        } else if (data.status !== 'pending' && data.status !== 'awaiting_signature') {
+          // Si no está ni pendiente ni esperando firma, se muestra un error.
+          setError(`La póliza no está en estado 'pendiente' o 'esperando firma'. Estado actual: ${data.status.charAt(0).toUpperCase() + data.status.slice(1)}.`);
+        }
+
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error al cargar los detalles de la póliza.');
+        console.error('Error fetching policy details:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPolicyDetails();
+  }, [policyId]); // Dependencia del ID de la póliza
 
   const handleSignatureUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) {
-      setError('Por favor, selecciona una imagen o un PDF de tu firma.');
+      setError('Por favor seleccione una imagen de su firma.');
+      return;
+    }
+    // Solo permitir firma si la póliza está pendiente o esperando firma
+    if (!policyDetails || (policyDetails.status !== 'pending' && policyDetails.status !== 'awaiting_signature')) {
+      setError('Esta póliza no está en estado "pendiente" o "esperando firma" para ser firmada, o ya ha sido firmada.');
       return;
     }
 
@@ -20,134 +101,141 @@ const ContractSignature = () => {
     setLoading(true);
     setError(null);
 
-    // Validar el tipo de archivo antes de intentar subir
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-    if (!allowedTypes.includes(file.type)) {
-      setError('Tipo de archivo no permitido. Sube una imagen (JPG, PNG, GIF) o un PDF.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Obtener el ID del contrato/política desde los parámetros de la URL
-      const params = new URLSearchParams(location.search);
-      const contractId = params.get('contractId'); // Este será el ID de la tabla 'policies'
-
-      if (!contractId) {
-        throw new Error('ID del contrato/política no encontrado. Por favor, asegúrate de que la URL sea correcta.');
+      if (!policyId) {
+        throw new Error('ID de póliza no encontrado. Error interno.');
       }
 
-      console.log("Intentando subir firma para contractId (policy ID):", contractId); // Debugging
-
       // Subir la firma a Supabase Storage
-      const fileExt = file.name.split('.').pop()?.toLowerCase();
-      const fileName = `${contractId}-signature.${fileExt}`;
-
+      const fileExt = file.name.split('.').pop();
+      // Generar un nombre de archivo único para evitar colisiones
+      const fileName = `${policyId}-${Date.now()}-signature.${fileExt}`;
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('signatures')
+        .from('signatures') // Asegúrate de que este bucket exista en Supabase Storage
         .upload(fileName, file, {
-          contentType: file.type,
-          upsert: true
+          cacheControl: '3600',
+          upsert: false // No sobrescribir si ya existe
         });
 
       if (uploadError) {
-        console.error('Error al subir a Supabase Storage:', uploadError);
-        if (uploadError.message.includes('not found')) {
-            throw new Error('El bucket "signatures" no existe o no tienes permisos de acceso.');
-        }
-        if (uploadError.message.includes('Policy')) {
-            throw new Error('Permisos insuficientes para subir el archivo. Revisa las políticas RLS de Storage.');
-        }
-        throw new Error(`Error al subir la firma: ${uploadError.message}`);
+        throw uploadError;
       }
 
-      // Obtener la URL pública del archivo subido
+      // Obtener la URL pública de la firma
       const { data: publicUrlData } = supabase.storage
         .from('signatures')
         .getPublicUrl(uploadData.path);
 
       if (!publicUrlData || !publicUrlData.publicUrl) {
-          throw new Error('No se pudo obtener la URL pública del archivo subido.');
+          throw new Error('No se pudo obtener la URL pública de la firma.');
       }
       
-      const signaturePublicUrl = publicUrlData.publicUrl;
-      console.log("Firma subida. URL Pública:", signaturePublicUrl); // Debugging
+      const signaturePublicUrl = publicUrlData.publicUrl; // Variable para almacenar la URL
 
-
-      // ¡¡¡CAMBIO CRÍTICO AQUÍ: 'contracts' cambiado a 'policies'!!!
-      // Actualizar el estado de la política en la base de datos
+      // Actualizar el estado de la póliza en la base de datos (ahora en 'policies')
       const { error: updateError } = await supabase
-        .from('policies')
+        .from('policies') // Apunta a 'policies'
         .update({
-          signature_url: signaturePublicUrl, // Mantener si la columna existe y la necesitas
-          signed_at: new Date().toISOString(), // Mantener si la columna existe y la necesitas
-          status: 'active' // ¡¡¡ASEGÚRATE DE QUE ESTÉ ASÍ!!!
+          signature_url: signaturePublicUrl, // Guardar la URL pública
+          signed_at: new Date().toISOString(),
+          status: 'active' // ¡CAMBIO! Cambiar el estado a 'active' después de la firma
         })
-        .eq('id', contractId);
+        .eq('id', policyId);
 
       if (updateError) {
-        console.error('Error al actualizar la política:', updateError);
-        throw new Error(`Error al actualizar el contrato: ${updateError.message || 'Detalle de error no disponible.'}`);
+          // Si hay un error al actualizar, intenta eliminar el archivo de firma para limpiar
+          await supabase.storage.from('signatures').remove([uploadData.path]);
+          throw updateError;
       }
 
       setSuccess(true);
+      // Opcional: Actualizar los detalles de la póliza en el estado para reflejar el cambio
+      setPolicyDetails(prev => prev ? { ...prev, signature_url: signaturePublicUrl, signed_at: new Date().toISOString(), status: 'active' } : null);
+
     } catch (err) {
-      console.error('Error general en handleSignatureUpload:', err);
-      // Asegurarse de que el error sea un string legible
-      setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado al procesar tu firma.');
+      setError(err instanceof Error ? err.message : 'Error al subir la firma.');
+      console.error('Error during signature upload or policy update:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="text-xl font-semibold text-gray-700">Cargando detalles de la póliza...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-red-50 p-4">
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Error</h2>
+          <p className="text-gray-700">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (success) {
     return (
-      <div className="p-4 text-center">
-        <h2 className="text-2xl font-bold mb-4">¡Gracias por firmar el contrato!</h2>
-        <p>El documento ha sido firmado exitosamente.</p>
-        <button
-          onClick={() => navigate('/')}
-          className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Volver al inicio
-        </button>
+      <div className="flex items-center justify-center min-h-screen bg-green-50 p-4">
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <h2 className="text-2xl font-bold text-green-700 mb-4">¡Póliza firmada exitosamente!</h2>
+          <p className="text-gray-700">Gracias por tu firma. La póliza ha sido completada.</p>
+          {policyDetails?.signature_url && (
+            <div className="mt-6">
+              <p className="text-gray-600 mb-2">Tu firma subida:</p>
+              <img src={policyDetails.signature_url} alt="Firma de la póliza" className="max-w-xs mx-auto border rounded-md shadow-sm" />
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Firma del Contrato</h1>
+    <div className="max-w-lg mx-auto my-10 p-6 bg-white rounded-lg shadow-xl border border-gray-200">
+      <h1 className="text-3xl font-extrabold text-gray-800 mb-6 text-center">Firma Electrónica de la Póliza</h1>
+      
+      {policyDetails ? (
+        <div className="bg-gray-50 p-4 rounded-md mb-6 border border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">Detalles de la Póliza:</h2>
+          <p className="text-gray-600"><strong className="text-gray-700">Número de Póliza:</strong> {policyDetails.policy_number}</p>
+          <p className="text-gray-600"><strong className="font-medium">Producto:</strong> {policyDetails.name}</p>
+          <p className="text-gray-600"><strong className="font-medium">Descripción:</strong> {policyDetails.description}</p>
+          <p className="text-gray-600"><strong className="text-gray-700">Para Cliente:</strong> {policyDetails.client_email}</p>
+          <p className="text-gray-600"><strong className="text-gray-700">Estado Actual:</strong> <span className={`font-medium ${policyDetails.status === 'active' ? 'text-green-600' : (policyDetails.status === 'pending' || policyDetails.status === 'awaiting_signature') ? 'text-orange-500' : 'text-red-600'}`}>{policyDetails.status.charAt(0).toUpperCase() + policyDetails.status.slice(1)}</span></p>
+          {/* Aquí puedes añadir más detalles de la póliza que quieras mostrar */}
+        </div>
+      ) : (
+        <div className="text-gray-600 text-center mb-6">No se pudieron cargar los detalles de la póliza.</div>
+      )}
 
-      <div className="mb-6">
-        <p className="text-gray-600 mb-4">
-          Por favor, sube una imagen clara de tu firma (JPG, PNG, GIF) o un documento PDF para completar el contrato.
+      <div className="mb-8">
+        <p className="text-gray-700 mb-5 leading-relaxed">
+          Por favor, suba una imagen clara de su firma para aceptar los términos de esta póliza.
+          Asegúrese de que la imagen sea legible y represente su firma manuscrita o electrónica.
         </p>
-
+        
         <FileUpload
           id="signature"
           name="signature"
-          label="Subir firma"
-          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf"
+          label="Subir imagen de la firma"
+          accept="image/*" // Solo permite imágenes
           onChange={handleSignatureUpload}
           required
+          disabled={loading || (policyDetails?.status !== 'pending' && policyDetails?.status !== 'awaiting_signature')} // Deshabilitar si está cargando o no está pendiente/esperando firma
         />
       </div>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-          <strong className="font-bold">¡Error!</strong>
-          <span className="block sm:inline ml-2">{error}</span>
-        </div>
-      )}
-
       {loading && (
-        <div className="text-gray-600 flex items-center justify-center mt-4">
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Procesando su firma...
+        <div className="text-center text-blue-600 font-medium py-2">
+          <div className="animate-spin inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+          Procesando su firma... Por favor, espere.
         </div>
       )}
     </div>

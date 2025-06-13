@@ -240,8 +240,6 @@ export default function CrearUsuarios() {
     setSubmissionMessage(null);
 
     try {
-      // 1. Crear el usuario en Supabase Auth sin contraseña
-      // Supabase enviará un correo de verificación con un enlace mágico para que el usuario establezca su contraseña.
       const { error: authError } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
@@ -260,9 +258,12 @@ export default function CrearUsuarios() {
             estado_civil: formData.estadoCivil,
             estatura: parseFloat(formData.estatura) || null,
             peso: parseFloat(formData.peso) || null,
-            role: 'cliente', // Se asigna 'cliente' por defecto
+            
+            // ¡ESTA ES LA LÍNEA CORREGIDA!
+            // Forzamos el rol a 'client' para que este formulario solo cree clientes.
+            role: 'client',
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`, // Asegúrate de que esta URL esté configurada en Supabase
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 

@@ -22,7 +22,7 @@ export default function ListarUsuarios({ onNavigate }: ListarUsuariosProps) {
             className="w-full"
           />
         </div>
-        <Button color="blue" onClick={() => onNavigate('crear-usuarios')}>
+        <Button color="blue" onClick={() => onNavigate('create-users')}>
           Crear Nuevo Usuario
         </Button>
       </div>
