@@ -59,7 +59,7 @@ const SidebarContent: MenuItem[] = [
 
     // --- Sección: Administración de Clientes ---
     {
-        heading: "Administración de usuarios",
+        heading: "Gestión de usuarios",
         requiredRole: "admin", // Esta sección solo aparecerá para admins (y superadministrators, con la lógica en Sidebar.tsx)
         children: [
             {
@@ -166,6 +166,14 @@ const SidebarContent: MenuItem[] = [
                 isPro: false,
                 requiredRole: "agent",
             },
+            {
+                    name: "Crear cliente",
+                    icon: "solar:user-plus-rounded-linear",
+                    id: uniqueId(),
+                    url: "/agent/dashboard/create-client", // Asegúrate de que esta URL sea correcta
+                    isPro: false,
+                    requiredRole: "agent", // Cambia esto de "admin" a "agent"
+                },
             {
                 name: "Crear póliza",
                 icon: "solar:document-add-line-duotone",

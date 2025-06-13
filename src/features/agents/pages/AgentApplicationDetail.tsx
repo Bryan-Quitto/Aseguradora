@@ -1,33 +1,68 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link} from 'react-router-dom';
-// Asegúrate de que esta importación sea CORRECTA y que tu archivo policy_management.ts
-// contenga las definiciones de Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy.
-// La interfaz `Policy` en `policy_management.ts` DEBE incluir 'awaiting_signature' como un estado válido.
+import { useParams, Link } from 'react-router-dom';
 import { Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy } from '../../policies/policy_management';
 import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
 import { useAuth } from 'src/contexts/AuthContext';
 import { enviarLinkFirma } from 'src/utils/enviarLinkFirma';
+import { supabase } from 'src/supabase/client'; // Importa el cliente de Supabase
 
+// Define tipos para los documentos
+interface PolicyDocument {
+  id: string;
+  policy_id: string;
+  document_name: string;
+  file_path: string;
+  uploaded_at: string;
+  file_url?: string; // URL pública para descarga
+}
+
+// Helper para renderizar los detalles
+// Mapea las claves del JSON a etiquetas legibles en español
+const detailLabels: { [key: string]: string } = {
+  deductible: 'Deducible Anual',
+  max_annual_out_of_pocket: 'Gasto Máximo Anual (Out-of-Pocket)',
+  coinsurance_percentage: 'Coaseguro',
+  max_dependents: 'Máximo de Dependientes',
+  max_age_for_inscription: 'Edad Máxima para Inscripción',
+  wellness_rebate_percentage: 'Reembolso por Bienestar',
+  includes_dental_basic: 'Incluye Dental Básico',
+  includes_dental_premium: 'Incluye Dental Premium',
+  includes_vision_basic: 'Incluye Visión Básica',
+  includes_vision_full: 'Incluye Visión Completa',
+};
+
+// Formatea los valores para que sean más legibles
+const formatDetailValue = (key: string, value: any): string => {
+  if (typeof value === 'boolean') {
+    return value ? 'Sí' : 'No';
+  }
+  if (key.includes('_percentage')) {
+    return `${value}%`;
+  }
+  if (['deductible', 'max_annual_out_of_pocket'].includes(key)) {
+    return `$${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return String(value);
+};
 
 /**
  * Componente para mostrar los detalles de una solicitud de póliza pendiente
  * y permitir al agente revisarla y tomar una acción (aprobar/rechazar).
  */
 export default function AgentApplicationDetail() {
-  const { id: applicationId } = useParams<{ id: string }>(); // Obtiene el ID de la solicitud (póliza) de la URL
-  const { user } = useAuth(); // Usamos el hook useAuth para obtener el usuario autenticado
+  const { id: applicationId } = useParams<{ id: string }>();
+  const { user } = useAuth();
 
-  const [application, setApplication] = useState<Policy | null>(null); // La solicitud es una póliza
+  const [application, setApplication] = useState<Policy | null>(null);
   const [client, setClient] = useState<ClientProfile | null>(null);
   const [product, setProduct] = useState<InsuranceProduct | null>(null);
+  const [documents, setDocuments] = useState<PolicyDocument[]>([]); // Estado para los documentos de la póliza
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null); // Mensaje para acciones (aprobado/rechazado)
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false); // Nuevo estado de carga para documentos
 
   useEffect(() => {
-    /**
-     * Función asíncrona para cargar los detalles de la solicitud, el cliente y el producto.
-     */
     const fetchApplicationDetails = async () => {
       if (!applicationId) {
         setError('ID de solicitud no proporcionado.');
@@ -39,7 +74,6 @@ export default function AgentApplicationDetail() {
       setError(null);
       setActionMessage(null);
 
-      // 1. Obtener los detalles de la póliza (solicitud)
       const { data: policyData, error: policyError } = await getPolicyById(applicationId);
 
       if (policyError) {
@@ -49,14 +83,15 @@ export default function AgentApplicationDetail() {
         return;
       }
 
-      // Manejar explícitamente el caso de policyData nulo antes de acceder a sus propiedades
       if (!policyData) {
-        setError('Solicitud no encontrada.'); // Mensaje más específico
+        setError('Solicitud no encontrada.');
         setLoading(false);
         return;
       }
 
-      // Permitir que se cargue si está pendiente o esperando firma
+      // Solo restringir a 'pending' y 'awaiting_signature' si es un flujo de APLICACIONES
+      // Si este componente también se usará para ver pólizas "aceptadas", se podría remover esta restricción.
+      // Para este caso de "AgentApplicationDetail", mantenemos la restricción por definición.
       if (policyData.status !== 'pending' && policyData.status !== 'awaiting_signature') {
         setError(`Solicitud no encontrada o no está pendiente/esperando firma. Estado actual: ${policyData.status}`);
         setLoading(false);
@@ -65,7 +100,6 @@ export default function AgentApplicationDetail() {
 
       setApplication(policyData);
 
-      // 2. Obtener los detalles del cliente asociado
       const { data: clientData, error: clientError } = await getClientProfileById(policyData.client_id);
       if (clientError) {
         console.error(`Error al obtener cliente para solicitud ${applicationId}:`, clientError);
@@ -74,7 +108,6 @@ export default function AgentApplicationDetail() {
         setClient(clientData);
       }
 
-      // 3. Obtener los detalles del producto asociado
       const { data: productData, error: productError } = await getInsuranceProductById(policyData.product_id);
       if (productError) {
         console.error(`Error al obtener producto para solicitud ${applicationId}:`, productError);
@@ -83,18 +116,45 @@ export default function AgentApplicationDetail() {
         setProduct(productData);
       }
 
+      // **Cargar documentos al obtener los detalles de la aplicación**
+      await fetchDocumentsForPolicy(applicationId);
+
       setLoading(false);
     };
 
     fetchApplicationDetails();
-  }, [applicationId]); // Se ejecuta cada vez que el applicationId cambia
+  }, [applicationId]);
 
-  /**
-   * Maneja la acción de aprobar o rechazar una solicitud.
-   * @param actionType 'approve' o 'reject'.
-   */
+  // Función para cargar los documentos de una póliza específica
+  const fetchDocumentsForPolicy = async (policyId: string) => {
+    setLoadingDocuments(true);
+    try {
+      const { data, error: docsError } = await supabase
+        .from('policy_documents')
+        .select('*')
+        .eq('policy_id', policyId)
+        .order('uploaded_at', { ascending: false });
+
+      if (docsError) {
+        throw new Error(`Error al cargar documentos: ${docsError.message}`);
+      }
+
+      const documentsWithUrls = await Promise.all((data || []).map(async (doc: PolicyDocument) => {
+        const { data: urlData } = supabase.storage
+          .from('documents') // Asegúrate de que el bucket se llame 'documents' en Supabase Storage
+          .getPublicUrl(doc.file_path);
+        return { ...doc, file_url: urlData?.publicUrl || '#' };
+      }));
+      setDocuments(documentsWithUrls);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error desconocido al recargar los documentos.');
+      console.error('Error fetching documents:', err);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
   const handleStatusUpdate = async (actionType: 'approve' | 'reject') => {
-    // Verificamos que tengamos la aplicación, el usuario autenticado y los datos del cliente
     if (!application || !user?.id || !client) { 
       setError('No se pudo procesar la solicitud. Faltan datos.');
       return;
@@ -104,23 +164,23 @@ export default function AgentApplicationDetail() {
     setError(null);
     setActionMessage(null);
 
-    let newStatus: Policy['status']; // Usamos el tipo 'Policy['status']' para garantizar la compatibilidad
+    let newStatus: Policy['status'];
     let successMessage: string;
     let errorMessagePrefix: string;
 
     if (actionType === 'approve') {
-      newStatus = 'awaiting_signature'; // ¡CAMBIO CLAVE! La póliza ahora espera la firma, no se activa de inmediato
+      newStatus = 'awaiting_signature';
       successMessage = `Solicitud ${application.policy_number} aprobada preliminarmente. Se ha enviado un enlace de firma al correo ${client.email}.`;
       errorMessagePrefix = 'aprobar';
-    } else { // actionType === 'reject'
+    } else {
       newStatus = 'rejected';
       successMessage = `Solicitud ${application.policy_number} rechazada exitosamente.`;
       errorMessagePrefix = 'rechazar';
     }
 
-    const updates: Partial<Policy> = { // Aseguramos que 'updates' sea compatible con 'Partial<Policy>'
+    const updates: Partial<Policy> = {
       status: newStatus,
-      updated_at: new Date().toISOString(), // Actualizar la fecha de modificación
+      updated_at: new Date().toISOString(),
     };
 
     try {
@@ -131,20 +191,17 @@ export default function AgentApplicationDetail() {
       }
 
       if (data) {
-        setApplication(data); // Actualiza el estado local de la aplicación para reflejar el nuevo estado
+        setApplication(data);
 
-        // Si la póliza fue aprobada preliminarmente, enviar el magic link para firma
         if (actionType === 'approve' && client.email) {
-          const { success, message } = await enviarLinkFirma(client.email, data.id); // data.id es el ID de la póliza
+          const { success, message } = await enviarLinkFirma(client.email, data.id);
 
           if (!success) {
             setError(`La póliza fue aprobada preliminarmente pero hubo un error al enviar el enlace de firma: ${message}`);
-            // OPCIONAL: Podrías considerar revertir el estado de la póliza a 'pending' si el email no se envía con éxito.
-            // Esto implicaría otra llamada a updatePolicy aquí.
           } else {
             setActionMessage(successMessage);
           }
-        } else { // Si fue rechazada, solo muestra el mensaje de rechazo
+        } else {
           setActionMessage(successMessage);
         }
       }
@@ -187,7 +244,7 @@ export default function AgentApplicationDetail() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100">
+    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold text-blue-700">Revisar Solicitud: {application.policy_number}</h2>
         <Link
@@ -251,10 +308,15 @@ export default function AgentApplicationDetail() {
         {/* Sección de Detalles del Contrato (si existen) */}
         {application.contract_details && Object.keys(application.contract_details).length > 0 && (
           <div className="md:col-span-2 bg-purple-50 p-6 rounded-lg shadow-sm">
-            <h3 className="text-xl font-semibold text-purple-800 mb-4">Detalles Adicionales del Contrato (JSON)</h3>
-            <pre className="bg-purple-100 p-4 rounded-md text-sm overflow-x-auto font-mono">
-              {JSON.stringify(application.contract_details, null, 2)}
-            </pre>
+            <h3 className="text-xl font-semibold text-purple-800 mb-4">Detalles Adicionales del Contrato</h3>
+            <div className="space-y-2">
+              {Object.entries(application.contract_details).map(([key, value]) => (
+                <div key={key} className="flex justify-between items-center text-sm py-1 border-b border-purple-200 last:border-b-0">
+                  <span className="font-medium text-purple-900">{detailLabels[key] || key.replace(/_/g, ' ')}:</span>
+                  <span className="text-right">{formatDetailValue(key, value)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -262,11 +324,50 @@ export default function AgentApplicationDetail() {
         {product?.coverage_details && Object.keys(product.coverage_details).length > 0 && (
           <div className="md:col-span-2 bg-yellow-50 p-6 rounded-lg shadow-sm">
             <h3 className="text-xl font-semibold text-yellow-800 mb-4">Detalles de Cobertura del Producto</h3>
-            <pre className="bg-yellow-100 p-4 rounded-md text-sm overflow-x-auto font-mono">
-              {JSON.stringify(product.coverage_details, null, 2)}
-            </pre>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+              {Object.entries(product.coverage_details).map(([key, value]) => {
+                if (detailLabels[key]) {
+                  return (
+                    <div key={key} className="flex justify-between items-center text-sm py-1.5 border-b border-yellow-200">
+                      <span className="font-medium text-yellow-900">{detailLabels[key]}:</span>
+                      <span className="font-semibold text-right">{formatDetailValue(key, value)}</span>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            </div>
           </div>
         )}
+
+        {/* Sección de Documentos Subidos por el Cliente */}
+        <div className="md:col-span-2 bg-indigo-50 p-6 rounded-lg shadow-sm">
+          <h3 className="text-xl font-semibold text-indigo-800 mb-4">Documentos Subidos por el Cliente</h3>
+          {loadingDocuments ? (
+            <div className="text-center text-gray-600 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-500 mr-3"></div>
+              Cargando documentos...
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-gray-600 italic">No hay documentos subidos por el cliente para esta solicitud.</div>
+          ) : (
+            <ul className="bg-white rounded-lg p-4 border border-indigo-200">
+              {documents.map((doc) => (
+                <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-indigo-200">
+                  <span className="text-gray-800 break-words flex-grow mr-4">{doc.document_name}</span>
+                  <a
+                    href={doc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
+                  >
+                    Ver
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {/* Botones de acción */}

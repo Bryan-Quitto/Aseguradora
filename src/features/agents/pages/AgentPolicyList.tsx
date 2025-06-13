@@ -11,7 +11,7 @@ type PolicyWithCedula = Policy & { numero_identificacion: string };
  * Componente para listar las pólizas gestionadas por un agente.
  */
 export default function AgentPolicyList() {
-  const { user } = useAuth(); 
+  const { user } = useAuth(); // Obtiene el perfil del agente autenticado y el objeto user
   // Cambia el tipo del estado policies:
   const [policies, setPolicies] = useState<PolicyWithCedula[]>([]); // Estado para almacenar las pólizas
   const [loading, setLoading] = useState<boolean>(true); // Estado de carga
@@ -94,7 +94,7 @@ export default function AgentPolicyList() {
     fetchPoliciesAndDetails();
   }, [user?.id]); // Dependencia del user_id del perfil para recargar si cambia
 
-  // Filtrar pólizas por número_identificacion (cedula)
+  // Filtrar pólizas por numero_identificacion (cedula)
   const filteredPolicies = policies.filter((policy) => {
     return searchCedula === '' || policy.numero_identificacion.startsWith(searchCedula);
   });
@@ -127,14 +127,21 @@ export default function AgentPolicyList() {
         </Link>
       </div>
 
-      {/* Barra de búsqueda */}
-      <div className="mb-6 flex justify-end">
+      {/* Barra de búsqueda ahora ocupa todo el ancho */}
+      <div className="mb-6">
         <input
           type="text"
           placeholder="Buscar por cédula..."
-          className="border border-gray-300 rounded-lg px-4 py-2 w-72 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
           value={searchCedula}
-          onChange={e => setSearchCedula(e.target.value)}
+          maxLength={10}
+          inputMode="numeric"
+          pattern="\d*"
+          onChange={e => {
+            // Solo permite números y máximo 10 caracteres
+            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setSearchCedula(value);
+          }}
         />
       </div>
 

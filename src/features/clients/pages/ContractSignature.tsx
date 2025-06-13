@@ -16,6 +16,7 @@ interface Policy {
   status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature'; // Incluido 'awaiting_signature'
   signature_url: string | null;
   signed_at: string | null;
+  start_date: string; // Añadido para reflejar en el estado
   // Añade otras propiedades de tu póliza aquí si las necesitas para mostrar detalles
 }
 
@@ -132,14 +133,16 @@ const ContractSignature = () => {
       }
       
       const signaturePublicUrl = publicUrlData.publicUrl; // Variable para almacenar la URL
+      const currentISODate = new Date().toISOString(); // Obtener la fecha actual en formato ISO
 
       // Actualizar el estado de la póliza en la base de datos (ahora en 'policies')
       const { error: updateError } = await supabase
         .from('policies') // Apunta a 'policies'
         .update({
           signature_url: signaturePublicUrl, // Guardar la URL pública
-          signed_at: new Date().toISOString(),
-          status: 'active' // ¡CAMBIO! Cambiar el estado a 'active' después de la firma
+          signed_at: currentISODate,
+          status: 'active', // Cambiar el estado a 'active' después de la firma
+          start_date: currentISODate.split('T')[0] // ¡NUEVO! Actualizar start_date a la fecha actual (solo la parte de la fecha)
         })
         .eq('id', policyId);
 
@@ -151,7 +154,13 @@ const ContractSignature = () => {
 
       setSuccess(true);
       // Opcional: Actualizar los detalles de la póliza en el estado para reflejar el cambio
-      setPolicyDetails(prev => prev ? { ...prev, signature_url: signaturePublicUrl, signed_at: new Date().toISOString(), status: 'active' } : null);
+      setPolicyDetails(prev => prev ? { 
+        ...prev, 
+        signature_url: signaturePublicUrl, 
+        signed_at: currentISODate, 
+        status: 'active',
+        start_date: currentISODate.split('T')[0] // Actualizar también en el estado local
+      } : null);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al subir la firma.');
