@@ -302,7 +302,7 @@ const ClientDocumentUpload: React.FC = () => {
                     name="document-upload"
                     label="Seleccionar Documento"
                     onChange={handleDocumentUpload}
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" // Sugerir tipos de archivo comunes
+                    accept=".pdf,.jpg,.jpeg,.png" // Sugerir tipos de archivo comunes
                     disabled={!selectedPolicyId || uploadingDocument} // Deshabilitar si no hay póliza seleccionada o si se está subiendo
                 />
 
