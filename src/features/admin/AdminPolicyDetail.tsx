@@ -247,7 +247,7 @@ export default function AdminPolicyDetail() {
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-blue-700">Detalles de Póliza: {policy?.policy_number || 'Cargando...'}</h2>
+                <h2 className="text-3xl font-bold text-blue-700">Detalles de Póliza: {product ? product.name : 'Cargando...'}</h2>
                 <div className="flex space-x-3">
                     <Link
                         to="/admin/dashboard/policies"
