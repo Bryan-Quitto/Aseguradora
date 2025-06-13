@@ -263,7 +263,7 @@ export default function AgentEditPolicy() {
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-blue-700">Editar Póliza: {policy.policy_number}</h2>
+                <h2 className="text-3xl font-bold text-blue-700">Editar Póliza: {product ? product.name : 'Cargando...'}</h2>
                 {/* Botón para volver a la lista de pólizas (similar al del administrador) */}
                 <Link
                     to="/agent/dashboard/policies" // Navega a la lista de pólizas

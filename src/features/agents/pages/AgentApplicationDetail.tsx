@@ -246,7 +246,7 @@ export default function AgentApplicationDetail() {
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-blue-700">Revisar Solicitud: {application.policy_number}</h2>
+        <h2 className="text-3xl font-bold text-blue-700">Revisar Solicitud: {product ? product.name : 'Cargando...'}</h2>
         <Link
           to="/agent/dashboard/applications"
           className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition duration-300 shadow-md"
