@@ -1,7 +1,7 @@
 import { Button, Modal, Label, TextInput, Select, Radio } from 'flowbite-react';
 import { useState, useEffect } from 'react';
 // Importa UserProfile de tu backend para el tipado correcto
-import { getUserProfileById, updateUserProfile, UserProfile } from 'src/features/admin/hooks/administrador_backend';
+import { getUserProfileById, updateUserProfile } from 'src/features/admin/hooks/administrador_backend';
 import { useParams, useNavigate } from 'react-router-dom';
 
 // Array de nacionalidades para reutilizar
@@ -379,7 +379,7 @@ export default function EditarUsuario({ userId, showModal, onClose, onUserUpdate
         };
 
         setLoading(true);
-        const { data, error } = await updateUserProfile(userId, updates);
+        const { error } = await updateUserProfile(userId, updates);
         setLoading(false);
 
         if (error) {

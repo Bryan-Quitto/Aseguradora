@@ -3,10 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 // IMPORTANTE: Importa la instancia de supabase ya creada y configurada
 import { supabase } from 'src/supabase/client'; // Asume que tienes este archivo configurado
 
-// --- Eliminamos las declaraciones globales de Supabase y la inicialización 'let supabase: any = null;' de aquí ---
-// declare const __app_id: string | undefined;
-// ... (resto de declaraciones globales si no se usan)
-
 // --- Interfaces de datos (estas las mantienes como están, son correctas) ---
 interface Policy {
     id: string;
@@ -16,7 +12,8 @@ interface Policy {
     product_id: string;
     start_date: string;
     end_date: string;
-    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    // ¡Actualizado el tipo de status para incluir awaiting_signature y rejected!
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature';
     premium_amount: number;
     payment_frequency: 'monthly' | 'quarterly' | 'annually';
     contract_details: string | null; // Puede ser null para clientes
@@ -110,8 +107,17 @@ interface ClientProfile {
     segundo_apellido: string | null;
     full_name: string | null;
     email: string | null;
-    phone_number: string | null;
     // Añade aquí cualquier otro campo relevante del perfil del cliente que quieras mostrar
+}
+
+// NUEVA INTERFAZ PARA DOCUMENTOS DE LA PÓLIZA
+interface Document {
+  id: string;
+  policy_id: string;
+  document_name: string;
+  file_path: string;
+  uploaded_at: string;
+  file_url?: string; // URL pública para descarga
 }
 
 /**
@@ -163,7 +169,6 @@ async function getPolicyById(policyId: string): Promise<{ data: Policy | null; e
  * Usa la instancia de supabase ya importada.
  */
 async function getInsuranceProductById(productId: string): Promise<{ data: InsuranceProduct | null; error: any }> {
-    // --- Eliminamos la inicialización de supabase aquí ---
     const { data, error } = await supabase
         .from('insurance_products')
         .select('*')
@@ -177,14 +182,48 @@ async function getInsuranceProductById(productId: string): Promise<{ data: Insur
  * Usa la instancia de supabase ya importada.
  */
 async function getClientProfileById(clientId: string): Promise<{ data: ClientProfile | null; error: any }> {
-    // --- Eliminamos la inicialización de supabase aquí ---
     const { data, error } = await supabase
         .from('profiles')
-        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email, phone_number')
+        .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email')
         .eq('user_id', clientId)
         .single();
-    return { data, error };
+    if (error) {
+        console.error(`Error al obtener perfil de cliente con ID ${clientId}:`, error.message);
+        return { data: null, error };
+    }
+    return { data: data as ClientProfile, error: null };
 }
+
+/**
+ * NUEVA FUNCIÓN: Obtiene documentos de la póliza desde Supabase Storage.
+ */
+async function getPolicyDocuments(policyId: string): Promise<{ data: Document[] | null; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('policy_documents') // Asegúrate de que tu tabla se llame 'policy_documents'
+      .select('*')
+      .eq('policy_id', policyId)
+      .order('uploaded_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Error al cargar documentos de la base de datos: ${error.message}`);
+    }
+
+    // Generar URLs públicas para cada documento
+    const documentsWithUrls = await Promise.all((data || []).map(async (doc: Document) => {
+      const { data: urlData } = supabase.storage
+        .from('documents') // Asegúrate de que tu bucket de almacenamiento se llame 'documents'
+        .getPublicUrl(doc.file_path);
+      return { ...doc, file_url: urlData?.publicUrl || '#' };
+    }));
+
+    return { data: documentsWithUrls, error: null };
+  } catch (err) {
+    console.error(`Error en getPolicyDocuments para policyId ${policyId}:`, err);
+    return { data: null, error: err };
+  }
+}
+
 
 /**
  * Componente para mostrar los detalles de una póliza específica para un agente.
@@ -197,10 +236,12 @@ export default function AgentPolicyDetail() {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        // --- Eliminamos la función initializeSupabaseClient y su llamada de aquí ---
-        // porque supabase ya debe estar inicializado y exportado desde 'src/supabase/client.ts'
+    // NUEVOS ESTADOS PARA DOCUMENTOS
+    const [policyDocuments, setPolicyDocuments] = useState<Document[]>([]);
+    const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false);
+    const [documentsError, setDocumentsError] = useState<string | null>(null);
 
+    useEffect(() => {
         const fetchPolicyDetails = async () => {
             if (!policyId) {
                 setError('ID de póliza no proporcionado.');
@@ -245,11 +286,35 @@ export default function AgentPolicyDetail() {
                 setClient(clientData);
             }
 
-            setLoading(false);
+            // 4. NUEVO: Obtener los documentos asociados a la póliza
+            setLoadingDocuments(true);
+            const { data: docsData, error: docsError } = await getPolicyDocuments(policyData.id);
+            if (docsError) {
+                console.error(`Error al obtener documentos para la póliza ${policyData.id}:`, docsError);
+                setDocumentsError('Error al cargar los documentos de la póliza.');
+                setPolicyDocuments([]);
+            } else {
+                setPolicyDocuments(docsData || []);
+            }
+            setLoadingDocuments(false); // Finaliza la carga de documentos
+
+            setLoading(false); // Finaliza la carga general
         };
 
         fetchPolicyDetails();
     }, [policyId]); // La dependencia policyId asegura que se recarga si la URL cambia
+
+    // Helper para capitalizar la primera letra de cualquier cadena (AHORA MÁS GENÉRICO)
+    const capitalizeStatus = (text: string | undefined | null) => {
+        if (!text) {
+            return 'Desconocido';
+        }
+        const trimmedText = text.trim();
+        if (trimmedText.length === 0) {
+            return 'Desconocido';
+        }
+        return trimmedText.charAt(0).toUpperCase() + trimmedText.slice(1);
+    };
 
     // Helper para renderizar los detalles específicos de cada tipo de póliza
     const renderSpecificPolicyDetails = () => {
@@ -369,17 +434,18 @@ export default function AgentPolicyDetail() {
                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General de la Póliza</h3>
                         <p className="mb-2"><strong className="font-medium">Número de Póliza:</strong> {policy.policy_number}</p>
                         <p className="mb-2"><strong className="font-medium">Producto:</strong> {product ? product.name : 'Cargando...'}</p>
-                        <p className="mb-2"><strong className="font-medium">Tipo de Producto:</strong> {product ? product.type.charAt(0).toUpperCase() + product.type.slice(1) : 'Cargando...'}</p>
+                        <p className="mb-2"><strong className="font-medium">Tipo de Producto:</strong> {product ? capitalizeStatus(product.type) : 'Cargando...'}</p> {/* Usar capitalizeStatus para tipo */}
                         <p className="mb-2"><strong className="font-medium">Fecha de Inicio:</strong> {policy.start_date}</p>
                         <p className="mb-2"><strong className="font-medium">Fecha de Fin:</strong> {policy.end_date}</p>
-                        <p className="mb-2"><strong className="font-medium">Monto de Prima:</strong> ${policy.premium_amount.toFixed(2)} {policy.payment_frequency.charAt(0).toUpperCase() + policy.payment_frequency.slice(1)}</p>
+                        <p className="mb-2"><strong className="font-medium">Monto de Prima:</strong> ${policy.premium_amount?.toFixed(2) || 'N/A'} {policy.payment_frequency ? capitalizeStatus(policy.payment_frequency) : ''}</p> {/* Usar capitalizeStatus para payment_frequency */}
                         <p className="mb-2"><strong className="font-medium">Estado:</strong>
                             <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                                policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
+                                policy.status === 'pending' || policy.status === 'awaiting_signature' ? 'bg-yellow-100 text-yellow-800' :
+                                policy.status === 'cancelled' || policy.status === 'expired' || policy.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-200 text-gray-800' // Fallback para estados no mapeados
                             }`}>
-                                {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
+                                {capitalizeStatus(policy.status)}
                             </span>
                         </p>
                     </div>
@@ -391,7 +457,6 @@ export default function AgentPolicyDetail() {
                             <>
                                 <p className="mb-2"><strong className="font-medium">Nombre:</strong> {client.full_name || `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()}</p>
                                 <p className="mb-2"><strong className="font-medium">Email:</strong> <a href={`mailto:${client.email}`} className="text-blue-700 hover:underline">{client.email}</a></p>
-                                {client.phone_number && <p className="mb-2"><strong className="font-medium">Teléfono:</strong> {client.phone_number}</p>}
                                 {/* Puedes añadir más detalles del cliente aquí si son relevantes */}
                             </>
                         ) : (
@@ -404,6 +469,34 @@ export default function AgentPolicyDetail() {
                         {renderSpecificPolicyDetails()}
                     </div>
                     
+                    {/* Sección de Documentos de la Póliza */}
+                    <div className="md:col-span-2 bg-purple-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-purple-800 mb-4">Documentos Subidos por el Cliente</h3>
+                        {loadingDocuments ? (
+                            <div className="text-center text-gray-600">Cargando documentos de la póliza...</div>
+                        ) : documentsError ? (
+                            <div className="text-red-600">Error: {documentsError}</div>
+                        ) : policyDocuments.length === 0 ? (
+                            <div className="text-gray-600 italic">No hay documentos subidos para esta póliza.</div>
+                        ) : (
+                            <ul className="bg-white rounded-lg p-4 border border-gray-200">
+                                {policyDocuments.map((doc) => (
+                                    <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
+                                        <span className="text-gray-800 break-words flex-grow mr-4">{doc.document_name}</span>
+                                        <a
+                                            href={doc.file_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
+                                        >
+                                            Ver
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
                     {/* Sección de Notas del Administrador del Producto (Descripción del final) */}
                     {product?.admin_notes && (
                         <div className="md:col-span-2 bg-gray-50 p-6 rounded-lg shadow-sm border-t border-gray-200">

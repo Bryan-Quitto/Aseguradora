@@ -1,12 +1,12 @@
 import { Button, Table, TextInput, Modal } from 'flowbite-react';
 import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
-import { getAllUserProfiles, UserProfile, activateUserProfile, deactivateUserProfile, deleteUserProfile } from 'src/features/admin/hooks/administrador_backend';
-import { Link, useNavigate } from 'react-router-dom';
-import { enviarCorreo } from '../../utils/enviarCorreo';
+import { Link } from 'react-router-dom';
 import { supabase } from 'src/supabase/client';
+import { getAllUserProfiles, UserProfile, deleteUserProfile, updateUserProfileStatus } from 'src/features/admin/hooks/administrador_backend';
+import { enviarCorreo } from 'src/utils/enviarCorreo';
 
-
+// Interfaz para el modal
 interface CustomModalProps {
     show: boolean;
     onClose: () => void;
@@ -16,32 +16,24 @@ interface CustomModalProps {
     onConfirm?: () => void;
 }
 
-const CustomModal: React.FC<CustomModalProps> = ({ show, onClose, message, title, type, onConfirm }) => {
+// Componente para el modal
+const CustomModal = ({ show, onClose, message, title, type, onConfirm }: CustomModalProps) => {
     if (!show) return null;
 
     return (
         <Modal show={show} onClose={onClose} dismissible>
             <Modal.Header>{title}</Modal.Header>
             <Modal.Body>
-                <div className="space-y-6">
-                    <p className="text-base leading-relaxed text-gray-500 dark:text-gray-400">
-                        {message}
-                    </p>
-                </div>
+                <p className="text-base leading-relaxed text-gray-500 dark:text-gray-400">
+                    {message}
+                </p>
             </Modal.Body>
             <Modal.Footer>
-                {type === 'confirm' && (
-                    <Button color="gray" onClick={onClose}>
-                        Cancelar
-                    </Button>
-                )}
-                <Button
-                    color={type === 'alert' ? 'blue' : 'failure'}
-                    onClick={() => {
-                        if (onConfirm) onConfirm();
-                        onClose();
-                    }}
-                >
+                {type === 'confirm' && <Button color="gray" onClick={onClose}>Cancelar</Button>}
+                <Button color={type === 'alert' ? 'blue' : 'failure'} onClick={() => {
+                    if (onConfirm) onConfirm();
+                    onClose();
+                }}>
                     {type === 'alert' ? 'Aceptar' : 'Confirmar'}
                 </Button>
             </Modal.Footer>
@@ -54,143 +46,101 @@ export default function ListarUsuarios() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    
+    // Estados para roles y usuario actual
     const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
-    const [userIdToDelete, setUserIdToDelete] = useState<string | null>(null);
 
-    const navigate = useNavigate();
-
+    // Estados para el modal
     const [showModal, setShowModal] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [modalTitle, setModalTitle] = useState('');
     const [modalType, setModalType] = useState<'alert' | 'confirm'>('alert');
-    const [modalAction, setModalAction] = useState<(() => void) | null>(null);
-
-    const fetchUsers = async () => {
-        setLoading(true);
-        setError(null);
-        const { data, error: fetchError } = await getAllUserProfiles();
-        if (fetchError) {
-            setError(fetchError.message);
-            console.error('Error fetching user profiles:', fetchError);
-        } else if (data) {
-            setUsers(data);
-        }
-        setLoading(false);
-    };
+    const [modalAction, setModalAction] = useState<(() => void) | undefined>(undefined);
 
     useEffect(() => {
-        const fetchDataAndUserRole = async () => {
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const fetchInitialData = async () => {
+            setLoading(true);
 
-            if (userError) {
-                console.error('Error al obtener el usuario autenticado:', userError);
-                setError('Error al cargar la información del usuario.');
-                setLoading(false);
-                return;
-            }
-
+            const { data: { user } } = await supabase.auth.getUser();
             if (user) {
-                setCurrentUserEmail(user?.email ?? null);
                 setCurrentUserId(user.id);
-
-                const { data: adminData, error: adminRoleError } = await supabase
-                    .from('administrators')
-                    .select('admin_role')
+                setCurrentUserEmail(user.email!);
+                
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
                     .eq('user_id', user.id)
                     .single();
-
-                if (adminRoleError && adminRoleError.code !== 'PGRST116') {
-                    console.error('Error al obtener el rol del administrador:', adminRoleError);
-                } else if (adminData) {
-                    setCurrentUserRole(adminData.admin_role);
-                } else {
-                    setCurrentUserRole(null);
-                }
-            } else {
-                setCurrentUserRole(null);
-                setCurrentUserEmail(null);
-                setCurrentUserId(null);
+                
+                setCurrentUserRole(profile?.role || null);
             }
 
             await fetchUsers();
+            setLoading(false);
         };
-
-        fetchDataAndUserRole();
+        fetchInitialData();
     }, []);
 
-    const filteredUsers = useMemo(() => {
-        if (!searchTerm) {
-            return users;
+    const fetchUsers = async () => {
+        const { data, error: fetchError } = await getAllUserProfiles();
+        if (fetchError) {
+            setError(fetchError.message);
+        } else if (data) {
+            setUsers(data as UserProfile[]); 
         }
+    };
+
+    const filteredUsers = useMemo(() => {
+        if (!searchTerm) return users;
         const lowerCaseSearchTerm = searchTerm.toLowerCase();
-        return users.filter(user =>
-            (user.numero_identificacion || '').toLowerCase().startsWith(lowerCaseSearchTerm)
-        );
+        return users.filter(user => {
+            const fullName = `${user.primer_nombre || ''} ${user.segundo_nombre || ''} ${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.toLowerCase();
+            const email = user.email?.toLowerCase() || '';
+            const identification = `${user.tipo_identificacion || ''} ${user.numero_identificacion || ''}`.toLowerCase();
+            const role = user.role?.toLowerCase() || '';
+
+            return fullName.includes(lowerCaseSearchTerm) ||
+                   email.includes(lowerCaseSearchTerm) ||
+                   identification.includes(lowerCaseSearchTerm) ||
+                   role.includes(lowerCaseSearchTerm);
+        });
     }, [users, searchTerm]);
+    
+    const handleToggleStatus = async (user: UserProfile) => {
+        const newStatus = user.status === 'active' ? 'inactive' : 'active';
+        const { error: toggleError } = await updateUserProfileStatus(user.user_id, newStatus);
+        
+        if (toggleError) {
+            setModalTitle('Error');
+            setModalMessage(`Error al cambiar el estado: ${toggleError.message}`);
+            setShowModal(true);
+        } else {
+            fetchUsers();
+        }
+    };
 
-    const handleDeleteUserClick = (userId: string, userName: string | null) => {
-        setUserIdToDelete(userId);
-        setModalTitle('Eliminar Usuario');
-        setModalMessage(`¿Estás seguro de que quieres eliminar a ${userName || 'este usuario'}? Esta acción no se puede deshacer.`);
+    const handleDeleteClick = (userId: string, userEmail: string) => {
+        setModalTitle('Confirmar Eliminación');
+        setModalMessage(`¿Seguro que quieres eliminar al usuario ${userEmail}? Esta acción es permanente.`);
         setModalType('confirm');
-        setModalAction(() => async () => {
-            const { error: deleteError } = await deleteUserProfile(userId);
-
-            if (deleteError) {
-                setModalTitle('Error');
-                setModalMessage(`Error al eliminar usuario: ${deleteError.message}`);
-                setModalType('alert');
-            } else {
-                setModalTitle('Éxito');
-                setModalMessage(`Usuario ${userName || 'seleccionado'} eliminado exitosamente.`);
-                setModalType('alert');
-                fetchUsers();
-            }
-            setUserIdToDelete(null);
-        });
+        setModalAction(() => () => confirmDelete(userId)); 
         setShowModal(true);
     };
 
-
-    const handleDeactivateUser = async (userId: string, userName: string | null) => {
-        setModalTitle('Desactivar Usuario');
-        setModalMessage(`¿Estás seguro de que quieres desactivar a ${userName || 'este usuario'}? Esto cambiará su estado a 'inactivo'.`);
-        setModalType('confirm');
-        setModalAction(() => async () => {
-            const { data, error: deactivateError } = await deactivateUserProfile(userId);
-            if (deactivateError) {
-                setModalTitle('Error');
-                setModalMessage(`Error al desactivar usuario: ${deactivateError.message}`);
-                setModalType('alert');
-            } else if (data) {
-                setModalTitle('Éxito');
-                setModalMessage(`Usuario ${data.full_name || 'N/A'} desactivado.`);
-                setModalType('alert');
-                fetchUsers();
-            }
-        });
-        setShowModal(true);
-    };
-
-    const handleActivateUser = async (userId: string, userName: string | null) => {
-        setModalTitle('Activar Usuario');
-        setModalMessage(`¿Estás seguro de que quieres activar a ${userName || 'este usuario'}? Esto cambiará su estado a 'activo'.`);
-        setModalType('confirm');
-        setModalAction(() => async () => {
-            const { data, error: activateError } = await activateUserProfile(userId);
-            if (activateError) {
-                setModalTitle('Error');
-                setModalMessage(`Error al activar usuario: ${activateError.message}`);
-                setModalType('alert');
-            } else if (data) {
-                setModalTitle('Éxito');
-                setModalMessage(`Usuario ${data.full_name || 'N/A'} activado.`);
-                setModalType('alert');
-                fetchUsers();
-            }
-        });
+    const confirmDelete = async (userId: string) => {
+        const { error: deleteError } = await deleteUserProfile(userId);
+        if (deleteError) {
+            setModalTitle('Error');
+            setModalMessage(`Error al eliminar usuario: ${deleteError.message}`);
+        } else {
+            setModalTitle('Éxito');
+            setModalMessage('Usuario eliminado correctamente.');
+            fetchUsers();
+        }
+        setModalType('alert');
+        setModalAction(undefined);
         setShowModal(true);
     };
 
@@ -198,201 +148,102 @@ export default function ListarUsuarios() {
         if (!currentUserEmail) {
             setModalTitle('Error');
             setModalMessage('No se pudo obtener el email del usuario actual.');
-            setModalType('alert');
-            setShowModal(true);
-            return;
+        } else {
+            try {
+                await enviarCorreo(currentUserEmail, to_email, name);
+                setModalTitle('Éxito');
+                setModalMessage('Correo enviado correctamente.');
+            } catch (error) {
+                setModalTitle('Error');
+                setModalMessage('Hubo un problema al enviar el correo.');
+            }
         }
-        try {
-            await enviarCorreo(currentUserEmail, to_email, name);
-            setModalTitle('Éxito');
-            setModalMessage('Correo enviado correctamente.');
-            setModalType('alert');
-            setShowModal(true);
-        } catch (error) {
-            setModalTitle('Error');
-            setModalMessage('Error enviando el correo.');
-            setModalType('alert');
-            setShowModal(true);
-        }
+        setModalType('alert');
+        setModalAction(undefined);
+        setShowModal(true);
     };
 
-    if (loading) {
-        return <div className="text-center p-10">Cargando usuarios...</div>;
-    }
-
-    if (error) {
-        return <div className="text-center p-10 text-red-600">Error: {error}</div>;
-    }
-
-    const numberOfColumns = 7;
+    if (loading) return <div className="text-center p-10">Cargando usuarios...</div>;
+    if (error) return <div className="text-center p-10 text-red-600">Error: {error}</div>;
 
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
-            <h2 className="text-2xl font-bold mb-4 text-blue-800">Lista General de Usuarios</h2>
-            <div className="flex justify-between items-center mb-6 ">
+        <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
+            <h1 className="text-2xl font-bold mb-4 text-blue-800">Gestión de Usuarios</h1>
+            <div className="flex justify-between items-center mb-6">
                 <div className="w-1/3">
-                    <input
-                        type="text"
-                        placeholder="Buscar por cédula..."
-                        className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
-                        value={searchTerm}
-                        maxLength={10}
-                        inputMode="numeric"
-                        pattern="\d*"
-                        onChange={e => {
-                            // Solo permite números y máximo 10 caracteres
-                            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                            setSearchTerm(value);
-                        }}
-                    />
+                    <TextInput id="search" type="text" icon={HiSearch} placeholder="Buscar por nombre, email, rol..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full" />
                 </div>
-                <Button color="blue" onClick={() => navigate('/admin/dashboard/create-users')}>
-                    Crear Nuevo Usuario
-                </Button>
+                <Link to="/admin/dashboard/create-users">
+                    <Button color="blue">Crear Nuevo Usuario</Button>
+                </Link>
             </div>
-
-            <div className="overflow-x-auto relative z-0">
-                <Table hoverable className="min-w-full table-auto">
+            <div className="overflow-x-auto">
+                <Table hoverable>
                     <Table.Head>
-                        <Table.HeadCell className="whitespace-nowrap">Nombres</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Apellidos</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Email</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Cédula/Pasaporte</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Rol</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Estado</Table.HeadCell>
-                        <Table.HeadCell className="whitespace-nowrap">Acciones</Table.HeadCell>
+                        <Table.HeadCell>Nombres</Table.HeadCell>
+                        <Table.HeadCell>Apellidos</Table.HeadCell>
+                        <Table.HeadCell>Email</Table.HeadCell>
+                        <Table.HeadCell>Cédula/Pasaporte</Table.HeadCell>
+                        <Table.HeadCell>Rol</Table.HeadCell>
+                        <Table.HeadCell>Estado</Table.HeadCell>
+                        <Table.HeadCell>Acciones</Table.HeadCell>
                     </Table.Head>
                     <Table.Body className="divide-y">
-                        {filteredUsers.length === 0 ? (
-                            <Table.Row>
-                                <Table.Cell colSpan={numberOfColumns} className="text-center text-gray-500 whitespace-nowrap">
-                                    No se encontraron usuarios.
-                                </Table.Cell>
-                            </Table.Row>
-                        ) : (
-                            filteredUsers.map((user) => (
+                        {filteredUsers.map((user) => {
+                            const isSelf = user.user_id === currentUserId;
+                            const isSuperAdminRow = user.role === 'superadministrator';
+                            const canEdit = !isSuperAdminRow || (isSuperAdminRow && isSelf);
+                            const canToggleStatus = !isSelf && !isSuperAdminRow;
+                            const canDelete = currentUserRole === 'superadministrator' && !isSelf && !isSuperAdminRow;
+
+                            return (
                                 <Table.Row key={user.user_id} className="bg-white">
-                                    <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
-                                        {`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim() || 'N/A'}
-                                    </Table.Cell>
-                                    <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
-                                        {`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim() || 'N/A'}
-                                    </Table.Cell>
-                                    <Table.Cell className="whitespace-nowrap">{user.email || 'N/A'}</Table.Cell>
-                                    <Table.Cell className="whitespace-nowrap">
-                                        {user.tipo_identificacion && user.numero_identificacion
-                                            ? `${user.tipo_identificacion}: ${user.numero_identificacion}`
-                                            : 'N/A'}
-                                    </Table.Cell>
-                                    <Table.Cell className="whitespace-nowrap">
-                                        <span className={`px-3 py-1 rounded-full text-sm ${user.role === 'admin' ? 'bg-green-100 text-green-800' : user.role === 'inactive' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
-                                            {user.role}
-                                        </span>
-                                    </Table.Cell>
-                                    <Table.Cell className="whitespace-nowrap">
-                                        <span className={`px-3 py-1 rounded-full text-sm ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                    <Table.Cell className="font-medium text-gray-900">{`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim()}</Table.Cell>
+                                    <Table.Cell className="font-medium text-gray-900">{`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim()}</Table.Cell>
+                                    <Table.Cell>{user.email}</Table.Cell>
+                                    <Table.Cell>{user.numero_identificacion ? `${user.tipo_identificacion}: ${user.numero_identificacion}` : 'N/A'}</Table.Cell>
+                                    <Table.Cell><span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">{user.role}</span></Table.Cell>
+                                    <Table.Cell>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                             {user.status === 'active' ? 'Activo' : 'Inactivo'}
                                         </span>
                                     </Table.Cell>
-                                    <Table.Cell className="whitespace-nowrap">
+                                    <Table.Cell>
                                         <div className="flex gap-2 items-center">
-                                            {/* Botón Contactar: siempre visible */}
-                                            <Button
-                                                size="xs"
-                                                color="blue"
-                                                disabled={!user.email || !currentUserEmail}
-                                                onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
-                                            >
+                                            <Button size="xs" color="blue" disabled={!user.email} onClick={() => handleEnviarCorreo(user.email!, user.full_name || '')}>
                                                 Contactar
                                             </Button>
-
-                                            {currentUserRole === 'superadministrator' ? (
-                                                <>
-                                                    {/* El superadministrador logueado gestiona: */}
-                                                    {user.user_id === currentUserId ? (
-                                                        // Solo Editar para su propio perfil
-                                                        <Link
-                                                            to={`/admin/dashboard/edit-user/${user.user_id}`}
-                                                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                        >
-                                                            Editar
-                                                        </Link>
-                                                    ) : (
-                                                        // Para otros usuarios, si NO es otro superadministrador, mostrar todos los botones (incluido eliminar)
-                                                        user.role !== 'superadministrator' && (
-                                                            <>
-                                                                <Link
-                                                                    to={`/admin/dashboard/edit-user/${user.user_id}`}
-                                                                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                                >
-                                                                    Editar
-                                                                </Link>
-
-                                                                {user.status === 'active' ? (
-                                                                    <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
-                                                                        Desactivar
-                                                                    </Button>
-                                                                ) : (
-                                                                    <Button size="xs" color="success" onClick={() => handleActivateUser(user.user_id, user.full_name)}>
-                                                                        Activar
-                                                                    </Button>
-                                                                )}
-
-                                                                <Button
-                                                                    size="xs"
-                                                                    color="red"
-                                                                    onClick={() => handleDeleteUserClick(user.user_id, user.full_name)}
-                                                                >
-                                                                    Eliminar
-                                                                </Button>
-                                                            </>
-                                                        )
-                                                    )}
-                                                </>
-                                            ) : (
-                                                /* Si el usuario logueado NO es superadministrator (es admin, agent, client) */
-                                                user.role !== 'superadministrator' && (
-                                                    /* Mostrar botones para usuarios que NO son superadministradores, PERO SIN el de Eliminar */
-                                                    <>
-                                                        {/* Botón Editar */}
-                                                        <Link
-                                                            to={`/admin/dashboard/edit-user/${user.user_id}`}
-                                                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                                                        >
-                                                            Editar
-                                                        </Link>
-
-                                                        {/* Botón Desactivar/Activar */}
-                                                        {user.status === 'active' ? (
-                                                            <Button size="xs" color="failure" onClick={() => handleDeactivateUser(user.user_id, user.full_name)}>
-                                                                Desactivar
-                                                            </Button>
-                                                        ) : (
-                                                            <Button size="xs" color="success" onClick={() => handleActivateUser(user.user_id, user.full_name)}>
-                                                                Activar
-                                                            </Button>
-                                                        )}
-
-                                                        {/* El botón de Eliminar HA SIDO ELIMINADO de esta sección */}
-                                                    </>
-                                                )
+                                            {canEdit && (
+                                                <Link to={`/admin/dashboard/edit-user/${user.user_id}`}>
+                                                    <Button size="xs" color="light">Editar</Button>
+                                                </Link>
+                                            )}
+                                            {canToggleStatus && (
+                                                <Button size="xs" color={user.status === 'active' ? 'warning' : 'success'} onClick={() => handleToggleStatus(user)}>
+                                                    {user.status === 'active' ? 'Desactivar' : 'Activar'}
+                                                </Button>
+                                            )}
+                                            {canDelete && (
+                                                <Button size="xs" color="failure" onClick={() => handleDeleteClick(user.user_id, user.email || 'desconocido')}>
+                                                    Eliminar
+                                                </Button>
                                             )}
                                         </div>
                                     </Table.Cell>
                                 </Table.Row>
-                            ))
-                        )}
+                            );
+                        })}
                     </Table.Body>
                 </Table>
             </div>
-
+            
             <CustomModal
                 show={showModal}
                 onClose={() => setShowModal(false)}
-                title={modalTitle}
                 message={modalMessage}
+                title={modalTitle}
                 type={modalType}
-                onConfirm={modalAction || undefined}
+                onConfirm={modalAction}
             />
         </div>
     );

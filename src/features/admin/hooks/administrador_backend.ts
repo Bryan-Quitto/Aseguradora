@@ -1,171 +1,80 @@
 import { supabase } from '../../../supabase/client'; // Asegúrate de que esta ruta sea correcta
 
-// Define la interfaz para el perfil de usuario, basándote en la tabla 'profiles' que creamos
-// ¡IMPORTANTE! Esta interfaz debe coincidir con la estructura de tu tabla 'profiles' en Supabase.
+// 1. CORRECCIÓN: La interfaz debe coincidir con tu tabla de la base de datos.
+// Usamos 'status' en lugar de 'is_active'.
 export interface UserProfile {
     user_id: string;
-    primer_nombre: string | null; // Añadido
-    segundo_nombre: string | null; // Añadido
+    primer_nombre: string | null;
+    segundo_nombre: string | null;
     primer_apellido: string | null;
     segundo_apellido: string | null;
     full_name: string | null;
-    email: string | null; // Añadido
-    nacionalidad: string | null; // Añadido
-    tipo_identificacion: string | null; // Añadido
-    numero_identificacion: string | null; // Añadido
-    lugar_nacimiento: string | null; // Añadido
-    fecha_nacimiento: string | null; // Añadido (asumiendo string en formato 'YYYY-MM-DD' para la fecha)
-    sexo: string | null; // Añadido
-    estado_civil: string | null; // Añadido
-    estatura: number | null; // Añadido (asumiendo number)
-    peso: number | null; // Añadido (asumiendo number)
+    email: string | null;
+    nacionalidad: string | null;
+    tipo_identificacion: string | null;
+    numero_identificacion: string | null;
+    lugar_nacimiento: string | null;
+    fecha_nacimiento: string | null; // Podrías usar Date si lo manejas así
+    sexo: string | null;
+    estado_civil: string | null;
+    estatura: number | null;
+    peso: number | null;
     role: string;
-    status: 'active' | 'inactive'; // Nuevo campo para el estado
+    // La propiedad clave que debe coincidir con tu BD
+    status: 'active' | 'inactive'; // <-- CAMBIO IMPORTANTE AQUÍ
     created_at: string;
     updated_at: string;
+    phone_number: string | null; // Añadida por si la necesitas, como en tu DDL
 }
 
-/**
- * Obtiene todos los perfiles de usuario de la tabla 'profiles'.
- * @returns Una promesa que resuelve con un array de UserProfile o un error.
- */
-export async function getAllUserProfiles(): Promise<{ data: UserProfile[] | null; error: Error | null }> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .select('*'); // Selecciona todas las columnas, incluyendo las nuevas
+// 2. CORRECCIÓN: Adaptamos las funciones para que retornen los tipos correctos.
+// Supabase puede devolver un PostgrestError, no un Error genérico.
+// Es mejor práctica usar los tipos que provee Supabase.
+import { PostgrestError } from '@supabase/supabase-js';
 
-    if (error) {
-        console.error('Error al obtener perfiles de usuario:', error.message);
-        return { data: null, error };
-    }
-
-    return { data: data as UserProfile[], error: null };
+// No es necesario retornar un objeto, podemos retornar directamente la respuesta de Supabase.
+export async function getAllUserProfiles() {
+    // El select obtiene todas las columnas, no es necesario especificarlas si quieres todas.
+    const { data, error } = await supabase.from('profiles').select('*');
+    return { data: data as UserProfile[] | null, error };
 }
 
-/**
- * Obtiene un perfil de usuario por su ID.
- * @param user_id El ID del usuario a buscar.
- * @returns Una promesa que resuelve con el UserProfile o un error.
- */
-export async function getUserProfileById(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
+export async function getUserProfileById(user_id: string) {
     const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', user_id)
-        .single(); // Esperamos un solo resultado
-
-    if (error) {
-        console.error(`Error al obtener perfil de usuario con ID ${user_id}:`, error.message);
-        return { data: null, error };
-    }
-
-    return { data: data as UserProfile, error: null };
+        .single();
+    
+    return { data: data as UserProfile | null, error };
 }
 
-
-interface UpdateUserProfileData {
-    primer_nombre?: string | null; // Modificado
-    segundo_nombre?: string | null; // Modificado
-    primer_apellido?: string | null; // Modificado
-    segundo_apellido?: string | null; // Modificado
-    full_name?: string | null; // Modificado
-    email?: string | null; // Modificado
-    nacionalidad?: string | null; // Modificado
-    tipo_identificacion?: string | null; // Modificado
-    numero_identificacion?: string | null; // Modificado
-    lugar_nacimiento?: string | null; // Modificado
-    fecha_nacimiento?: string | null; // Modificado
-    sexo?: string | null; // Modificado
-    estado_civil?: string | null; // Modificado
-    estatura?: number | null;
-    peso?: number | null;
-    role?: string | null; // Modificado
-    status?: 'active' | 'inactive'; // Añadido
-}
-
-/**
- * Actualiza un perfil de usuario existente en la tabla 'profiles'.
- * @param user_id El ID del perfil a actualizar.
- * @param updates Los campos a actualizar.
- * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
- */
-export async function updateUserProfile(user_id: string, updates: UpdateUserProfileData): Promise<{ data: UserProfile | null; error: Error | null }> {
+export async function updateUserProfile(user_id: string, updates: Partial<UserProfile>) {
     const { data, error } = await supabase
         .from('profiles')
         .update(updates)
         .eq('user_id', user_id)
         .select()
         .single();
-
-    if (error) {
-        console.error('Error al actualizar perfil de usuario:', error.message);
-        return { data: null, error };
-    }
-
-    return { data: data as UserProfile, error: null };
+    
+    return { data: data as UserProfile | null, error };
 }
 
-/**
- * Desactiva un perfil de usuario (ej. cambiando su campo 'status' a 'inactive').
- * @param user_id El ID del perfil a desactivar.
- * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
- */
-export async function deactivateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .update({ status: 'inactive' }) // Cambiar el estado a 'inactive'
-        .eq('user_id', user_id)
-        .select()
-        .single();
 
-    if (error) {
-        console.error('Error al desactivar perfil de usuario:', error.message);
-        return { data: null, error };
-    }
-
-    return { data: data as UserProfile, error: null };
+// 4. CORRECCIÓN: Creamos la función que el frontend necesita.
+// Esta es la función que usamos para activar/desactivar.
+export async function updateUserProfileStatus(user_id: string, newStatus: 'active' | 'inactive') {
+    // Reutilizamos la función genérica de actualizar para mantener el código DRY (Don't Repeat Yourself)
+    return updateUserProfile(user_id, { status: newStatus });
 }
 
-/**
- * Activa un perfil de usuario cambiando su estado a 'active'.
- * @param user_id El ID del perfil a activar.
- * @returns Una promesa que resuelve con el UserProfile actualizado o un error.
- */
-export async function activateUserProfile(user_id: string): Promise<{ data: UserProfile | null; error: Error | null }> {
-    const { data, error } = await supabase
-        .from('profiles')
-        .update({ status: 'active' })
-        .eq('user_id', user_id)
-        .select()
-        .single();
 
-    if (error) {
-        console.error('Error al activar perfil de usuario:', error.message);
-        return { data: null, error };
-    }
-
-    return { data: data as UserProfile, error: null };
-}
-
-/**
- * Elimina un perfil de usuario de la base de datos por su ID.
- * Nota: Esto eliminará el registro de la tabla 'profiles'.
- * Si también necesitas eliminar el usuario de la autenticación de Supabase (auth.users),
- * necesitarías credenciales de 'service_role' para el cliente Supabase y usar `supabase.auth.admin.deleteUser(userId)`.
- * Por motivos de seguridad y alcance, aquí solo eliminamos el perfil de la tabla 'profiles'.
- * @param user_id El ID del perfil de usuario a eliminar.
- * @returns Una promesa que resuelve con un error si la eliminación falla.
- */
-export async function deleteUserProfile(user_id: string): Promise<{ error: Error | null }> {
+// 5. La función de borrar está bien, solo ajustamos el tipo de retorno para consistencia.
+export async function deleteUserProfile(user_id: string): Promise<{ error: PostgrestError | null }> {
     const { error } = await supabase
-        .from('profiles') // Elimina el registro de la tabla 'profiles'
+        .from('profiles')
         .delete()
         .eq('user_id', user_id);
-
-    if (error) {
-        console.error('Error al eliminar perfil de usuario:', error.message);
-        return { error };
-    }
-
-    return { error: null };
+    
+    return { error };
 }

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from "react"; //esto es solo para que se haga el commit
+import { useEffect, useState, FC, FormEvent } from "react"; // Usamos FC y FormEvent para un tipado más explícito
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase/client";
 import logo from 'src/assets/images/logos/logo-wrappixel.png';
-import type { Session } from "@supabase/supabase-js";
 
 const gradientStyle = {
   background: "linear-gradient(-45deg, #4A90E2, #333333, #A2D5C6, #FFFFFF)",
@@ -11,16 +10,18 @@ const gradientStyle = {
   minHeight: "100vh",
 };
 
-const AuthCallback: React.FC = () => {
+const AuthCallback: FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
+  // 3. CORRECCIÓN: Eliminamos el estado 'session' que no se utilizaba
+  // const [session, setSession] = useState<Session | null>(null);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const checkSession = async () => {
+      // Simplemente verificamos si existe una sesión
       const { data, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -29,25 +30,30 @@ const AuthCallback: React.FC = () => {
         return;
       }
 
+      // Si no hay sesión, es un error en este contexto
       if (!data.session) {
-        setError("No hay sesión activa. Por favor inicia sesión.");
+        setError("No hay sesión activa. Por favor, inicia sesión de nuevo.");
         setLoading(false);
+        // Opcional: Redirigir al login
+        // navigate('/auth/login');
         return;
       }
 
-      setSession(data.session);
+      // No es necesario guardar la sesión si no la vamos a usar.
+      // setSession(data.session); 
       setLoading(false);
     };
 
     checkSession();
-  }, []);
+  }, []); // El array de dependencias vacío es correcto
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
   
-    const { data, error } = await supabase.auth.updateUser({
+    // 4. CORRECCIÓN: No necesitamos 'data', solo nos interesa el 'error'.
+    const { error } = await supabase.auth.updateUser({
       password: password,
     });
   
@@ -58,7 +64,8 @@ const AuthCallback: React.FC = () => {
     }
   
     setSaving(false);
-    navigate("/");
+    // Redirigir a la página principal o al dashboard después de actualizar la contraseña
+    navigate("/"); 
   };
 
   if (loading) {

@@ -9,6 +9,7 @@ interface FileUploadProps {
   onChange: (files: FileList | null) => void;
   required?: boolean;
   className?: string;
+  disabled?: boolean; // ¡Esta es la propiedad que faltaba!
 }
 
 const FileUpload: React.FC<FileUploadProps> = ({

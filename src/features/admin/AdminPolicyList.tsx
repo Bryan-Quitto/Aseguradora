@@ -1,250 +1,231 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '../../supabase/client'; // ¡Ruta corregida a tu cliente Supabase!
-// RUTA CORREGIDA: Ajuste para que apunte correctamente a policy_management.ts
-import { Policy, getAllPolicies, deletePolicy } from '../policies/policy_management'; // Importa deletePolicy
+// ASUMO que tienes una función `getAllPolicies` en policy_management.ts
+// Si no la tienes, necesitarás crearla en el backend para que este componente funcione.
+import { Policy, getAllPolicies, getInsuranceProductById } from '../policies/policy_management';
+import { getClientProfileById } from '../clients/hooks/cliente_backend'; // Importa getClientProfileById
+
+// Extiende Policy para incluir numero_identificacion
+type PolicyWithCedula = Policy & { numero_identificacion: string };
 
 /**
- * Componente para mostrar una lista de todas las pólizas disponibles para los administradores.
- * Permite ver un resumen de cada póliza y navegar a sus detalles.
+ * Componente para listar TODAS las pólizas en el sistema (vista de administrador).
  */
 export default function AdminPolicyList() {
-    const [policies, setPolicies] = useState<Policy[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [showConfirmDialog, setShowConfirmDialog] = useState(false); // Estado para controlar la visibilidad del modal de confirmación
-    const [policyToDeleteId, setPolicyToDeleteId] = useState<string | null>(null); // Estado para guardar el ID de la póliza a eliminar
-    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null); // Estado para el rol del usuario actual
+  // El usuario autenticado sigue siendo útil para otras comprobaciones de permisos si fueran necesarias,
+  // pero su ID ya no se usa para filtrar las pólizas aquí.
+  const [policies, setPolicies] = useState<PolicyWithCedula[]>([]); // Estado para almacenar las pólizas
+  const [loading, setLoading] = useState<boolean>(true); // Estado de carga
+  const [error, setError] = useState<string | null>(null); // Estado de error
+  const [clientNames, setClientNames] = useState<Map<string, string>>(new Map()); // Mapa para almacenar nombres de clientes
+  const [productNames, setProductNames] = useState<Map<string, string>>(new Map()); // Mapa para almacenar nombres de productos
+  const [searchCedula, setSearchCedula] = useState('');
 
+  useEffect(() => {
     /**
-     * Hook useEffect para cargar todas las pólizas al montar el componente.
-     * También, para obtener el rol del usuario autenticado.
+     * Función asíncrona para cargar TODAS las pólizas y sus detalles asociados.
      */
-    useEffect(() => {
-        const fetchPoliciesAndUserRole = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                // 1. Obtener el usuario autenticado de Supabase
-                const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const fetchAllPoliciesAndDetails = async () => {
+      setLoading(true);
+      setError(null);
 
-                if (userError) {
-                    console.error('Error al obtener el usuario autenticado:', userError);
-                    setError('Error al cargar la información del usuario.');
-                    setLoading(false);
-                    return;
-                }
+      // AHORA LLAMAMOS A getAllPolicies para obtener TODAS las pólizas
+      const { data: policiesData, error: policiesError } = await getAllPolicies();
 
-                if (user) {
-                    // 2. Consultar la tabla 'administrators' para obtener el admin_role
-                    const { data: adminData, error: adminRoleError } = await supabase
-                        .from('administrators')
-                        .select('admin_role')
-                        .eq('user_id', user.id)
-                        .single(); // Esperamos un solo resultado para un user_id
+      if (policiesError) {
+        console.error('Error al obtener pólizas:', policiesError);
+        setError('Error al cargar las pólizas. Por favor, inténtalo de nuevo.');
+        setLoading(false);
+        return;
+      }
 
-                    if (adminRoleError && adminRoleError.code !== 'PGRST116') { // PGRST116 es 'No rows found'
-                        console.error('Error al obtener el rol del administrador:', adminRoleError);
-                        // No establecer error aquí, ya que el usuario podría no ser un administrador (lo cual es normal)
-                    } else if (adminData) {
-                        // Si se encontró un registro y tiene un admin_role
-                        setCurrentUserRole(adminData.admin_role);
-                    } else {
-                        // Si el usuario está autenticado pero no está en la tabla 'administrators',
-                        // podemos asumir que no es un administrador para este contexto,
-                        // o podrías consultar la tabla 'profiles' para su rol general si lo necesitas.
-                        // Para este caso, simplemente no establecemos un admin_role, lo que por defecto
-                        // evitará que vea el botón de eliminar.
-                        setCurrentUserRole(null); // O un rol por defecto como 'client' si lo manejas así
-                    }
-                } else {
-                    // Si no hay usuario autenticado, no hay rol de administrador
-                    setCurrentUserRole(null);
-                }
+      if (policiesData) {
+        const uniqueClientIds = new Set(policiesData.map(p => p.client_id));
+        const uniqueProductIds = new Set(policiesData.map(p => p.product_id));
 
-                // 3. Llama a la función getAllPolicies
-                const { data, error: policiesError } = await getAllPolicies();
-                if (policiesError) {
-                    setError('No se pudieron cargar las pólizas: ' + policiesError.message);
-                    console.error('Error al obtener pólizas:', policiesError);
-                } else {
-                    setPolicies(data || []);
-                }
-            } catch (e: any) {
-                setError('Ocurrió un error inesperado al cargar los datos: ' + e.message);
-                console.error('Error inesperado:', e);
-            } finally {
-                setLoading(false);
+        // Cargar nombres y cédulas de clientes
+        const newClientNames = new Map<string, string>(clientNames);
+        const cedulasPorCliente = new Map<string, string>();
+        for (const clientId of uniqueClientIds) {
+          if (!newClientNames.has(clientId) || !cedulasPorCliente.has(clientId)) {
+            const { data: clientData, error: clientError } = await getClientProfileById(clientId);
+            if (clientError) {
+              newClientNames.set(clientId, 'Cliente Desconocido');
+              cedulasPorCliente.set(clientId, '');
+            } else if (clientData) {
+              newClientNames.set(clientId, clientData.full_name || `${clientData.primer_nombre || ''} ${clientData.primer_apellido || ''}`.trim() || 'Nombre no disponible');
+              cedulasPorCliente.set(clientId, clientData.numero_identificacion || '');
             }
-        };
-
-        fetchPoliciesAndUserRole();
-    }, []); // El array vacío asegura que este efecto se ejecuta una sola vez al montar el componente
-
-    /**
-     * Maneja el clic en el botón de eliminar.
-     * Guarda el ID de la póliza y muestra el diálogo de confirmación.
-     * @param policyId El ID de la póliza a eliminar.
-     */
-    const handleDeleteClick = (policyId: string) => {
-        setPolicyToDeleteId(policyId);
-        setShowConfirmDialog(true);
-    };
-
-    /**
-     * Cancela la operación de eliminación y cierra el diálogo de confirmación.
-     */
-    const cancelDelete = () => {
-        setPolicyToDeleteId(null);
-        setShowConfirmDialog(false);
-    };
-
-    /**
-     * Confirma la eliminación de la póliza.
-     * Aquí iría la lógica para llamar a tu API de Supabase para eliminar el registro.
-     */
-    const confirmDelete = async () => {
-        if (policyToDeleteId) {
-            setLoading(true); // Opcional: mostrar un estado de carga mientras se elimina
-            const { error: deleteError } = await deletePolicy(policyToDeleteId); // Llama a la función de eliminación
-
-            if (deleteError) {
-                setError('Error al eliminar la póliza: ' + deleteError.message);
-                console.error('Error de eliminación:', deleteError);
-            } else {
-                // Si la eliminación es exitosa, cierra el modal y recarga la lista de pólizas
-                setShowConfirmDialog(false);
-                setPolicyToDeleteId(null);
-                // Vuelve a cargar las pólizas para reflejar el cambio
-                const { data, error: fetchError } = await getAllPolicies();
-                if (fetchError) {
-                    setError('No se pudieron recargar las pólizas después de la eliminación: ' + fetchError.message);
-                } else {
-                    setPolicies(data || []);
-                }
-            }
-            setLoading(false); // Finaliza el estado de carga
+          }
         }
+        setClientNames(newClientNames);
+
+        // Agrega la cédula al objeto policy
+        const policiesWithCedula = policiesData.map(policy => ({
+          ...policy,
+          numero_identificacion: cedulasPorCliente.get(policy.client_id) || ''
+        }));
+        setPolicies(policiesWithCedula);
+
+        // Cargar nombres de productos
+        const newProductNames = new Map<string, string>(productNames);
+        for (const productId of uniqueProductIds) {
+          if (!newProductNames.has(productId)) { // Evitar recargar si ya está en el mapa
+            const { data: productData, error: productError } = await getInsuranceProductById(productId);
+            if (productError) {
+              console.error(`Error al obtener producto ${productId}:`, productError);
+              newProductNames.set(productId, 'Producto Desconocido');
+            } else if (productData) {
+              newProductNames.set(productId, productData.name);
+            }
+          }
+        }
+        setProductNames(newProductNames);
+      }
+      setLoading(false);
     };
 
+    fetchAllPoliciesAndDetails();
+  }, []); // El array de dependencias está vacío porque ya no depende del user.id para filtrar
 
-    // Muestra un indicador de carga mientras se obtienen los datos
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-48">
-                <p className="text-blue-600 text-lg">Cargando pólizas...</p>
-            </div>
-        );
-    }
+  // Filtrar pólizas por numero_identificacion (cédula)
+  const filteredPolicies = policies.filter((policy) => {
+    return searchCedula === '' || policy.numero_identificacion.startsWith(searchCedula);
+  });
 
-    // Muestra un mensaje de error si algo salió mal durante la carga
-    if (error) {
-        return (
-            <div className="flex justify-center items-center h-48">
-                <p className="text-red-500 text-lg">Error: {error}</p>
-            </div>
-        );
-    }
-
-    // Muestra un mensaje si no hay pólizas registradas después de la carga
-    if (policies.length === 0) {
-        return (
-            <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-5xl border border-blue-100 text-center">
-                <h2 className="text-3xl font-bold text-blue-700 mb-6">Lista de Pólizas</h2>
-                <p className="text-gray-600">No hay pólizas registradas en el sistema.</p>
-            </div>
-        );
-    }
-
-    // Si hay pólizas, las muestra en una tabla
+  if (loading) {
     return (
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-7xl border border-blue-100 mx-auto">
-            <h2 className="text-3xl font-bold text-blue-700 mb-6 text-center">Lista de pólizas</h2>
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-blue-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número de Póliza</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Inicio</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Fin</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Premium</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th> {/* Nueva columna */}
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {policies.map((policy) => (
-                            <tr key={policy.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{policy.policy_number}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                        policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                                        policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        policy.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                    }`}>
-                                        {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{policy.start_date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{policy.end_date}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${policy.premium_amount.toFixed(2)}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-left text-sm font-medium">
-                                    <div className="flex items-center space-x-2"> {/* Contenedor para los botones de acción */}
-                                        <Link
-                                            to={`/admin/dashboard/policies/${policy.id}`}
-                                            className="text-blue-600 hover:text-blue-900 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                                        >
-                                            Ver Detalles
-                                        </Link>
-                                        <Link
-                                            to={`/admin/dashboard/policies/${policy.id}/edit`}
-                                            className="text-green-600 hover:text-green-900 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm bg-green-50 hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                                        >
-                                            Editar
-                                        </Link>
-                                        {/* Botón de Eliminar - SOLO VISIBLE PARA SUPERADMINISTRADORES */}
-                                        {currentUserRole === 'superadministrator' && (
-                                            <button
-                                                onClick={() => handleDeleteClick(policy.id)}
-                                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                                            >
-                                                Eliminar
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Diálogo de Confirmación de Eliminación (Modal) */}
-            {showConfirmDialog && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-sm w-full">
-                        <h3 className="text-lg font-bold text-gray-900 mb-4">Confirmar Eliminación</h3>
-                        <p className="text-gray-700 mb-6">
-                            ¿Estás seguro de que quieres eliminar esta póliza? Esta acción no se puede deshacer.
-                        </p>
-                        <div className="flex justify-end space-x-4">
-                            <button
-                                onClick={cancelDelete}
-                                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                            >
-                                Eliminar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <p className="text-blue-600 text-xl">Cargando pólizas...</p>
+      </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p className="text-red-600 text-xl">{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-3xl font-bold text-blue-700">Todas las Pólizas del Sistema</h2>
+        {/* El botón "Crear nueva póliza" podría seguir siendo relevante para un administrador */}
+        <Link
+          to="/admin/dashboard/policies/new" // Asegúrate que esta ruta sea la correcta para el administrador
+          className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition duration-300 shadow-md"
+        >
+          Crear Nueva Póliza
+        </Link>
+      </div>
+
+      {/* Barra de búsqueda */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Buscar por cédula..."
+          className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
+          value={searchCedula}
+          maxLength={10}
+          inputMode="numeric"
+          pattern="\d*"
+          onChange={e => {
+            // Solo permite números y máximo 10 caracteres
+            const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+            setSearchCedula(value);
+          }}
+        />
+      </div>
+
+      {filteredPolicies.length === 0 ? (
+        <p className="text-lg text-gray-600 text-center py-10">
+          No hay pólizas que coincidan con la búsqueda.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-blue-50">
+              <tr>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Número de Póliza
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cliente
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Cédula
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Producto
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Monto Prima
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredPolicies.map((policy) => {
+                const clientFullName = clientNames.get(policy.client_id) || 'Cargando...';
+                const productName = productNames.get(policy.product_id) || 'Cargando...';
+
+                return (
+                  <tr key={policy.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {policy.policy_number}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {clientFullName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {policy.numero_identificacion}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      {productName}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                      ${policy.premium_amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        policy.status === 'active' ? 'bg-green-100 text-green-800' :
+                        policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        policy.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        policy.status === 'expired' ? 'bg-gray-400 text-gray-900' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <Link
+                        to={`/admin/dashboard/policies/${policy.id}`} // Ruta para ver detalles (ajustada para admin)
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        Ver Detalles
+                      </Link>
+                      <Link
+                        to={`/admin/dashboard/policies/${policy.id}/edit`} // Ruta para editar (ajustada para admin)
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Editar
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }

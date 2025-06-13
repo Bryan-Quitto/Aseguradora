@@ -1,20 +1,61 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { supabase } from 'src/supabase/client'; // Importa el cliente de Supabase real
 
 // Importa las funciones de manejo de datos y las interfaces desde el archivo central policy_management.ts
-// Asegúrate de que todas estas funciones e interfaces estén exportadas en policy_management.ts
 import {
     Policy,
     InsuranceProduct,
     ClientProfile,
     AgentProfile,
-    Beneficiary, // Importa Beneficiary y Dependent para el tipado consistente
+    Beneficiary,
     Dependent,
     getPolicyById,
     getInsuranceProductById,
     getClientProfileById,
     getAgentProfileById,
 } from '../policies/policy_management';
+
+// Define la interfaz Document (si no está ya exportada desde policy_management.ts o un archivo de tipos compartido)
+interface Document {
+  id: string;
+  policy_id: string;
+  document_name: string;
+  file_path: string;
+  uploaded_at: string;
+  file_url?: string; // URL pública para descarga
+}
+
+/**
+ * Función para obtener documentos de la póliza desde Supabase Storage.
+ * Es similar a la función en AgentPolicyDetail, asegurando la consistencia.
+ */
+async function getPolicyDocuments(policyId: string): Promise<{ data: Document[] | null; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('policy_documents') // Asegúrate de que tu tabla se llame 'policy_documents'
+      .select('*')
+      .eq('policy_id', policyId)
+      .order('uploaded_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Error al cargar documentos de la base de datos: ${error.message}`);
+    }
+
+    // Generar URLs públicas para cada documento
+    const documentsWithUrls = await Promise.all((data || []).map(async (doc: Document) => {
+      const { data: urlData } = supabase.storage
+        .from('documents') // Asegúrate de que tu bucket de almacenamiento se llame 'documents'
+        .getPublicUrl(doc.file_path);
+      return { ...doc, file_url: urlData?.publicUrl || '#' };
+    }));
+
+    return { data: documentsWithUrls, error: null };
+  } catch (err) {
+    console.error(`Error en getPolicyDocuments para policyId ${policyId}:`, err);
+    return { data: null, error: err };
+  }
+}
 
 /**
  * Componente para mostrar los detalles de una póliza específica para un administrador.
@@ -29,6 +70,11 @@ export default function AdminPolicyDetail() {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
+    // NUEVOS ESTADOS PARA DOCUMENTOS
+    const [policyDocuments, setPolicyDocuments] = useState<Document[]>([]);
+    const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false);
+    const [documentsError, setDocumentsError] = useState<string | null>(null);
+
     /**
      * Hook useEffect para cargar todos los datos relevantes al montar el componente.
      */
@@ -41,7 +87,8 @@ export default function AdminPolicyDetail() {
             }
 
             setLoading(true);
-            setError(null);
+            setError(null); // Limpiar error principal
+            setDocumentsError(null); // Limpiar error de documentos
 
             try {
                 // 1. Obtener los detalles de la póliza (usando la función importada)
@@ -90,6 +137,18 @@ export default function AdminPolicyDetail() {
                     setAgent(null);
                 }
 
+                // 5. NUEVO: Obtener los documentos asociados a la póliza
+                setLoadingDocuments(true);
+                const { data: docsData, error: docsError } = await getPolicyDocuments(policyData.id);
+                if (docsError) {
+                    console.error(`Error al obtener documentos para la póliza ${policyData.id}:`, docsError);
+                    setDocumentsError('Error al cargar los documentos de la póliza.');
+                    setPolicyDocuments([]);
+                } else {
+                    setPolicyDocuments(docsData || []);
+                }
+                setLoadingDocuments(false);
+
             } catch (err: any) {
                 // Captura cualquier error inesperado en la cadena de fetches
                 console.error("Error general al cargar detalles de la póliza:", err);
@@ -99,10 +158,16 @@ export default function AdminPolicyDetail() {
             }
         };
 
-        // Ya no necesitamos initializeSupabaseClient aquí, ya que las funciones importadas
-        // de policy_management.ts manejan su propia inicialización o dependen de una global.
         fetchAllDetails();
     }, [policyId]);
+
+    // Helper para capitalizar la primera letra de cualquier cadena (más genérico)
+    const capitalize = (s: string | null | undefined): string => {
+        if (!s) return 'N/A';
+        const trimmedS = s.trim();
+        if (trimmedS.length === 0) return 'N/A';
+        return trimmedS.charAt(0).toUpperCase() + trimmedS.slice(1);
+    };
 
     // Helper para renderizar los detalles específicos de cada tipo de póliza
     const renderSpecificPolicyDetails = () => {
@@ -184,7 +249,6 @@ export default function AdminPolicyDetail() {
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-3xl font-bold text-blue-700">Detalles de Póliza: {policy?.policy_number || 'Cargando...'}</h2>
                 <div className="flex space-x-3">
-                    {/* El botón "Editar Póliza" se ha eliminado de aquí */}
                     <Link
                         to="/admin/dashboard/policies"
                         className="bg-gray-600 text-white px-5 py-2 rounded-lg hover:bg-gray-700 transition duration-300 shadow-md"
@@ -225,18 +289,19 @@ export default function AdminPolicyDetail() {
                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General de la Póliza</h3>
                         <p className="mb-2"><strong className="font-medium">Número de Póliza:</strong> {policy.policy_number}</p>
                         <p className="mb-2"><strong className="font-medium">Producto:</strong> {product ? product.name : 'Cargando...'}</p>
-                        <p className="mb-2"><strong className="font-medium">Tipo de Producto:</strong> {product ? product.type.charAt(0).toUpperCase() + product.type.slice(1) : 'Cargando...'}</p>
+                        <p className="mb-2"><strong className="font-medium">Tipo de Producto:</strong> {product ? capitalize(product.type) : 'Cargando...'}</p>
                         <p className="mb-2"><strong className="font-medium">Fecha de Inicio:</strong> {policy.start_date}</p>
                         <p className="mb-2"><strong className="font-medium">Fecha de Fin:</strong> {policy.end_date}</p>
-                        <p className="mb-2"><strong className="font-medium">Monto de Prima:</strong> ${policy.premium_amount.toFixed(2)}</p>
-                        <p className="mb-2"><strong className="font-medium">Frecuencia de Pago:</strong> {policy.payment_frequency.charAt(0).toUpperCase() + policy.payment_frequency.slice(1)}</p>
+                        <p className="mb-2"><strong className="font-medium">Monto de Prima:</strong> ${policy.premium_amount?.toFixed(2) || 'N/A'}</p>
+                        <p className="mb-2"><strong className="font-medium">Frecuencia de Pago:</strong> {capitalize(policy.payment_frequency)}</p>
                         <p className="mb-2"><strong className="font-medium">Estado:</strong>
                             <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                                 policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                                policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
+                                policy.status === 'pending' || policy.status === 'awaiting_signature' ? 'bg-yellow-100 text-yellow-800' :
+                                policy.status === 'cancelled' || policy.status === 'expired' || policy.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-200 text-gray-800' // Fallback para estados no mapeados
                             }`}>
-                                {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
+                                {capitalize(policy.status)}
                             </span>
                         </p>
                         <p className="mb-2"><strong className="font-medium">Edad al Inscribirse:</strong> {policy.age_at_inscription || 'N/A'} años</p>
@@ -256,10 +321,23 @@ export default function AdminPolicyDetail() {
                                 <p className="mb-2"><strong className="font-medium">Nombre:</strong> {client.full_name || `${client.primer_nombre || ''} ${client.primer_apellido || ''}`.trim()}</p>
                                 <p className="mb-2"><strong className="font-medium">Email:</strong> <a href={`mailto:${client.email}`} className="text-blue-700 hover:underline">{client.email}</a></p>
                                 {client.phone_number && <p className="mb-2"><strong className="font-medium">Teléfono:</strong> {client.phone_number}</p>}
-                                {/* Puedes añadir más detalles del cliente aquí si son relevantes */}
                             </>
                         ) : (
                             <p className="text-gray-600">No se pudo cargar la información del cliente.</p>
+                        )}
+                    </div>
+
+                    {/* Sección del Agente */}
+                    <div className="bg-orange-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-orange-800 mb-4">Agente Asignado</h3>
+                        {agent ? (
+                            <>
+                                <p className="mb-2"><strong className="font-medium">Nombre:</strong> {agent.full_name || `${agent.primer_nombre || ''} ${agent.primer_apellido || ''}`.trim()}</p>
+                                <p className="mb-2"><strong className="font-medium">Email:</strong> <a href={`mailto:${agent.email}`} className="text-blue-700 hover:underline">{agent.email}</a></p>
+                                {agent.phone_number && <p className="mb-2"><strong className="font-medium">Teléfono:</strong> {agent.phone_number}</p>}
+                            </>
+                        ) : (
+                            <p className="text-gray-600">No hay un agente asignado o no se pudo cargar su información.</p>
                         )}
                     </div>
 
@@ -268,6 +346,34 @@ export default function AdminPolicyDetail() {
                         {renderSpecificPolicyDetails()}
                     </div>
                     
+                    {/* Sección de Documentos de la Póliza */}
+                    <div className="md:col-span-2 bg-purple-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-purple-800 mb-4">Documentos Subidos por el Cliente</h3>
+                        {loadingDocuments ? (
+                            <div className="text-center text-gray-600">Cargando documentos de la póliza...</div>
+                        ) : documentsError ? (
+                            <div className="text-red-600">Error: {documentsError}</div>
+                        ) : policyDocuments.length === 0 ? (
+                            <div className="text-gray-600 italic">No hay documentos subidos para esta póliza.</div>
+                        ) : (
+                            <ul className="bg-white rounded-lg p-4 border border-gray-200">
+                                {policyDocuments.map((doc) => (
+                                    <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
+                                        <span className="text-gray-800 break-words flex-grow mr-4">{doc.document_name}</span>
+                                        <a
+                                            href={doc.file_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
+                                        >
+                                            Ver
+                                        </a>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
                     {/* Sección de Notas del Administrador del Producto (Descripción del final) */}
                     {product?.admin_notes && (
                         <div className="md:col-span-2 bg-gray-50 p-6 rounded-lg shadow-sm border-t border-gray-200">

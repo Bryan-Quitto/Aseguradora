@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByAgentId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
-import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend'; // Importa getClientProfileById
+import { Policy, getPoliciesByAgentId, getInsuranceProductById } from '../../policies/policy_management';
+import { getClientProfileById } from '../../clients/hooks/cliente_backend'; // Importa getClientProfileById
 
 // Extiende Policy para incluir numero_identificacion
 type PolicyWithCedula = Policy & { numero_identificacion: string };
@@ -11,7 +11,7 @@ type PolicyWithCedula = Policy & { numero_identificacion: string };
  * Componente para listar las pólizas gestionadas por un agente.
  */
 export default function AgentPolicyList() {
-  const { profile, user } = useAuth(); // Obtiene el perfil del agente autenticado y el objeto user
+  const { user } = useAuth(); // Obtiene el perfil del agente autenticado y el objeto user
   // Cambia el tipo del estado policies:
   const [policies, setPolicies] = useState<PolicyWithCedula[]>([]); // Estado para almacenar las pólizas
   const [loading, setLoading] = useState<boolean>(true); // Estado de carga
@@ -94,7 +94,7 @@ export default function AgentPolicyList() {
     fetchPoliciesAndDetails();
   }, [user?.id]); // Dependencia del user_id del perfil para recargar si cambia
 
-  // Filtrar pólizas por número_identificacion (cedula)
+  // Filtrar pólizas por numero_identificacion (cedula)
   const filteredPolicies = policies.filter((policy) => {
     return searchCedula === '' || policy.numero_identificacion.startsWith(searchCedula);
   });

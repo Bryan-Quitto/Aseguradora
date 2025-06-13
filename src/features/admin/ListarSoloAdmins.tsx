@@ -1,4 +1,4 @@
-import { Button, Table, TextInput } from 'flowbite-react';
+import { Button, Table } from 'flowbite-react';
 import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { listOnlyAdmins } from './hooks/listUsers';
@@ -12,39 +12,46 @@ export default function ListarSoloAdmins() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  
+  // Mantenemos tu modal, que es más robusto.
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
 
   useEffect(() => {
-    async function fetchUsers() {
+    async function fetchUsersAndCurrentUser() {
       setLoading(true);
-      const { data, error } = await listOnlyAdmins();
-      if (error) {
-        setError(error.message);
+      
+      // Obtener lista de administradores
+      const { data, error: usersError } = await listOnlyAdmins();
+      if (usersError) {
+        setError(usersError.message);
       } else if (data) {
         setUsers(data);
       }
-      setLoading(false);
-    }
-    fetchUsers();
 
-    // Obtener email del usuario actual
-    const getCurrentUser = async () => {
+      // Obtener email del usuario actual
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUserEmail(user?.email ?? null);
-    };
-    getCurrentUser();
+      
+      setLoading(false);
+    }
+    fetchUsersAndCurrentUser();
   }, []);
 
+  // ========= LÓGICA DE FILTRADO MEJORADA =========
+  // Ahora busca solo por el número de identificación
   const filteredUsers = useMemo(() => {
-    if (!searchTerm) return users;
-    const lower = searchTerm.toLowerCase();
-    return users.filter(user =>
-      (user.numero_identificacion || '').toLowerCase().startsWith(lower)
+    if (!searchTerm) {
+      return users;
+    }
+    // La búsqueda es por 'startsWith' para que sea más útil
+    return users.filter(user => 
+      (user.numero_identificacion || '').startsWith(searchTerm)
     );
   }, [users, searchTerm]);
 
+  // Tu lógica de enviar correo está bien, la mantenemos.
   const handleEnviarCorreo = async (to_email: string, name: string) => {
     if (!currentUserEmail) {
       setModalTitle('Error');
@@ -56,12 +63,11 @@ export default function ListarSoloAdmins() {
       await enviarCorreo(currentUserEmail, to_email, name);
       setModalTitle('Éxito');
       setModalMessage('Correo enviado correctamente.');
-      setShowModal(true);
     } catch (error) {
       setModalTitle('Error');
       setModalMessage('Error enviando el correo.');
-      setShowModal(true);
     }
+    setShowModal(true);
   };
 
   if (loading) return <div className="text-center p-10">Cargando administradores...</div>;
@@ -71,87 +77,95 @@ export default function ListarSoloAdmins() {
     <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
       <h2 className="text-2xl font-bold mb-4 text-blue-800">Lista de Administradores</h2>
       <div className="flex justify-between items-center mb-6">
-        <div className="w-1/3">
+        
+        {/* ========= INPUT DE BÚSQUEDA MEJORADO ========= */}
+        <div className="w-1/3 relative">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+             <HiSearch className="h-5 w-5 text-gray-500" />
+          </div>
           <input
             type="text"
             placeholder="Buscar por cédula..."
-            className="border border-gray-300 rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="block w-full rounded-lg border-gray-300 bg-gray-50 p-2.5 pl-10 text-sm text-gray-900 focus:border-cyan-500 focus:ring-cyan-500"
             value={searchTerm}
-            maxLength={10}
-            inputMode="numeric"
-            pattern="\d*"
+            inputMode="numeric" // Mejora la experiencia en móviles
+            pattern="\d*"       // Patrón para validación
             onChange={e => {
-              // Solo permite números y máximo 10 caracteres
+              // Solo permite números y un máximo de 10 caracteres
               const value = e.target.value.replace(/\D/g, '').slice(0, 10);
               setSearchTerm(value);
             }}
           />
         </div>
       </div>
-      <Table hoverable>
-        <Table.Head>
-          <Table.HeadCell>Nombres</Table.HeadCell>
-          <Table.HeadCell>Apellidos</Table.HeadCell>
-          <Table.HeadCell>Email</Table.HeadCell>
-          <Table.HeadCell>Cédula/Pasaporte</Table.HeadCell>
-          <Table.HeadCell>Rol</Table.HeadCell>
-          <Table.HeadCell>Acciones</Table.HeadCell>
-        </Table.Head>
-        <Table.Body className="divide-y">
-          {filteredUsers.length === 0 ? (
-            <Table.Row>
-              <Table.Cell colSpan={6} className="text-center text-gray-500">
-                No se encontraron administradores.
-              </Table.Cell>
-            </Table.Row>
-          ) : (
-            filteredUsers.map((user) => (
-              <Table.Row key={user.user_id} className="bg-white">
-                <Table.Cell className="font-medium text-gray-900">
-                  {`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim() || 'N/A'}
-                </Table.Cell>
-                <Table.Cell className="font-medium text-gray-900">
-                  {`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim() || 'N/A'}
-                </Table.Cell>
-                <Table.Cell>{user.email || 'N/A'}</Table.Cell>
-                <Table.Cell>
-                  {user.tipo_identificacion && user.numero_identificacion
-                    ? `${user.tipo_identificacion}: ${user.numero_identificacion}`
-                    : 'N/A'}
-                </Table.Cell>
-                <Table.Cell>
-                  <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-                    {user.role}
-                  </span>
-                </Table.Cell>
-                <Table.Cell>
-                  <div className="flex gap-2">
-                    <Button
-                      size="xs"
-                      color="blue"
-                      disabled={!user.email || !currentUserEmail}
-                      onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
-                    >
-                      Contactar
-                    </Button>
-                    {/* CAMBIO AQUÍ: Oculta el botón "Desactivar" si el rol es 'superadministrator' */}
-                    {user.role !== 'superadministrator' && (
-                      <Button size="xs" color="failure">
-                        Desactivar
-                      </Button>
-                    )}
-                  </div>
+      <div className="overflow-x-auto">
+        <Table hoverable>
+          <Table.Head>
+            <Table.HeadCell>Nombres</Table.HeadCell>
+            <Table.HeadCell>Apellidos</Table.HeadCell>
+            <Table.HeadCell>Email</Table.HeadCell>
+            <Table.HeadCell>Cédula/Pasaporte</Table.HeadCell>
+            <Table.HeadCell>Rol</Table.HeadCell>
+            <Table.HeadCell>Acciones</Table.HeadCell>
+          </Table.Head>
+          <Table.Body className="divide-y">
+            {filteredUsers.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan={6} className="text-center text-gray-500">
+                  No se encontraron administradores.
                 </Table.Cell>
               </Table.Row>
-            ))
-          )}
-        </Table.Body>
-      </Table>
-      {/* Modal simple */}
+            ) : (
+              filteredUsers.map((user) => (
+                <Table.Row key={user.user_id} className="bg-white">
+                  <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
+                    {`${user.primer_nombre || ''} ${user.segundo_nombre || ''}`.trim() || 'N/A'}
+                  </Table.Cell>
+                  <Table.Cell className="font-medium text-gray-900 whitespace-nowrap">
+                    {`${user.primer_apellido || ''} ${user.segundo_apellido || ''}`.trim() || 'N/A'}
+                  </Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">{user.email || 'N/A'}</Table.Cell>
+                  <Table.Cell className="whitespace-nowrap">
+                    {user.tipo_identificacion && user.numero_identificacion
+                      ? `${user.tipo_identificacion}: ${user.numero_identificacion}`
+                      : 'N/A'}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 whitespace-nowrap">
+                      {user.role}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <div className="flex gap-2">
+                      <Button
+                        size="xs"
+                        color="blue"
+                        disabled={!user.email || !currentUserEmail}
+                        onClick={() => handleEnviarCorreo(user.email!, `${user.primer_nombre || ''} ${user.primer_apellido || ''}`)}
+                      >
+                        Contactar
+                      </Button>
+                      
+                      {/* ========= LÓGICA DE ROL PARA BOTÓN DESACTIVAR ========= */}
+                      {user.role !== 'superadministrator' && (
+                        <Button size="xs" color="failure">
+                          Desactivar
+                        </Button>
+                      )}
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              ))
+            )}
+          </Table.Body>
+        </Table>
+      </div>
+
+      {/* Tu modal se mantiene sin cambios */}
       {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <h3 className="font-bold mb-2">{modalTitle}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="rounded-lg bg-white p-6 shadow-lg">
+            <h3 className="mb-2 font-bold">{modalTitle}</h3>
             <p>{modalMessage}</p>
             <div className="mt-4 flex justify-end">
               <Button size="xs" onClick={() => setShowModal(false)}>Cerrar</Button>
