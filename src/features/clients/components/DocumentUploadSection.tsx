@@ -4,16 +4,6 @@ import { supabase } from 'src/supabase/client';
 // Importa el componente FileUpload real
 import FileUpload from 'src/components/shared/FileUpload';
 
-// Importa los tipos y funciones necesarios desde tu archivo de gestión de pólizas
-import {
-  Policy, // Importa la interfaz Policy de policy_management.ts
-  getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
-  getInsuranceProductById, // ¡IMPORTANTE! Importa también esta función
-  InsuranceProduct, // Asegúrate de que esta interfaz esté importada si getInsuranceProductById la devuelve
-} from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
-
-// Define tipos para los documentos que se manejarán localmente.
-// Si esta interfaz también se centralizará, impórtala desde su ubicación.
 interface Document {
   id: string;
   policy_id: string;

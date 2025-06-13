@@ -1,13 +1,6 @@
 import { Outlet, useLocation } from 'react-router-dom'; // Importa Outlet
 import { useAuth } from 'src/contexts/AuthContext';
 
-import ListarUsuarios from './ListarUsuarios';
-import CrearUsuarios from './CrearUsuarios';
-import ListarSoloUsuarios from './ListarSoloUsuarios';
-import ListarSoloAgentes from './ListarSoloAgentes';
-import ListarSoloAdmins from './ListarSoloAdmins';
-import AdminPolicyList from './AdminPolicyList'; // Tampoco necesitas importar este aquí
-
 export default function Dashboard_administrador() { // Renombré para que coincida con tu Router.tsx
   const location = useLocation();
   const { profile } = useAuth();

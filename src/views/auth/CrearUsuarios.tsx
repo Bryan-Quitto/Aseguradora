@@ -98,7 +98,7 @@ export default function CrearUsuarios() {
     try {
       // 1. Iniciar sesión o crear usuario con un enlace mágico/OTP
       // Esto enviará un correo al usuario para que "inicie sesión" o complete el registro.
-      const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
+      const { error: authError } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
           emailRedirectTo: `${window.location.origin}/dashboard`, // Redirigir después de la confirmación

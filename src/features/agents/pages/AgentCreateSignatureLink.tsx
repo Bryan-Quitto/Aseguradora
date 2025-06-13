@@ -3,17 +3,6 @@ import React, { useState } from 'react';
 import { enviarLinkFirma } from 'src/utils/enviarLinkFirma'; // Asegúrate de que esta ruta sea correcta
 import { supabase } from 'src/supabase/client'; // Importa supabase para crear pólizas de ejemplo
 
-// Definición de una interfaz Policy para el contexto de este componente
-interface Policy {
-  id: string;
-  policy_number: string;
-  name: string;
-  description: string;
-  client_id: string; // El user_id del cliente (auth.uid)
-  client_email: string;
-  status: string;
-}
-
 const AgentCreateSignatureLink = () => {
   const [clientEmail, setClientEmail] = useState('');
   // Eliminamos clientId del estado, ya que se usará como variable local.

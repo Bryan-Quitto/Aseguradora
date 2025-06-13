@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, Link} from 'react-router-dom';
 // Asegúrate de que esta importación sea CORRECTA y que tu archivo policy_management.ts
 // contenga las definiciones de Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy.
 // La interfaz `Policy` en `policy_management.ts` DEBE incluir 'awaiting_signature' como un estado válido.
@@ -15,7 +15,6 @@ import { enviarLinkFirma } from 'src/utils/enviarLinkFirma';
  */
 export default function AgentApplicationDetail() {
   const { id: applicationId } = useParams<{ id: string }>(); // Obtiene el ID de la solicitud (póliza) de la URL
-  const navigate = useNavigate(); 
   const { user } = useAuth(); // Usamos el hook useAuth para obtener el usuario autenticado
 
   const [application, setApplication] = useState<Policy | null>(null); // La solicitud es una póliza

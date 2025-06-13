@@ -54,13 +54,6 @@ const ClientDocumentUpload = Loadable(lazy(() => import('../features/clients/pag
 // ¡NUEVA IMPORTACIÓN! Componente para Agente para enviar link de firma
 const AgentCreateSignatureLink = Loadable(lazy(() => import('../features/agents/pages/AgentCreateSignatureLink')));
 
-
-// utilities (mantengo estas imports pero considera eliminarlas si no las usas en tus rutas)
-const Typography = Loadable(lazy(() => import("../components/typography/BasicTypography")));
-const Table = Loadable(lazy(() => import("../views/tables/Table")));
-const Form = Loadable(lazy(() => import("../components/forms/BasicForm")));
-const Alert = Loadable(lazy(() => import("../components/alerts/BasicAlerts")));
-
 // Importa las rutas de autenticación y de la landing page desde sus nuevos archivos
 import AuthRoutes from '../features/auth/auth.routes';
 import LandingRoutes from '../features/landing/landing.routes';

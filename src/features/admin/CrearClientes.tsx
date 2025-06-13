@@ -119,11 +119,6 @@ export default function CrearUsuarios() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
 
-  // Validaciones
-  const validateName = (value: string): boolean => {
-    return /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/.test(value);
-  };
-
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
@@ -247,7 +242,7 @@ export default function CrearUsuarios() {
     try {
       // 1. Crear el usuario en Supabase Auth sin contraseña
       // Supabase enviará un correo de verificación con un enlace mágico para que el usuario establezca su contraseña.
-      const { data: authData, error: authError } = await supabase.auth.signInWithOtp({
+      const { error: authError } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
           data: {

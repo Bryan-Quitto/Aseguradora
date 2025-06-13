@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByClientId, InsuranceProduct, getInsuranceProductById } from '../../policies/policy_management';
+import { Policy, getPoliciesByClientId, getInsuranceProductById } from '../../policies/policy_management';
 
 /**
  * Componente para listar las pólizas contratadas por un cliente.
  */
 export default function ClientPolicyList() {
-  const { profile, user } = useAuth(); // Obtiene el perfil del cliente autenticado y el objeto user
+  const { user } = useAuth(); // Obtiene el perfil del cliente autenticado y el objeto user
   const [policies, setPolicies] = useState<Policy[]>([]); // Estado para almacenar las pólizas
   const [loading, setLoading] = useState<boolean>(true); // Estado de carga
   const [error, setError] = useState<string | null>(null); // Estado de error

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from 'src/supabase/client';
 import FileUpload from 'src/components/shared/FileUpload';

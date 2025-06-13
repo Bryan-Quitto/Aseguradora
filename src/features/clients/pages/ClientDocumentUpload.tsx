@@ -7,7 +7,6 @@ import {
   Policy, // Importa la interfaz Policy de policy_management.ts
   getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
   getInsuranceProductById, // ¡IMPORTANTE! Importa también esta función
-  InsuranceProduct, // Asegúrate de que esta interfaz esté importada si getInsuranceProductById la devuelve
 } from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
 
 // Define tipos para los documentos que se manejarán localmente.

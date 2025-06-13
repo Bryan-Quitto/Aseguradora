@@ -1,4 +1,4 @@
-import { useLocation, Link, useParams } from 'react-router-dom'; // Importa Link y useParams
+import { useLocation, Link } from 'react-router-dom'; // Importa Link y useParams
 import { useAuth } from 'src/contexts/AuthContext';
 
 // Importa los nuevos componentes
@@ -11,9 +11,6 @@ import AgentApplicationDetail from './AgentApplicationDetail'; // Importa el com
 export default function DashboardAgente() {
   const location = useLocation();
   const { profile } = useAuth(); // Obtén el perfil del usuario
-  const { id: policyId } = useParams<{ id: string }>(); // Obtiene el ID de la póliza de la URL
-  const { id: applicationId } = useParams<{ id: string }>(); // Obtiene el ID de la solicitud de la URL
-
   // Construye el nombre completo
   const fullName = profile
     ? `${profile.primer_nombre || ''} ${profile.primer_apellido || ''}`.trim()

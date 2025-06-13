@@ -1,6 +1,4 @@
-// src/features/clients/components/DashboardCliente.tsx (or wherever DashboardCliente is defined)
-import React from 'react';
-import { Outlet, Link, useParams, useLocation } from 'react-router-dom'; // Importa Outlet
+import { Outlet, Link} from 'react-router-dom'; // Importa Outlet
 import { useAuth } from 'src/contexts/AuthContext'; // Asumo que el perfil es para mostrar el saludo inicial.
 
 // No necesitas importar ClientPolicyList, ClientPolicyForm, ClientPolicyDetail aquí,
@@ -11,11 +9,7 @@ import { useAuth } from 'src/contexts/AuthContext'; // Asumo que el perfil es pa
 
 export default function DashboardCliente() {
 
-    const location = useLocation();
-  
     const { profile } = useAuth(); // Obtén el perfil del usuario
-  
-    const { id: policyId } = useParams<{ id: string }>(); // Obtiene el ID de la póliza de la URL
   
     // Construye el nombre completo
     const fullName = profile

@@ -55,7 +55,6 @@ interface ClientGenericLifePolicyFormProps {
  */
 const ClientGenericLifePolicyForm: React.FC<ClientGenericLifePolicyFormProps> = ({ product, clientId, agentId }) => {
   // Estados para los campos de la tabla 'policies' relevantes para Seguros de Vida
-  const [contractDetails, setContractDetails] = useState<string>(''); // Este campo se eliminará en el cliente
   const [ageAtInscription, setAgeAtInscription] = useState<string>('');
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]); // Lista de beneficiarios estructurada
 

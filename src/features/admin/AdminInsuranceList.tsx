@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 // Importamos el cliente de Supabase desde la ruta correcta
 import { supabase } from '../../supabase/client';
 import { Link } from 'react-router-dom'; // Importa Link para los botones de acción
