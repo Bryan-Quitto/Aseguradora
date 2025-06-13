@@ -23,15 +23,35 @@ interface DependentInputProps {
 /**
  * Componente para ingresar los detalles de un solo dependiente.
  */
+const limpiarEspacios = (valor: string) =>
+  valor.replace(/\s+/g, ' ').trim();
+
+const soloUnaPalabra = (valor: string) => {
+  let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''));
+  return limpio.split(' ')[0] || '';
+};
+
 const DependentInput: React.FC<DependentInputProps> = ({ dependent, index, onChange, onRemove }) => {
     // Maneja los cambios en los campos individuales del dependiente
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         let updatedValue: string | number = value;
 
-        // Convertir la edad a número si el campo es 'age'
-        if (name === 'age') {
-            updatedValue = value === '' ? '' : parseInt(value, 10);
+        // Restricciones para nombres y apellidos: solo letras y una palabra
+        if (name === 'first_name1' || name === 'first_name2' || name === 'last_name1' || name === 'last_name2') {
+            updatedValue = soloUnaPalabra(value);
+        }
+        // Solo números para cédula, máximo 10 dígitos
+        else if (name === 'id_card') {
+            updatedValue = value.replace(/\D/g, '').slice(0, 10);
+        }
+        // Solo números para edad, sin decimales, mínimo 0
+        else if (name === 'age') {
+            updatedValue = value === '' ? '' : Math.max(0, parseInt(value.replace(/\D/g, ''), 10));
+        }
+        // Para los demás campos, limpiar espacios
+        else if (name === 'custom_relation') {
+            updatedValue = limpiarEspacios(value);
         }
 
         const newDependent = { ...dependent, [name]: updatedValue };

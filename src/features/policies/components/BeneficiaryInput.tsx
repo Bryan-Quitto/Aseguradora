@@ -20,18 +20,37 @@ interface BeneficiaryInputProps {
     onRemove: (index: number) => void;
 }
 
-/**
- * Componente para ingresar los detalles de un solo beneficiario.
- */
+const limpiarEspacios = (valor: string) =>
+  valor.replace(/\s+/g, ' ').trim();
+
+const soloUnaPalabra = (valor: string) => {
+  let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''));
+  return limpio.split(' ')[0] || '';
+};
+
 const BeneficiaryInput: React.FC<BeneficiaryInputProps> = ({ beneficiary, index, onChange, onRemove }) => {
     // Maneja los cambios en los campos individuales del beneficiario
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         let updatedValue: string | number = value;
 
-        // Convertir el porcentaje a número si el campo es 'percentage'
-        if (name === 'percentage') {
-            updatedValue = value === '' ? '' : parseFloat(value);
+        // Restricciones para nombres y apellidos: solo letras y una palabra
+        if (name === 'first_name1' || name === 'first_name2' || name === 'last_name1' || name === 'last_name2') {
+            updatedValue = soloUnaPalabra(value);
+        }
+        // Solo números para cédula, máximo 10 dígitos
+        else if (name === 'id_card') {
+            updatedValue = value.replace(/\D/g, '').slice(0, 10);
+        }
+        // Solo números y punto decimal para porcentaje, entre 0 y 100
+        else if (name === 'percentage') {
+            let val = value.replace(/[^0-9.]/g, '');
+            let num = val === '' ? '' : Math.min(100, Math.max(0, parseFloat(val)));
+            updatedValue = num;
+        }
+        // Para los demás campos, limpiar espacios
+        else if (name === 'custom_relation') {
+            updatedValue = limpiarEspacios(value);
         }
 
         const newBeneficiary = { ...beneficiary, [name]: updatedValue };
