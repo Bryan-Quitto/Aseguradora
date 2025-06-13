@@ -118,7 +118,7 @@ export default function ClientPolicyDetail() {
     if (policy.status !== 'active') {
         return (
             <div className="bg-red-100 border border-red-400 text-red-700 px-8 py-6 rounded-xl shadow-lg w-full max-w-2xl mx-auto text-center">
-                <h2 className="text-2xl font-bold mb-4">Póliza {policy.policy_number} Inactiva</h2>
+                <h2 className="text-2xl font-bold mb-4">Póliza { product ? product.name : 'Cargando...'} Inactiva</h2>
                 <p className="mb-4 text-lg">
                     El estado actual de tu póliza es <span className="font-semibold text-red-800">"{policy.status.toUpperCase()}"</span>.
                     Para ver los detalles completos y **activar** tu póliza, por favor, contacta a tu agente asignado.
