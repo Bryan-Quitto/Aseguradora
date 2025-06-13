@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Declaraciones globales de Supabase (si es que no están disponibles de otra manera)
+// Estas `declare const` son para entornos donde las variables se inyectan globalmente (como en Canvas/Playground).
+// En un proyecto React/Vite, las variables de entorno se acceden vía `import.meta.env`.
 declare const __app_id: string | undefined;
 declare const __firebase_config: string | undefined;
 declare const __initial_auth_token: string | undefined;
@@ -43,6 +45,10 @@ export interface Dependent {
     age: number | ''; // Permite número o cadena vacía para la entrada de formulario
 }
 
+// Interfaz simple para el nombre del producto de seguro cuando se une a la póliza
+export interface SimpleInsuranceProduct {
+    name: string;
+}
 
 // Interfaces para los tipos de datos de las tablas
 export interface InsuranceProduct {
@@ -53,7 +59,7 @@ export interface InsuranceProduct {
     default_term_months: number | null;
     min_term_months: number | null;
     max_term_months: number | null;
-    
+
     coverage_details: {
         coverage_amount?: number;
         ad_d_included?: boolean;
@@ -90,7 +96,8 @@ export interface Policy {
     product_id: string;
     start_date: string;
     end_date: string;
-    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    // ¡CAMBIO CLAVE AQUÍ! Añadimos 'awaiting_signature' al tipo de estado
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature';
     premium_amount: number;
     payment_frequency: 'monthly' | 'quarterly' | 'annually';
     contract_details: string | null;
@@ -100,7 +107,7 @@ export interface Policy {
     ad_d_coverage: number | null;
     beneficiaries: Beneficiary[] | null;
     num_beneficiaries: number | null;
-    
+
     deductible: number | null;
     coinsurance: number | null;
     max_annual: number | null;
@@ -117,8 +124,17 @@ export interface Policy {
     wellness_rebate: number | null;
     max_age_inscription: number | null;
 
+    // Campos de firma añadidos a la póliza
+    signature_url?: string | null; // URL de la firma (opcional hasta que se firme)
+    signed_at?: string | null;     // Fecha de la firma (opcional hasta que se firme)
+
     created_at: string;
     updated_at: string;
+
+    // ¡AÑADIDO PARA EL JOIN!
+    // Cuando haces un select anidado como `insurance_products(name)`, Supabase devuelve un array
+    // de objetos, incluso si es una relación de uno a uno.
+    insurance_products?: SimpleInsuranceProduct[] | null;
 }
 
 // Interfaz para la CREACIÓN de una nueva póliza.
@@ -129,7 +145,7 @@ export interface CreatePolicyData {
     product_id: string;
     start_date: string;
     end_date: string;
-    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature'; // ¡También aquí!
     premium_amount: number;
     payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
     contract_details: string | null;
@@ -155,6 +171,9 @@ export interface CreatePolicyData {
     age_at_inscription?: number | null;
     wellness_rebate?: number | null;
     max_age_inscription?: number | null;
+
+    signature_url?: string | null; // Permite incluirla en la creación (opcional)
+    signed_at?: string | null;     // Permite incluirla en la creación (opcional)
 }
 
 // Interfaz para la actualización de una póliza (todos los campos opcionales)
@@ -165,7 +184,7 @@ export interface UpdatePolicyData {
     product_id?: string;
     start_date?: string;
     end_date?: string;
-    status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected';
+    status?: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature'; // ¡Y aquí!
     premium_amount?: number;
     payment_frequency?: 'monthly' | 'quarterly' | 'annually' | null;
     contract_details?: string | null;
@@ -191,8 +210,10 @@ export interface UpdatePolicyData {
     age_at_inscription?: number | null;
     wellness_rebate?: number | null;
     max_age_inscription?: number | null;
-    
-    updated_at?: string; 
+
+    signature_url?: string | null; // Permite actualizar la URL de la firma
+    signed_at?: string | null;     // Permite actualizar la fecha de la firma
+    updated_at?: string;
 }
 
 // Interfaces para Perfiles de Usuario (clientes y agentes)
@@ -206,7 +227,7 @@ export interface ClientProfile {
     email: string | null;
     phone_number: string | null;
     // Asumiendo que 'role' existe en la tabla 'profiles'
-    role: 'client' | 'agent' | 'admin' | string; 
+    role: 'client' | 'agent' | 'admin' | string;
 }
 
 export interface AgentProfile {
@@ -352,6 +373,8 @@ export async function getPolicyById(
         return { data: null, error };
     }
     const policyData = data as Policy;
+    // Si tus columnas de JSONB están retornando como strings (lo cual es común si no se especifican tipos en Supabase),
+    // necesitarás parsearlas. Si Supabase las devuelve como objetos directamente, puedes quitar esto.
     if (typeof policyData.beneficiaries === 'string') {
         try {
             policyData.beneficiaries = JSON.parse(policyData.beneficiaries);
@@ -363,7 +386,7 @@ export async function getPolicyById(
     if (typeof policyData.dependents_details === 'string') {
         try {
             policyData.dependents_details = JSON.parse(policyData.dependents_details);
-        } catch (e) {
+            } catch (e) {
             console.error("Error parsing dependents_details JSON:", e);
             policyData.dependents_details = null;
         }
@@ -422,9 +445,13 @@ export async function getPoliciesByAgentId(
 export async function getPoliciesByClientId(
     client_id: string
 ): Promise<{ data: Policy[] | null; error: Error | null }> {
+    // Aquí puedes especificar el select para incluir 'insurance_products' si lo necesitas en otras llamadas.
+    // Para esta función específica que solo trae las pólizas, el '*' está bien,
+    // pero si siempre necesitas el nombre del producto, cámbialo a:
+    // .select('*, insurance_products(name)')
     const { data, error } = await supabase
         .from('policies')
-        .select('*')
+        .select('id, policy_number, product_id, insurance_products(name)') // ¡Añadido el join aquí para que la interfaz Policy coincida!
         .eq('client_id', client_id);
 
     if (error) {
@@ -436,6 +463,9 @@ export async function getPoliciesByClientId(
     }
     const policiesData = data as Policy[];
     policiesData.forEach(policy => {
+        // Estas conversiones de JSON.parse solo son necesarias si tus columnas JSONB
+        // no están siendo interpretadas directamente como objetos por Supabase.
+        // Si Supabase ya las devuelve como objetos al seleccionar, puedes eliminarlas.
         if (typeof policy.beneficiaries === 'string') {
             try {
                 policy.beneficiaries = JSON.parse(policy.beneficiaries);
@@ -540,6 +570,7 @@ export async function getClientProfileById(userId: string): Promise<{ data: Clie
  * @returns Una promesa que resuelve con el AgentProfile o un error.
  */
 export async function getAgentProfileById(userId: string): Promise<{ data: AgentProfile | null; error: Error | null }> {
+    // ¡CORREGIDO! Cambiado de '=>' a '=' para la desestructuración
     const { data, error } = await supabase
         .from('profiles')
         .select('user_id, primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, full_name, email, phone_number, role')

@@ -46,7 +46,7 @@ const COUNTRIES = NATIONALITIES.map(nationality => {
   }
 });
 
-// Interfaz para los datos del formulario
+// Interfaz para los datos del formulario (se elimina el campo 'rol')
 interface FormData {
   primerNombre: string;
   segundoNombre: string;
@@ -64,10 +64,9 @@ interface FormData {
   estadoCivil: string;
   estatura: string;
   peso: string;
-  rol: string;
 }
 
-// Interfaz para los errores del formulario
+// Interfaz para los errores del formulario (se elimina el campo 'rol')
 interface FormErrors {
   primerNombre?: string;
   segundoNombre?: string;
@@ -85,10 +84,19 @@ interface FormErrors {
   estadoCivil?: string;
   estatura?: string;
   peso?: string;
-  rol?: string;
 }
 
-export default function CrearClientes() {
+// Función para limpiar espacios en blanco al inicio/final y entre palabras
+const limpiarEspacios = (valor: string) =>
+  valor.replace(/\s+/g, ' ').trim();
+
+// Función para permitir solo letras y solo una palabra (sin espacios)
+const soloUnaPalabra = (valor: string) => {
+  let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''));
+  return limpio.split(' ')[0] || '';
+};
+
+export default function CrearUsuarios() {
   const [formData, setFormData] = useState<FormData>({
     primerNombre: '',
     segundoNombre: '',
@@ -106,7 +114,6 @@ export default function CrearClientes() {
     estadoCivil: '',
     estatura: '',
     peso: '',
-    rol: ''
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -135,37 +142,52 @@ export default function CrearClientes() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let newValue = value;
+
+    // Aplica limpieza y restricción solo a los campos de nombres y apellidos
+    if (
+      name === 'primerNombre' ||
+      name === 'segundoNombre' ||
+      name === 'primerApellido' ||
+      name === 'segundoApellido'
+    ) {
+      newValue = soloUnaPalabra(value);
+    } else {
+      // Para todos los demás campos, elimina espacios al inicio y final
+      newValue = limpiarEspacios(value);
+    }
+
+    setFormData(prev => ({ ...prev, [name]: newValue }));
 
     const newErrors = { ...errors };
 
     // Validaciones específicas por campo
     if (['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido'].includes(name)) {
-      if (value && !validateName(value)) { // Solo validar si hay valor
-        newErrors[name as keyof FormErrors] = 'Solo se permiten letras';
+      if (newValue && !/^[A-Za-zÁáÉéÍíÓóÚúÑñ]+$/.test(newValue)) {
+        newErrors[name as keyof FormErrors] = 'Solo se permiten letras, sin espacios';
       } else {
         delete newErrors[name as keyof FormErrors];
       }
     } else if (name === 'email') {
-      if (value && !validateEmail(value)) {
+      if (newValue && !validateEmail(newValue)) {
         newErrors.email = 'Email inválido';
       } else {
         delete newErrors.email;
       }
     } else if (name === 'numeroID') {
-      if (value && !validateNumber(value)) {
+      if (newValue && !validateNumber(newValue)) {
         newErrors.numeroID = 'Solo se permiten números';
       } else {
         delete newErrors.numeroID;
       }
     } else if (name === 'fechaNacimiento') {
-      if (value && !validateDate(value)) {
+      if (newValue && !validateDate(newValue)) {
         newErrors.fechaNacimiento = 'Formato AAAA-MM-DD requerido';
       } else {
         delete newErrors.fechaNacimiento;
       }
     } else if (['estatura', 'peso'].includes(name)) {
-      if (value && !validateDecimalNumber(value)) {
+      if (newValue && !validateDecimalNumber(newValue)) {
         newErrors[name as keyof FormErrors] = 'Solo números y un punto decimal';
       } else {
         delete newErrors[name as keyof FormErrors];
@@ -173,11 +195,11 @@ export default function CrearClientes() {
     }
 
     // Limpiar errores de campos condicionales si la opción "Otra" no está seleccionada
-    if (name === 'nacionalidad' && value !== 'Otra') {
+    if (name === 'nacionalidad' && newValue !== 'Otra') {
       delete newErrors.nacionalidadOtra;
       setFormData(prev => ({ ...prev, nacionalidadOtra: '' }));
     }
-    if (name === 'lugarNacimiento' && value !== 'Otra') {
+    if (name === 'lugarNacimiento' && newValue !== 'Otra') {
       delete newErrors.lugarNacimientoOtra;
       setFormData(prev => ({ ...prev, lugarNacimientoOtra: '' }));
     }
@@ -243,24 +265,24 @@ export default function CrearClientes() {
             estado_civil: formData.estadoCivil,
             estatura: parseFloat(formData.estatura) || null,
             peso: parseFloat(formData.peso) || null,
-            role: 'client', // Pasa el rol seleccionado a raw_user_meta_data
+            role: 'cliente', // Se asigna 'cliente' por defecto
           },
           emailRedirectTo: `${window.location.origin}/auth/callback`, // Asegúrate de que esta URL esté configurada en Supabase
         },
       });
 
       if (authError) {
-        console.error('Error al registrar cliente en Auth:', authError.message);
+        console.error('Error al registrar usuario en Auth:', authError.message);
         if (authError.message.includes("already registered")) {
-          setSubmissionMessage('El cliente con este email ya está registrado.');
+          setSubmissionMessage('El usuario con este email ya está registrado.');
         } else {
-          setSubmissionMessage(`Error al registrar cliente: ${authError.message}`);
+          setSubmissionMessage(`Error al registrar usuario: ${authError.message}`);
         }
         return;
       }
 
       // Si no hay error, Supabase ha enviado un correo al usuario.
-      setSubmissionMessage('Cliente creado exitosamente. Se ha enviado un correo electrónico al cliente para que establezca su contraseña y verifique su cuenta.');
+      setSubmissionMessage('Usuario creado exitosamente. Se ha enviado un correo electrónico al usuario para que establezca su contraseña y verifique su cuenta.');
       
       // Limpiar formulario después de éxito
       setFormData({
@@ -280,7 +302,6 @@ export default function CrearClientes() {
         estadoCivil: '',
         estatura: '',
         peso: '',
-        rol: ''
       });
       setErrors({});
 
@@ -553,7 +574,6 @@ export default function CrearClientes() {
             />
           </div>
         </div>
-
 
         {submissionMessage && (
           <div className={`p-3 rounded-md text-sm ${submissionMessage.includes('Error') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>

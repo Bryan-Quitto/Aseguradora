@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+// Asegúrate de que esta importación sea CORRECTA y que tu archivo policy_management.ts
+// contenga las definiciones de Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy.
+// La interfaz `Policy` en `policy_management.ts` DEBE incluir 'awaiting_signature' como un estado válido.
 import { Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy } from '../../policies/policy_management';
 import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
 import { useAuth } from 'src/contexts/AuthContext';
@@ -12,8 +15,8 @@ import { enviarLinkFirma } from 'src/utils/enviarLinkFirma';
  */
 export default function AgentApplicationDetail() {
   const { id: applicationId } = useParams<{ id: string }>(); // Obtiene el ID de la solicitud (póliza) de la URL
-  const navigate = useNavigate();
-  const { user } = useAuth(); // Para obtener el ID del agente actual
+  const navigate = useNavigate(); 
+  const { user } = useAuth(); // Usamos el hook useAuth para obtener el usuario autenticado
 
   const [application, setApplication] = useState<Policy | null>(null); // La solicitud es una póliza
   const [client, setClient] = useState<ClientProfile | null>(null);
@@ -47,8 +50,16 @@ export default function AgentApplicationDetail() {
         return;
       }
 
-      if (!policyData || policyData.status !== 'pending') { // Asegurarse de que sea una solicitud pendiente
-        setError('Solicitud no encontrada o ya no está pendiente.');
+      // Manejar explícitamente el caso de policyData nulo antes de acceder a sus propiedades
+      if (!policyData) {
+        setError('Solicitud no encontrada.'); // Mensaje más específico
+        setLoading(false);
+        return;
+      }
+
+      // Permitir que se cargue si está pendiente o esperando firma
+      if (policyData.status !== 'pending' && policyData.status !== 'awaiting_signature') {
+        setError(`Solicitud no encontrada o no está pendiente/esperando firma. Estado actual: ${policyData.status}`);
         setLoading(false);
         return;
       }
@@ -81,10 +92,11 @@ export default function AgentApplicationDetail() {
 
   /**
    * Maneja la acción de aprobar o rechazar una solicitud.
-   * @param newStatus El nuevo estado de la póliza ('active' o 'rejected').
+   * @param actionType 'approve' o 'reject'.
    */
-  const handleStatusUpdate = async (newStatus: 'active' | 'rejected') => {
-    if (!application || !user?.id || !client) {
+  const handleStatusUpdate = async (actionType: 'approve' | 'reject') => {
+    // Verificamos que tengamos la aplicación, el usuario autenticado y los datos del cliente
+    if (!application || !user?.id || !client) { 
       setError('No se pudo procesar la solicitud. Faltan datos.');
       return;
     }
@@ -93,10 +105,22 @@ export default function AgentApplicationDetail() {
     setError(null);
     setActionMessage(null);
 
-    const updates = {
+    let newStatus: Policy['status']; // Usamos el tipo 'Policy['status']' para garantizar la compatibilidad
+    let successMessage: string;
+    let errorMessagePrefix: string;
+
+    if (actionType === 'approve') {
+      newStatus = 'awaiting_signature'; // ¡CAMBIO CLAVE! La póliza ahora espera la firma, no se activa de inmediato
+      successMessage = `Solicitud ${application.policy_number} aprobada preliminarmente. Se ha enviado un enlace de firma al correo ${client.email}.`;
+      errorMessagePrefix = 'aprobar';
+    } else { // actionType === 'reject'
+      newStatus = 'rejected';
+      successMessage = `Solicitud ${application.policy_number} rechazada exitosamente.`;
+      errorMessagePrefix = 'rechazar';
+    }
+
+    const updates: Partial<Policy> = { // Aseguramos que 'updates' sea compatible con 'Partial<Policy>'
       status: newStatus,
-      // Opcional: registrar el agente que aprobó/rechazó si no está ya en agent_id
-      // agent_id: user.id,
       updated_at: new Date().toISOString(), // Actualizar la fecha de modificación
     };
 
@@ -104,30 +128,30 @@ export default function AgentApplicationDetail() {
       const { data, error: updateError } = await updatePolicy(application.id, updates);
 
       if (updateError) {
-        throw new Error(`Error al ${newStatus === 'active' ? 'aprobar' : 'rechazar'} la solicitud: ${updateError.message}`);
+        throw new Error(`Error al ${errorMessagePrefix} la solicitud: ${updateError.message}`);
       }
 
       if (data) {
-        setApplication(data);
+        setApplication(data); // Actualiza el estado local de la aplicación para reflejar el nuevo estado
 
-        // Si la póliza fue aprobada, enviar el magic link para firma
-        if (newStatus === 'active' && client.email) {
-          const { success, message } = await enviarLinkFirma(client.email, data.id);
+        // Si la póliza fue aprobada preliminarmente, enviar el magic link para firma
+        if (actionType === 'approve' && client.email) {
+          const { success, message } = await enviarLinkFirma(client.email, data.id); // data.id es el ID de la póliza
 
           if (!success) {
-            setError(`La póliza fue aprobada pero hubo un error al enviar el enlace de firma: ${message}`);
+            setError(`La póliza fue aprobada preliminarmente pero hubo un error al enviar el enlace de firma: ${message}`);
+            // OPCIONAL: Podrías considerar revertir el estado de la póliza a 'pending' si el email no se envía con éxito.
+            // Esto implicaría otra llamada a updatePolicy aquí.
           } else {
-            setActionMessage(
-              `Solicitud ${data.policy_number} aprobada exitosamente. Se ha enviado un enlace de firma al correo ${client.email}`
-            );
+            setActionMessage(successMessage);
           }
-        } else if (newStatus === 'rejected') {
-          setActionMessage(`Solicitud ${data.policy_number} rechazada exitosamente.`);
+        } else { // Si fue rechazada, solo muestra el mensaje de rechazo
+          setActionMessage(successMessage);
         }
       }
-    } catch (error) {
-      console.error('Error en handleStatusUpdate:', error);
-      setError(error instanceof Error ? error.message : 'Error al procesar la solicitud');
+    } catch (err) {
+      console.error('Error en handleStatusUpdate:', err);
+      setError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
     } finally {
       setLoading(false);
     }
@@ -176,7 +200,7 @@ export default function AgentApplicationDetail() {
       </div>
 
       {actionMessage && (
-        <div className={`px-4 py-3 rounded relative mb-4 ${actionMessage.includes('exitosa') ? 'bg-green-100 border border-green-400 text-green-700' : 'bg-red-100 border border-red-400 text-red-700'}`} role="alert">
+        <div className={`px-4 py-3 rounded relative mb-4 ${actionMessage.includes('exitosa') || actionMessage.includes('preliminarmente') ? 'bg-green-100 border border-green-400 text-green-700' : 'bg-red-100 border border-red-400 text-red-700'}`} role="alert">
           <strong className="font-bold">¡Mensaje!</strong>
           <span className="block sm:inline"> {actionMessage}</span>
         </div>
@@ -193,10 +217,13 @@ export default function AgentApplicationDetail() {
           <p className="mb-2"><strong className="font-medium">Fecha de Fin Sugerida:</strong> {application.end_date}</p>
           <p className="mb-2"><strong className="font-medium">Monto de Prima Sugerido:</strong> ${application.premium_amount.toFixed(2)} {application.payment_frequency.charAt(0).toUpperCase() + application.payment_frequency.slice(1)}</p>
           <p className="mb-2"><strong className="font-medium">Estado Actual:</strong>
-            <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${application.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-              application.status === 'active' ? 'bg-green-100 text-green-800' :
-                'bg-red-100 text-red-800'
-              }`}>
+            <span className={`ml-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              application.status === 'pending' || application.status === 'awaiting_signature'
+                ? 'bg-yellow-100 text-yellow-800'
+                : application.status === 'active'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-red-100 text-red-800'
+            }`}>
               {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
             </span>
           </p>
@@ -244,22 +271,26 @@ export default function AgentApplicationDetail() {
       </div>
 
       {/* Botones de acción */}
-      {application.status === 'pending' && (
+      {application.status === 'pending' || application.status === 'awaiting_signature' ? (
         <div className="mt-8 flex justify-end gap-4">
           <button
-            onClick={() => handleStatusUpdate('rejected')}
+            onClick={() => handleStatusUpdate('reject')}
             disabled={loading}
             className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 transition duration-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Rechazando...' : 'Rechazar Solicitud'}
           </button>
           <button
-            onClick={() => handleStatusUpdate('active')}
+            onClick={() => handleStatusUpdate('approve')}
             disabled={loading}
             className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition duration-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Aprobando...' : 'Aprobar Solicitud'}
           </button>
+        </div>
+      ) : (
+        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-center text-gray-700">
+          <p>Esta solicitud ya no está pendiente de aprobación.</p>
         </div>
       )}
     </div>
