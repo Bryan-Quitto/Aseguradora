@@ -1,7 +1,7 @@
 import logo from 'src/assets/images/logos/logo-wrappixel.png';
 import { Link, useNavigate } from "react-router-dom";
 import React, { useState } from "react";
-import { supabase } from "../../../supabase/client"; // Asegúrate de que esta ruta sea correcta
+import { supabase } from "../../../supabase/client";
 import { Label, TextInput } from "flowbite-react";
 
 const gradientStyle = {
@@ -15,7 +15,7 @@ const Register = () => {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false); // Nuevo estado de carga
+  const [loading, setLoading] = useState<boolean>(false);
 
   const [formData, setFormData] = useState({
     primerApellido: "",
@@ -38,33 +38,53 @@ const Register = () => {
     confirmPassword: "",
   });
 
+  // Función para limpiar espacios en blanco al inicio/final y entre palabras
+  const limpiarEspacios = (valor: string) =>
+    valor.replace(/\s+/g, ' ').trim();
+
+  // Función para permitir solo letras y solo una palabra (sin espacios)
+  const soloUnaPalabra = (valor: string) => {
+    let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZÁÉÍÓÚáéíóúÑñ]/g, ''));
+    return limpio.split(' ')[0] || '';
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    let newValue = value;
 
-    // Solo letras y espacios para nombres y apellidos
+    // Solo letras y solo una palabra para nombres y apellidos
     if (["primerApellido", "segundoApellido", "primerNombre", "segundoNombre"].includes(name)) {
-      if (!/^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]*$/.test(value)) return;
-      // No permitir solo espacios
-      if (value.length > 0 && value.trim() === "") return;
+      newValue = soloUnaPalabra(value);
     }
-
     // Solo números y máximo 10 dígitos para número de identificación
-    if (name === "numeroID") {
-      if (!/^\d*$/.test(value)) return;
-      if (value.length > 10) return;
+    else if (name === "numeroID") {
+      newValue = value.replace(/\D/g, '').slice(0, 10);
     }
-
     // Solo números y punto decimal para estatura y peso
-    if (["estatura", "peso"].includes(name)) {
-      if (!/^[0-9.]*$/.test(value)) return;
+    else if (["estatura", "peso"].includes(name)) {
+      newValue = value.replace(/[^0-9.]/g, '');
+    }
+    // Validación para fecha de nacimiento: no permitir fechas futuras
+    else if (name === "fechaNacimiento") {
+      const hoy = new Date().toISOString().split('T')[0];
+      if (value > hoy) {
+        setError("La fecha de nacimiento no puede ser mayor a la fecha actual.");
+        return;
+      }
+      setError(null);
+      newValue = value;
+    }
+    // Para los demás campos, limpiar espacios al inicio y final
+    else {
+      newValue = limpiarEspacios(value);
     }
 
     setFormData((prev) => {
-      const newState = { ...prev, [name]: value };
-      if (name === "nacionalidad" && value !== "Otra") {
+      const newState = { ...prev, [name]: newValue };
+      if (name === "nacionalidad" && newValue !== "Otra") {
         newState.nacionalidadOtra = "";
       }
-      if (name === "lugarNacimiento" && value !== "Otra") {
+      if (name === "lugarNacimiento" && newValue !== "Otra") {
         newState.lugarNacimientoOtro = "";
       }
       return newState;
@@ -75,7 +95,7 @@ const Register = () => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    setLoading(true); // Iniciar carga
+    setLoading(true);
 
     // Validar si algún campo está vacío
     const requiredFields = [
@@ -122,6 +142,14 @@ const Register = () => {
         setError("Por favor, ingresa un correo electrónico válido.");
         setLoading(false);
         return;
+    }
+
+    // Validar que la fecha de nacimiento no sea futura
+    const hoy = new Date().toISOString().split('T')[0];
+    if (formData.fechaNacimiento > hoy) {
+      setError("La fecha de nacimiento no puede ser mayor a la fecha actual.");
+      setLoading(false);
+      return;
     }
 
     try {
@@ -459,6 +487,7 @@ const Register = () => {
                   type="date"
                   className="mt-1"
                   required
+                  max={new Date().toISOString().split('T')[0]} // Restringe fechas futuras
                 />
               </div>
             </div>

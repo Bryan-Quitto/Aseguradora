@@ -130,57 +130,75 @@ export default function CrearCliente() {
     return /^\d{4}-\d{2}-\d{2}$/.test(date);
   };
 
+  const limpiarEspacios = (valor: string) =>
+    valor.replace(/\s+/g, ' ').trim();
+
+  const soloUnaPalabra = (valor: string) => {
+    let limpio = limpiarEspacios(valor.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, ''));
+    return limpio.split(' ')[0] || '';
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    let newValue = value;
+    let errorMsg = '';
 
-    const newErrors = { ...errors };
-
-    // Validaciones específicas por campo
-    if (['primerNombre', 'segundoNombre', 'primerApellido', 'segundoApellido'].includes(name)) {
-      if (value && !validateName(value)) { // Solo validar si hay valor
-        newErrors[name as keyof FormErrors] = 'Solo se permiten letras';
-      } else {
-        delete newErrors[name as keyof FormErrors];
-      }
-    } else if (name === 'email') {
-      if (value && !validateEmail(value)) {
-        newErrors.email = 'Email inválido';
-      } else {
-        delete newErrors.email;
-      }
-    } else if (name === 'numeroID') {
-      if (value && !validateNumber(value)) {
-        newErrors.numeroID = 'Solo se permiten números';
-      } else {
-        delete newErrors.numeroID;
-      }
-    } else if (name === 'fechaNacimiento') {
-      if (value && !validateDate(value)) {
-        newErrors.fechaNacimiento = 'Formato AAAA-MM-DD requerido';
-      } else {
-        delete newErrors.fechaNacimiento;
-      }
-    } else if (['estatura', 'peso'].includes(name)) {
-      if (value && !validateDecimalNumber(value)) {
-        newErrors[name as keyof FormErrors] = 'Solo números y un punto decimal';
-      } else {
-        delete newErrors[name as keyof FormErrors];
+    // Solo letras y una palabra para nombres y apellidos
+    if (
+      name === 'primerNombre' ||
+      name === 'segundoNombre' ||
+      name === 'primerApellido' ||
+      name === 'segundoApellido'
+    ) {
+      newValue = soloUnaPalabra(value);
+      if (newValue && !validateName(newValue)) {
+        errorMsg = 'Solo se permiten letras, sin espacios ni números';
       }
     }
-
-    // Limpiar errores de campos condicionales si la opción "Otra" no está seleccionada
-    if (name === 'nacionalidad' && value !== 'Otra') {
-      delete newErrors.nacionalidadOtra;
-      setFormData(prev => ({ ...prev, nacionalidadOtra: '' }));
+    // Solo números y máximo 10 dígitos para número de identificación
+    else if (name === 'numeroID') {
+      newValue = value.replace(/\D/g, '').slice(0, 10);
+      if (newValue && !validateNumber(newValue)) {
+        errorMsg = 'Solo se permiten números';
+      }
     }
-    if (name === 'lugarNacimiento' && value !== 'Otra') {
-      delete newErrors.lugarNacimientoOtra;
-      setFormData(prev => ({ ...prev, lugarNacimientoOtra: '' }));
+    // Solo números y punto decimal para estatura y peso
+    else if (name === 'estatura' || name === 'peso') {
+      newValue = value.replace(/[^0-9.]/g, '');
+      if (newValue && !validateDecimalNumber(newValue)) {
+        errorMsg = 'Solo números y un punto decimal';
+      }
+    }
+    // Validación para fecha de nacimiento: no permitir fechas futuras y formato correcto
+    else if (name === 'fechaNacimiento') {
+      const hoy = new Date().toISOString().split('T')[0];
+      if (value > hoy) {
+        errorMsg = "La fecha de nacimiento no puede ser mayor a la fecha actual.";
+      } else if (value && !validateDate(value)) {
+        errorMsg = "Formato de fecha inválido (AAAA-MM-DD)";
+      }
+      newValue = value;
+    }
+    // Validación de email
+    else if (name === 'email') {
+      newValue = limpiarEspacios(value);
+      if (newValue && !validateEmail(newValue)) {
+        errorMsg = 'Email inválido';
+      }
+    }
+    // Para los demás campos, limpiar espacios al inicio y final
+    else {
+      newValue = limpiarEspacios(value);
     }
 
-    setErrors(newErrors);
-    setSubmissionMessage(null); // Limpiar mensaje al cambiar input
+    setFormData(prev => ({ ...prev, [name]: newValue }));
+
+    setErrors(prev => ({
+      ...prev,
+      [name]: errorMsg || undefined,
+    }));
+
+    setSubmissionMessage(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

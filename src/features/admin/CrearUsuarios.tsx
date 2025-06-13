@@ -149,7 +149,6 @@ export default function CrearUsuarios() {
     const { name, value } = e.target;
     let newValue = value;
 
-    // Aplica limpieza y restricción solo a los campos de nombres y apellidos
     if (
       name === 'primerNombre' ||
       name === 'segundoNombre' ||
@@ -157,8 +156,19 @@ export default function CrearUsuarios() {
       name === 'segundoApellido'
     ) {
       newValue = soloUnaPalabra(value);
+    } else if (name === 'numeroID') {
+      newValue = value.replace(/\D/g, '').slice(0, 10);
+    } else if (name === 'estatura' || name === 'peso') {
+      newValue = value.replace(/[^0-9.]/g, '');
+    } else if (name === 'fechaNacimiento') {
+      const hoy = new Date().toISOString().split('T')[0];
+      if (value > hoy) {
+        setSubmissionMessage("La fecha de nacimiento no puede ser mayor a la fecha actual.");
+        return;
+      }
+      setSubmissionMessage(null);
+      newValue = value;
     } else {
-      // Para todos los demás campos, elimina espacios al inicio y final
       newValue = limpiarEspacios(value);
     }
 
