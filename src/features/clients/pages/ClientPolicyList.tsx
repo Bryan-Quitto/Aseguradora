@@ -140,8 +140,8 @@ export default function ClientPolicyList() {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                         {/* Accede al nombre del producto directamente desde la unión */}
-                                        {policy.insurance_products?.name || 'Nombre de producto no disponible'}
-                                    </td>
+                                        {policy.insurance_products?.[0]?.name || 'Nombre de producto no disponible'}
+                                        </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                         {typeof policy.premium_amount === 'number' ? `$${policy.premium_amount.toFixed(2)}` : 'N/A'}
                                     </td>

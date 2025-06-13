@@ -254,7 +254,7 @@ const ClientDocumentUpload: React.FC = () => {
                     >
                         {policies.map((policy) => (
                             <option key={policy.id} value={policy.id}>
-                                {policy.policy_number} - {policy.insurance_products?.name || 'Nombre de producto no disponible'}
+                                {policy.policy_number} - {policy.insurance_products?.[0]?.name || 'Nombre de producto no disponible'}
                             </option>
                         ))}
                     </select>

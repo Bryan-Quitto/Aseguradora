@@ -1,20 +1,25 @@
-import { supabase } from 'src/supabase/client'; // Asegúrate de que esta ruta sea correcta
 
-export async function enviarLinkFirma(email: string, contractId: string) {
+import { supabase } from 'src/supabase/client';
+
+export async function enviarLinkFirma(
+  email: string,
+  contractId: string
+): Promise<{ success: boolean; message: string }> {
   try {
-    const appBaseUrl = import.meta.env.VITE_REACT_APP_APP_BASE_URL || import.meta.env.VITE_REACT_APP_SUPABASE_URL;
+    const appBaseUrl = import.meta.env.VITE_REACT_APP_APP_BASE_URL;
 
     if (!appBaseUrl) {
-      throw new Error('VITE_REACT_APP_APP_BASE_URL o VITE_REACT_APP_SUPABASE_URL no están definidos en tus variables de entorno.');
+      throw new Error(
+        'La variable VITE_REACT_APP_APP_BASE_URL no está definida en tu archivo .env'
+      );
     }
 
-    console.log(`enviarLinkFirma: Solicitando magic link para ${email} con redirección a ${appBaseUrl}/contract-signature?contractId=${contractId}`);
+    const redirectUrl = `${appBaseUrl}/contract-signature?contractId=${contractId}`;
 
-    // 1. CORRECCIÓN: Eliminamos 'data' de la desestructuración porque no se usa.
     const { error } = await supabase.auth.signInWithOtp({
       email: email,
       options: {
-        emailRedirectTo: `${appBaseUrl}/contract-signature?contractId=${contractId}`,
+        emailRedirectTo: redirectUrl,
       },
     });
 
@@ -23,13 +28,17 @@ export async function enviarLinkFirma(email: string, contractId: string) {
       return { success: false, message: error.message };
     }
 
-    return { 
-      success: true, 
-      message: `Se ha enviado un enlace de firma a ${email}. Por favor, revisa tu bandeja de entrada.` 
+    return {
+      success: true,
+      message: `Se ha enviado un enlace de firma a ${email}. Por favor, revisa tu bandeja de entrada.`,
     };
 
   } catch (error) {
-    console.error('Error inesperado en enviarLinkFirma:', error);
-    return { success: false, message: error instanceof Error ? error.message : 'Ocurrió un error inesperado al intentar enviar el enlace.' };
+    console.error('Error inesperado en la función enviarLinkFirma:', error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Ocurrió un error inesperado al intentar enviar el enlace.';
+    return { success: false, message: message };
   }
 }
