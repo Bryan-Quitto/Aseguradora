@@ -1,118 +1,26 @@
 import React, { useState, useEffect } from 'react';
-// Importa el cliente de Supabase desde tu configuración real.
-// En un entorno de producción, DEBES cambiar esto por tu importación real:
-// import { supabase } from 'src/supabase/client';
+// Importa el cliente de Supabase real
+import { supabase } from 'src/supabase/client';
+// Importa el componente FileUpload real
+import FileUpload from 'src/components/shared/FileUpload';
 
-// === INICIO: SIMULACIÓN DE SUPABASE Y FILEUPLOAD PARA CONTEXTO DE CANVAS ===
-// Esta sección simula Supabase y un componente FileUpload para que el código sea ejecutable en este entorno.
-// EN UN ENTORNO DE PRODUCCIÓN REAL, ESTA SECCIÓN DEBERÍA SER REEMPLAZADA
-// POR LA INICIALIZACIÓN ADECUADA DE TU CLIENTE SUPABASE Y LA IMPORTACIÓN DE TU COMPONENTE FileUpload.
-const mockSupabase = {
-  auth: {
-    getSession: async () => {
-      const userId = 'a1b2c3d4-e5f6-7890-1234-567890abcdef'; // ID de usuario de ejemplo
-      return { data: { session: { user: { id: userId } } }, error: null };
-    },
-  },
-  from: (tableName: string) => ({
-    select: (columns: string) => ({
-      eq: (column: string, value: any) => ({
-        order: (orderByColumn: string, options: { ascending: boolean }) => {
-          if (tableName === 'policy_documents') {
-            // Simula documentos para la póliza seleccionada
-            if (value === 'policy1-uuid') {
-              return {
-                data: [
-                  {
-                    id: 'doc1-life',
-                    policy_id: 'policy1-uuid',
-                    document_name: 'DNI_Cliente.pdf',
-                    file_path: 'policies/policy1-uuid/DNI_Cliente.pdf',
-                    uploaded_at: new Date().toISOString(),
-                  },
-                  {
-                    id: 'doc2-life',
-                    policy_id: 'policy1-uuid',
-                    document_name: 'Certificado_Medico.pdf',
-                    file_path: 'policies/policy1-uuid/Certificado_Medico.pdf',
-                    uploaded_at: new Date(Date.now() - 3600000).toISOString(),
-                  },
-                ],
-                error: null,
-              };
-            }
-            return { data: [], error: null };
-          }
-          return { data: [], error: null };
-        },
-      }),
-    }),
-    insert: async (data: any) => {
-      console.log('Simulando inserción en la base de datos:', data);
-      return { data: data, error: null };
-    },
-  }),
-  storage: {
-    from: (bucketName: string) => ({
-      upload: async (filePath: string, file: File, options: any) => {
-        console.log(`Simulando subida a Supabase Storage: ${bucketName}/${filePath}`);
-        return { data: { path: filePath, id: 'mock-file-id' }, error: null };
-      },
-      getPublicUrl: (filePath: string) => {
-        return { publicUrl: `https://example.com/storage/${filePath}` };
-      },
-    }),
-  },
-};
+// Importa los tipos y funciones necesarios desde tu archivo de gestión de pólizas
+import {
+  Policy, // Importa la interfaz Policy de policy_management.ts
+  getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
+  getInsuranceProductById, // ¡IMPORTANTE! Importa también esta función
+  InsuranceProduct, // Asegúrate de que esta interfaz esté importada si getInsuranceProductById la devuelve
+} from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
 
-const supabase = mockSupabase as any;
-
-// Definición de un componente FileUpload simple para que el código sea autocontenido.
-interface FileUploadProps {
-  id: string;
-  name: string;
-  label: string;
-  onChange: (files: FileList | null) => void;
-  accept?: string;
-  disabled?: boolean;
-  multiple?: boolean; // Añadir si tu componente FileUpload original lo soporta
-  required?: boolean; // Añadir si tu componente FileUpload original lo soporta
-}
-
-const FileUpload: React.FC<FileUploadProps> = ({ id, name, label, onChange, accept, disabled, multiple, required }) => {
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    onChange(event.target.files);
-  };
-
-  return (
-    <div className="mb-4">
-      <label htmlFor={id} className="block text-gray-700 text-lg font-medium mb-2">
-        {label}
-      </label>
-      <input
-        type="file"
-        id={id}
-        name={name}
-        onChange={handleFileChange}
-        accept={accept}
-        disabled={disabled}
-        multiple={multiple}
-        required={required}
-        className="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 transition duration-300 ease-in-out"
-      />
-    </div>
-  );
-};
-// === FIN: SIMULACIÓN DE SUPABASE Y FILEUPLOAD PARA CONTEXTO DE CANVAS ===
-
-
+// Define tipos para los documentos que se manejarán localmente.
+// Si esta interfaz también se centralizará, impórtala desde su ubicación.
 interface Document {
   id: string;
   policy_id: string;
   document_name: string;
   file_path: string;
   uploaded_at: string;
-  file_url?: string;
+  file_url?: string; // URL pública para descarga
 }
 
 interface DocumentUploadSectionProps {
@@ -126,7 +34,7 @@ const DocumentUploadSection: React.FC<DocumentUploadSectionProps> = ({
   policyId,
   clientId,
   onDocumentUploadSuccess,
-  requiredDocumentTypes = [] // Por defecto, no hay tipos de documentos requeridos específicos
+  requiredDocumentTypes = []
 }) => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(false);

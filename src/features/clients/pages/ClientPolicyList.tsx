@@ -58,7 +58,6 @@ export default function ClientPolicyList() {
         // --- DEBUGGING: Log IDs de productos únicos ---
         console.log('ClientPolicyList: IDs de productos únicos:', Array.from(uniqueProductIds));
 
-
         // Cargar nombres de productos
         const newProductNames = new Map<string, string>(productNames);
         for (const productId of uniqueProductIds) {
@@ -98,6 +97,19 @@ export default function ClientPolicyList() {
       </div>
     );
   }
+
+  // Función auxiliar para capitalizar el estado
+  const capitalizeStatus = (status: Policy['status'] | undefined | null) => {
+    if (!status) {
+      return 'Desconocido';
+    }
+    // Si la cadena está vacía después del trim, también se considera 'Desconocido'
+    const trimmedStatus = status.trim();
+    if (trimmedStatus.length === 0) {
+      return 'Desconocido';
+    }
+    return trimmedStatus.charAt(0).toUpperCase() + trimmedStatus.slice(1);
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100">
@@ -144,20 +156,23 @@ export default function ClientPolicyList() {
                     {policy.policy_number}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {productNames.get(policy.product_id) || 'Cargando...'}
+                    {/* Accede al nombre del producto a través del array insurance_products */}
+                    {policy.insurance_products && policy.insurance_products.length > 0
+                      ? policy.insurance_products[0].name
+                      : productNames.get(policy.product_id) || 'Cargando...'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    ${policy.premium_amount.toFixed(2)}
+                    {typeof policy.premium_amount === 'number' ? `$${policy.premium_amount.toFixed(2)}` : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                      policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      policy.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                      policy.status === 'pending' || policy.status === 'awaiting_signature' ? 'bg-yellow-100 text-yellow-800' :
+                      policy.status === 'cancelled' || policy.status === 'rejected' ? 'bg-red-100 text-red-800' :
                       policy.status === 'expired' ? 'bg-gray-400 text-gray-900' :
-                      'bg-red-100 text-red-800'
+                      'bg-gray-200 text-gray-800'
                     }`}>
-                      {policy.status.charAt(0).toUpperCase() + policy.status.slice(1)}
+                      {capitalizeStatus(policy.status)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

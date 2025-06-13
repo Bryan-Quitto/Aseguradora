@@ -96,7 +96,6 @@ export interface Policy {
     product_id: string;
     start_date: string;
     end_date: string;
-    // ¡CAMBIO CLAVE AQUÍ! Añadimos 'awaiting_signature' al tipo de estado
     status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature';
     premium_amount: number;
     payment_frequency: 'monthly' | 'quarterly' | 'annually';
@@ -124,16 +123,12 @@ export interface Policy {
     wellness_rebate: number | null;
     max_age_inscription: number | null;
 
-    // Campos de firma añadidos a la póliza
-    signature_url?: string | null; // URL de la firma (opcional hasta que se firme)
-    signed_at?: string | null;     // Fecha de la firma (opcional hasta que se firme)
+    signature_url?: string | null;
+    signed_at?: string | null;
 
     created_at: string;
     updated_at: string;
 
-    // ¡AÑADIDO PARA EL JOIN!
-    // Cuando haces un select anidado como `insurance_products(name)`, Supabase devuelve un array
-    // de objetos, incluso si es una relación de uno a uno.
     insurance_products?: SimpleInsuranceProduct[] | null;
 }
 
@@ -451,7 +446,7 @@ export async function getPoliciesByClientId(
     // .select('*, insurance_products(name)')
     const { data, error } = await supabase
         .from('policies')
-        .select('id, policy_number, product_id, insurance_products(name)') // ¡Añadido el join aquí para que la interfaz Policy coincida!
+        .select('*, insurance_products(name)')
         .eq('client_id', client_id);
 
     if (error) {

@@ -44,6 +44,53 @@ interface InsuranceProduct {
   updated_at: string;
 }
 
+// === INTERFAZ POLICY ACTUALIZADA PARA COINCIDIR CON policy_management.ts ===
+export interface Policy {
+  id: string;
+  policy_number: string;
+  client_id: string;
+  agent_id: string | null;
+  product_id: string;
+  start_date: string;
+  end_date: string;
+  // ¡CAMBIO CLAVE AQUÍ! Añadimos 'awaiting_signature' al tipo de estado
+  status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature';
+  premium_amount: number;
+  payment_frequency: 'monthly' | 'quarterly' | 'annually';
+  contract_details: string | null;
+
+  coverage_amount: number | null;
+  ad_d_included: boolean | null;
+  ad_d_coverage: number | null;
+  beneficiaries: any[] | null; // Cambiado a 'any[]' temporalmente para evitar problemas de tipo si no se usa Beneficiary
+  num_beneficiaries: number | null;
+
+  deductible: number | null;
+  coinsurance: number | null;
+  max_annual: number | null;
+  has_dental: boolean | null;
+  has_dental_basic: boolean | null;
+  has_dental_premium: boolean | null;
+  has_vision: boolean | null;
+  has_vision_basic: boolean | null;
+  has_vision_full: boolean | null;
+  dependents_details: Dependent[] | null;
+  num_dependents: number | null;
+
+  age_at_inscription: number | null;
+  wellness_rebate: number | null;
+  max_age_inscription: number | null;
+
+  signature_url?: string | null;
+  signed_at?: string | null;
+
+  created_at: string;
+  updated_at: string;
+
+  insurance_products?: any[] | null; // Cambiado a 'any[]' temporalmente
+}
+// === FIN INTERFAZ POLICY ACTUALIZADA ===
+
 interface ClientGenericHealthPolicyFormProps {
   product: InsuranceProduct;
   clientId: string; // El ID del cliente logeado
@@ -227,7 +274,7 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
 
       // Campos de dependientes
       num_dependents: dependents.length, // Número de dependientes ingresados
-      dependents_details: JSON.parse(JSON.stringify(dependents)), // Asegúrate de que esto se guarde como JSONB en Supabase
+      dependents_details: dependents, // ¡CAMBIO CLAVE AQUÍ! Pasar el array directamente
 
       // Campos no aplicables para salud, se envían como null
       coverage_amount: null,
@@ -269,10 +316,12 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
     }
   };
 
-  // Helper para Capitalizar la primera letra de la frecuencia de pago
+  // Helper para Capitalizar la primera letra de cualquier cadena (más genérico)
   const capitalize = (s: string | null | undefined): string => {
     if (!s) return 'N/A';
-    return s.charAt(0).toUpperCase() + s.slice(1);
+    const trimmedS = s.trim();
+    if (trimmedS.length === 0) return 'N/A';
+    return trimmedS.charAt(0).toUpperCase() + trimmedS.slice(1);
   };
 
   return (

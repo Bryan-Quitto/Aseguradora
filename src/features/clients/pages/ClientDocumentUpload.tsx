@@ -6,6 +6,8 @@ import FileUpload from 'src/components/shared/FileUpload'; // Importa el compone
 import {
   Policy, // Importa la interfaz Policy de policy_management.ts
   getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
+  getInsuranceProductById, // ¡IMPORTANTE! Importa también esta función
+  InsuranceProduct, // Asegúrate de que esta interfaz esté importada si getInsuranceProductById la devuelve
 } from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
 
 // Define tipos para los documentos que se manejarán localmente.
@@ -32,6 +34,7 @@ const ClientDocumentUpload: React.FC = () => {
   const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [productNames, setProductNames] = useState<Map<string, string>>(new Map()); // ¡NUEVO! Mapa para almacenar nombres de productos
 
   // Efecto para obtener el ID del usuario actual y cargar las pólizas al montar el componente
   useEffect(() => {
@@ -60,6 +63,33 @@ const ClientDocumentUpload: React.FC = () => {
             setPolicies(policiesData);
             // Seleccionar automáticamente la primera póliza si está disponible
             setSelectedPolicyId(policiesData[0].id);
+
+            // ¡NUEVO! Cargar nombres de productos para las pólizas obtenidas
+            const newProductNames = new Map<string, string>();
+            const productIdsToFetch = new Set<string>();
+
+            policiesData.forEach(policy => {
+              // Si el nombre del producto no viene directamente en la unión, agregarlo al set para buscarlo
+              if (!policy.insurance_products || policy.insurance_products.length === 0 || !policy.insurance_products[0]?.name) {
+                productIdsToFetch.add(policy.product_id);
+              } else {
+                newProductNames.set(policy.product_id, policy.insurance_products[0].name);
+              }
+            });
+
+            // Fetchear nombres de productos para los IDs que faltan
+            for (const productId of Array.from(productIdsToFetch)) {
+              const { data: productData, error: productFetchError } = await getInsuranceProductById(productId);
+              if (productFetchError) {
+                console.error(`Error al obtener producto ${productId}:`, productFetchError);
+                newProductNames.set(productId, 'Producto Desconocido');
+              } else if (productData) {
+                newProductNames.set(productId, productData.name);
+              }
+            }
+            setProductNames(newProductNames);
+
+
           } else {
             setPolicies([]);
             setSelectedPolicyId(null); // Asegúrate de que no haya una póliza seleccionada
@@ -247,9 +277,8 @@ const ClientDocumentUpload: React.FC = () => {
             onChange={(e) => setSelectedPolicyId(e.target.value)}
           >
             {policies.map((policy) => (
-              // Acceder a insurance_products de forma segura
               <option key={policy.id} value={policy.id}>
-                {policy.policy_number} - {policy.insurance_products?.[0]?.name || 'Producto Desconocido'}
+                {policy.policy_number} - {productNames.get(policy.product_id) || 'Cargando...'}
               </option>
             ))}
           </select>
