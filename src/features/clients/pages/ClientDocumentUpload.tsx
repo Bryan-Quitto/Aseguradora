@@ -6,11 +6,9 @@ import FileUpload from 'src/components/shared/FileUpload'; // Importa el compone
 import {
     Policy, // Importa la interfaz Policy de policy_management.ts
     getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
-    // getInsuranceProductById, // ¡NO ES NECESARIA SI EL JOIN YA TRAE EL NOMBRE!
 } from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
 
 // Define tipos para los documentos que se manejarán localmente.
-// Si esta interfaz también se centralizará, impórtala desde su ubicación.
 interface Document {
     id: string;
     policy_id: string;
@@ -18,7 +16,8 @@ interface Document {
     file_path: string;
     uploaded_at: string;
     file_url?: string; // URL pública para descarga
-    uploaded_by: string; // Asegúrate de que esta columna exista en tu tabla policy_documents
+    uploaded_by: string;
+    document_type?: string; // <--- Añadido el tipo de documento
 }
 
 const ClientDocumentUpload: React.FC = () => {
@@ -34,8 +33,14 @@ const ClientDocumentUpload: React.FC = () => {
     const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
     const [documents, setDocuments] = useState<Document[]>([]);// Usamos la interfaz Document actualizada
     const [userId, setUserId] = useState<string | null>(null);
-    // Ya no necesitamos productNames como un Map separado si el join funciona.
-    // Los nombres de productos estarán anidados directamente en cada póliza.
+
+    // Estados para el modal de eliminación
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [docToDelete, setDocToDelete] = useState<{ id: string; filePath: string; name: string } | null>(null);
+
+    // Formatos de archivo aceptados
+    const acceptedFileTypes = ".pdf,.jpg,.jpeg,.png,.svg";
+    const acceptedFileTypesDisplay = acceptedFileTypes.replace(/\./g, '').toUpperCase().split(',').join(', '); // Formatear para mostrar
 
     // Efecto para obtener el ID del usuario actual y cargar las pólizas al montar el componente
     useEffect(() => {
@@ -53,8 +58,7 @@ const ClientDocumentUpload: React.FC = () => {
 
                 if (session?.user) {
                     setUserId(session.user.id);
-                    // ¡Usa la función importada de policy_management para obtener las pólizas!
-                    // Esta función ahora debería traer los nombres de productos directamente
+                    // Usa la función importada de policy_management para obtener las pólizas
                     const { data: policiesData, error: policiesError } = await getPoliciesByClientId(session.user.id);
 
                     if (policiesError) {
@@ -65,7 +69,9 @@ const ClientDocumentUpload: React.FC = () => {
                         setPolicies(policiesData);
                         // Seleccionar automáticamente la primera póliza si está disponible
                         setSelectedPolicyId(policiesData[0].id);
-                        // Ya no se necesita cargar productNames aquí, ya vienen con la póliza
+                        // Consola para depuración: Comprueba la estructura de policy.insurance_products
+                        console.log("Datos de pólizas recibidos:", policiesData);
+                        policiesData.forEach(p => console.log(`Póliza ID: ${p.id}, Nombre del producto: `, p.insurance_products));
                     } else {
                         setPolicies([]);
                         setSelectedPolicyId(null); // Asegúrate de que no haya una póliza seleccionada
@@ -147,6 +153,17 @@ const ClientDocumentUpload: React.FC = () => {
         setError(null);
         setSuccessMessage(null);
 
+        // --- VALIDACIÓN DE TIPO DE ARCHIVO AÑADIDA ---
+        const allowedExtensions = acceptedFileTypes.split(',').map(ext => ext.trim().toLowerCase());
+        const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+        if (!fileExtension || !allowedExtensions.includes(`.${fileExtension}`)) {
+            setError(`Formato de archivo no permitido. Solo se aceptan: ${acceptedFileTypesDisplay}.`);
+            setUploadingDocument(false);
+            return;
+        }
+        // --- FIN VALIDACIÓN ---
+
         let uploadedFilePath: string | null = null; // Para guardar la ruta si la subida es exitosa
 
         try {
@@ -179,8 +196,8 @@ const ClientDocumentUpload: React.FC = () => {
                     policy_id: selectedPolicyId,
                     document_name: file.name, // Nombre original del archivo
                     file_path: uploadedFilePath, // Ruta devuelta por Supabase Storage
-                    uploaded_by: userId, // <-- ¡Asegúrate de que esta columna exista en tu DB!
-                    // document_type: 'some_type' // Podrías añadir una forma de seleccionar el tipo de documento
+                    uploaded_by: userId,
+                    document_type: 'policies', // <--- Tipo de documento por defecto 'policies'
                 });
 
             if (dbError) {
@@ -211,6 +228,64 @@ const ClientDocumentUpload: React.FC = () => {
         }
     };
 
+    /**
+     * Inicia el proceso de eliminación de un documento, mostrando el modal de confirmación.
+     * @param docId El ID del documento a eliminar.
+     * @param filePath La ruta del archivo en Storage.
+     * @param docName El nombre del documento para mostrar en el modal.
+     */
+    const confirmDelete = (docId: string, filePath: string, docName: string) => {
+        setDocToDelete({ id: docId, filePath: filePath, name: docName });
+        setShowDeleteModal(true);
+    };
+
+    /**
+     * Ejecuta la eliminación del documento después de la confirmación del modal.
+     */
+    const handleDeleteDocument = async () => {
+        if (!docToDelete) return; // No debería pasar si el modal se dispara correctamente
+
+        setUploadingDocument(true); // Reutilizamos este estado para indicar una operación en curso
+        setError(null);
+        setSuccessMessage(null);
+        setShowDeleteModal(false); // Cierra el modal inmediatamente
+
+        try {
+            // 1. Eliminar el registro del documento de la tabla 'policy_documents'
+            const { error: dbDeleteError } = await supabase
+                .from('policy_documents')
+                .delete()
+                .eq('id', docToDelete.id);
+
+            if (dbDeleteError) {
+                throw new Error(`Error al eliminar el registro del documento de la base de datos: ${dbDeleteError.message}`);
+            }
+
+            // 2. Eliminar el archivo de Supabase Storage
+            const { error: storageDeleteError } = await supabase.storage
+                .from('documents') // Asegúrate de que el bucket es 'documents'
+                .remove([docToDelete.filePath]);
+
+            if (storageDeleteError) {
+                // Si falla la eliminación del Storage, lo registramos pero no bloqueamos la operación general
+                console.error(`Error al eliminar el archivo de Storage: ${storageDeleteError.message}`);
+                // Podrías considerar un mensaje de error más específico aquí si solo falla Storage
+            }
+
+            setSuccessMessage(`Documento "${docToDelete.name}" eliminado exitosamente.`);
+            setDocToDelete(null); // Limpia el estado del documento a eliminar
+            // Recarga la lista de documentos para reflejar los cambios
+            if (selectedPolicyId) {
+                await fetchDocumentsForPolicy(selectedPolicyId);
+            }
+        } catch (err: any) {
+            setError(err instanceof Error ? err.message : 'Error desconocido al eliminar el documento.');
+            console.error('Error durante la eliminación del documento:', err);
+        } finally {
+            setUploadingDocument(false);
+        }
+    };
+
     // Renderizar estado de carga para pólizas
     if (loadingPolicies) {
         return (
@@ -227,13 +302,28 @@ const ClientDocumentUpload: React.FC = () => {
             <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 text-center">
                 <h2 className="text-2xl font-bold text-blue-800 mb-4">Mis Documentos</h2>
                 <p className="text-gray-600 mb-4">
-                    No tienes pólizas activas en tu cuenta. Para subir documentos, primero debes tener una póliza.
+                    No tienes pólizas activas. Para subir documentos, primero debes tener una póliza.
                 </p>
                 {error && <div className="text-red-600 mt-4">{error}</div>}
                 {successMessage && <div className="text-green-600 mt-4">{successMessage}</div>}
             </div>
         );
     }
+
+    // Función auxiliar para obtener el nombre del producto de forma segura
+    const getProductName = (policy: Policy) => {
+        if (policy.insurance_products) {
+            // Verifica si es un array (según la interfaz)
+            if (Array.isArray(policy.insurance_products) && policy.insurance_products.length > 0) {
+                return policy.insurance_products[0]?.name;
+            } else {
+                // Si no es un array, pero existe, asume que es el objeto directo (según el console.log)
+                // Usamos una aserción de tipo para que TypeScript lo acepte.
+                return (policy.insurance_products as { name?: string })?.name;
+            }
+        }
+        return undefined; // Retorna undefined si no se encuentra el nombre
+    };
 
     // Renderizado principal del componente
     return (
@@ -254,7 +344,7 @@ const ClientDocumentUpload: React.FC = () => {
                     >
                         {policies.map((policy) => (
                             <option key={policy.id} value={policy.id}>
-                                {policy.policy_number} - {policy.insurance_products?.[0]?.name || 'Nombre de producto no disponible'}
+                                {policy.policy_number} - {getProductName(policy) || 'Nombre de producto no disponible'}
                             </option>
                         ))}
                     </select>
@@ -275,15 +365,28 @@ const ClientDocumentUpload: React.FC = () => {
                     <ul className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         {documents.map((doc) => (
                             <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
-                                <span className="text-gray-800 break-words flex-grow mr-4">{doc.document_name}</span>
-                                <a
-                                    href={doc.file_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
-                                >
-                                    Ver
-                                </a>
+                                <span className="text-gray-800 break-words flex-grow mr-4">
+                                    {doc.document_type === 'signature' ? 'Firma' : doc.document_name} {/* <-- Texto condicional */}
+                                </span>
+                                <div className="flex items-center space-x-2">
+                                    <a
+                                        href={doc.file_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
+                                    >
+                                        Ver
+                                    </a>
+                                    {doc.document_type !== 'signature' && ( // <-- Botón de eliminar condicional
+                                        <button
+                                            onClick={() => confirmDelete(doc.id, doc.file_path, doc.document_name)}
+                                            className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                                            disabled={uploadingDocument} // Deshabilitar durante la subida/eliminación
+                                        >
+                                            Eliminar
+                                        </button>
+                                    )}
+                                </div>
                             </li>
                         ))}
                     </ul>
@@ -300,9 +403,9 @@ const ClientDocumentUpload: React.FC = () => {
                 <FileUpload
                     id="document-upload"
                     name="document-upload"
-                    label="Seleccionar Documento"
+                    label={`Seleccionar Documento (Formatos: ${acceptedFileTypesDisplay})`}
                     onChange={handleDocumentUpload}
-                    accept=".pdf,.jpg,.jpeg,.png,.svg" // Sugerir tipos de archivo comunes
+                    accept={acceptedFileTypes} // Usar la constante definida
                     disabled={!selectedPolicyId || uploadingDocument} // Deshabilitar si no hay póliza seleccionada o si se está subiendo
                 />
 
@@ -327,6 +430,34 @@ const ClientDocumentUpload: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* Modal de Confirmación de Eliminación */}
+            {showDeleteModal && docToDelete && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
+                    <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Confirmar Eliminación</h3>
+                        <p className="text-gray-700 mb-6">
+                            ¿Estás seguro de que deseas eliminar el documento "<span className="font-semibold">{docToDelete.name}</span>"? Esta acción no se puede deshacer.
+                        </p>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition-colors"
+                                disabled={uploadingDocument}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleDeleteDocument}
+                                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                disabled={uploadingDocument}
+                            >
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

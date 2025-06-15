@@ -1,26 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-// La importación de uuidv4 se ha eliminado de aquí ya que solo se usa en DependentInput y DependentInputList.
-
-// Importa el componente de lista de dependientes y su interfaz
 import DependentInputList from '../../policies/components/DependentInputList';
-import { Dependent } from '../../policies/components/DependentInput'; // Necesitas esta interfaz aquí también
+import { Dependent } from '../../policies/components/DependentInput';
 
-// Declara las variables globales proporcionadas por el entorno Canvas (si aplica)
 declare const __app_id: string | undefined;
 declare const __firebase_config: string | undefined;
 declare const __initial_auth_token: string | undefined;
 
-// Instancia del cliente de Supabase
 let supabase: any = null;
 
-// Interfaz para el producto de seguro que se pasa como prop
 interface InsuranceProduct {
     id: string;
     name: string;
     type: 'life' | 'health' | 'other';
     description: string | null;
-    duration_months: number | null; // Cambiado a duration_months
+    duration_months: number | null;
     coverage_details: {
         deductible?: number;
         coinsurance_percentage?: number;
@@ -31,44 +25,39 @@ interface InsuranceProduct {
         includes_vision_full?: boolean;
         wellness_rebate_percentage?: number;
         max_age_for_inscription?: number;
-        max_dependents?: number; // Campo para el máximo de dependientes para salud
-        [key: string]: any; // Permite otras propiedades
+        max_dependents?: number;
+        [key: string]: any;
     };
     base_premium: number;
     currency: string;
     terms_and_conditions: string | null;
     is_active: boolean;
     admin_notes: string | null;
-    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null; // Nueva frecuencia de pago fija
+    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
     created_at: string;
     updated_at: string;
 }
 
-// Interfaz para los clientes (profiles)
 interface ClientProfile {
     user_id: string;
     full_name: string;
     email: string;
+    fecha_nacimiento: string | null;
 }
 
 interface GenericHealthPolicyFormProps {
     product: InsuranceProduct;
-    agentId: string; // El ID del agente logeado
+    agentId: string;
 }
 
-/**
- * Componente de formulario genérico para la creación de pólizas de Seguro de Salud.
- * Se adapta según los 'coverage_details' del producto de seguro recibido.
- */
 const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ product, agentId }) => {
-    // Estados para los campos de la tabla 'policies' relevantes para Seguros de Salud
     const [clientId, setClientId] = useState<string>('');
     const [contractDetails, setContractDetails] = useState<string>('');
-    const [ageAtInscription, setAgeAtInscription] = useState<string>('');
-    const [dependents, setDependents] = useState<Dependent[]>([]); // Lista de dependientes estructurada
+    const [dateOfBirth, setDateOfBirth] = useState<string>('');
+    const [registeredDateOfBirth, setRegisteredDateOfBirth] = useState<string | null>(null);
+    const [ageAtInscription, setAgeAtInscription] = useState<number | null>(null);
+    const [dependents, setDependents] = useState<Dependent[]>([]);
 
-    // Estados para los campos de cobertura específicos que se guardarán en 'policies'
-    // Estos campos ahora son de solo lectura y obtienen su valor directamente del producto
     const policyDeductible = product.coverage_details.deductible?.toString() || '';
     const policyCoinsurancePercentage = product.coverage_details.coinsurance_percentage?.toString() || '';
     const policyMaxAnnualOutOfPocket = product.coverage_details.max_annual_out_of_pocket?.toString() || '';
@@ -77,44 +66,36 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
     const policyIncludesVisionBasic = product.coverage_details.includes_vision_basic || false;
     const policyIncludesVisionFull = product.coverage_details.includes_vision_full || false;
     const policyWellnessRebatePercentage = product.coverage_details.wellness_rebate_percentage?.toString() || '';
-    
-    // Convertir policyMaxDependents a number | null para evitar el error de 'undefined'
-    const policyMaxDependents: number | null = product.coverage_details.max_dependents ?? null; // Número, 0 para no permitir
+    const policyMaxDependents: number | null = product.coverage_details.max_dependents ?? null;
 
     const [loading, setLoading] = useState<boolean>(false);
     const [message, setMessage] = useState<string | null>(null);
     const [isError, setIsError] = useState<boolean>(false);
     const [clients, setClients] = useState<ClientProfile[]>([]);
+    const [dateOfBirthMismatch, setDateOfBirthMismatch] = useState<boolean>(false);
 
-    /**
-     * Hook useEffect para inicializar el cliente de Supabase y cargar los clientes.
-     */
     useEffect(() => {
         const initializeAndFetchClients = async () => {
             try {
-                // Inicialización de Supabase si no está globalmente disponible
                 if (!supabase) {
                     const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'TU_URL_DE_SUPABASE_AQUI';
                     const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'TU_CLAVE_ANON_DE_SUPABASE_AQUI';
                     supabase = createClient(supabaseUrl, supabaseAnonKey);
                 }
 
-                // Cargar clientes con rol 'client'
                 setLoading(true);
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('user_id, full_name, email') // Asegúrate de que 'full_name' y 'email' existan en tu tabla 'profiles'
+                    .select('user_id, full_name, email, fecha_nacimiento')
                     .eq('role', 'client');
 
                 if (error) {
-                    console.error('Error al cargar clientes:', error);
                     setMessage('Error al cargar la lista de clientes.');
                     setIsError(true);
                 } else if (data) {
                     setClients(data);
                 }
             } catch (err: any) {
-                console.error("Error al inicializar o cargar clientes:", err);
                 setMessage("Error fatal al cargar clientes: " + err.message);
                 setIsError(true);
             } finally {
@@ -125,9 +106,91 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
         initializeAndFetchClients();
     }, []);
 
-    /**
-     * Calcula la fecha de fin de la póliza basándose en la fecha de inicio (actual) y la duración del producto.
-     */
+    useEffect(() => {
+        const fetchClientDateOfBirth = async () => {
+            if (clientId && supabase) {
+                setLoading(true);
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('fecha_nacimiento')
+                    .eq('user_id', clientId)
+                    .single();
+
+                if (error) {
+                    setRegisteredDateOfBirth(null);
+                    setDateOfBirth('');
+                    setAgeAtInscription(null);
+                    setDateOfBirthMismatch(true);
+                } else if (data && data.fecha_nacimiento) {
+                    setRegisteredDateOfBirth(data.fecha_nacimiento);
+                    setDateOfBirth(data.fecha_nacimiento);
+                    const initialCalculatedAge = calculateAge(data.fecha_nacimiento);
+                    setAgeAtInscription(initialCalculatedAge);
+                    setDateOfBirthMismatch(false);
+                } else {
+                    setRegisteredDateOfBirth(null);
+                    setDateOfBirth('');
+                    setAgeAtInscription(null);
+                    setDateOfBirthMismatch(true);
+                    setMessage("El cliente seleccionado no tiene una fecha de nacimiento registrada. Su perfil debe estar completo.");
+                    setIsError(true);
+                }
+                setLoading(false);
+            } else {
+                setRegisteredDateOfBirth(null);
+                setDateOfBirth('');
+                setAgeAtInscription(null);
+                setDateOfBirthMismatch(false);
+            }
+        };
+
+        fetchClientDateOfBirth();
+    }, [clientId]);
+
+    // *** NUEVO EFECTO PARA GESTIONAR LA VISIBILIDAD DEL MENSAJE ***
+    useEffect(() => {
+        if (message) {
+            const timer = setTimeout(() => {
+                setMessage(null);
+                setIsError(false);
+            }, 5000); // El mensaje desaparecerá después de 5 segundos
+
+            return () => clearTimeout(timer); // Limpia el temporizador si el componente se desmonta
+        }
+    }, [message]);
+
+    const calculateAge = (dobString: string): number | null => {
+        if (!dobString) return null;
+        const today = new Date();
+        const birthDate = new Date(dobString);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
+    const handleDateOfBirthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const enteredDate = e.target.value;
+        setDateOfBirth(enteredDate);
+        const calculatedAge = calculateAge(enteredDate);
+        setAgeAtInscription(calculatedAge);
+
+        if (registeredDateOfBirth && enteredDate !== registeredDateOfBirth) {
+            setDateOfBirthMismatch(true);
+            setMessage("La fecha de nacimiento no coincide con la registrada. Contacte a administración para cambios.");
+            setIsError(true);
+        } else {
+            setDateOfBirthMismatch(false);
+            // Solo limpia el mensaje si era un error de mismatch
+            if (isError && message?.includes("fecha de nacimiento")) {
+                setMessage(null);
+                setIsError(false);
+            }
+        }
+    };
+
     const calculateEndDate = (start: string, months: number | null): string => {
         if (!start || !months) return '';
         const startDateObj = new Date(start);
@@ -136,18 +199,12 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
         return startDateObj.toISOString().split('T')[0];
     };
 
-    /**
-     * Genera un número de póliza simple (para fines de demostración).
-     */
     const generatePolicyNumber = (): string => {
         const timestamp = new Date().getTime();
         const random = Math.floor(Math.random() * 10000);
         return `POL-SALUD-${timestamp}-${random}`;
     };
 
-    /**
-     * Maneja el envío del formulario para crear la póliza de salud.
-     */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -166,93 +223,80 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
             setLoading(false);
             return;
         }
-
-        // Validación de dependientes
+        if (dateOfBirthMismatch) {
+            setMessage("La fecha de nacimiento no coincide. Corrija o contacte a administración.");
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
+        if (ageAtInscription === null || ageAtInscription < 0) {
+            setMessage("Por favor, ingrese una fecha de nacimiento válida.");
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
+        if (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription) {
+            setMessage(`La edad (${ageAtInscription}) excede el máximo permitido (${product.coverage_details.max_age_for_inscription}).`);
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
         if (policyMaxDependents !== null && dependents.length > policyMaxDependents) {
-            setMessage(`El número de dependientes excede el límite permitido por el producto (${policyMaxDependents}).`);
-            setIsError(true);
-            setLoading(false);
-            return;
-        }
-        if (policyMaxDependents === 0 && dependents.length > 0) {
-            setMessage("Este producto de seguro no permite dependientes.");
+            setMessage(`El número de dependientes excede el límite permitido (${policyMaxDependents}).`);
             setIsError(true);
             setLoading(false);
             return;
         }
 
-        // La fecha de inicio es la fecha actual del sistema
         const currentStartDate = new Date().toISOString().split('T')[0];
-        // La fecha de fin se calcula con la duración fija del producto
         const calculatedEndDate = calculateEndDate(currentStartDate, product.duration_months);
-        if (!calculatedEndDate) {
-             setMessage("Error: No se pudo calcular la fecha de fin de la póliza. Verifique la duración del producto.");
-             setIsError(true);
-             setLoading(false);
-             return;
-        }
 
         const newPolicy = {
             policy_number: generatePolicyNumber(),
             client_id: clientId,
             agent_id: agentId,
             product_id: product.id,
-            start_date: currentStartDate, // Fecha actual, no seleccionable
+            start_date: currentStartDate,
             end_date: calculatedEndDate,
             status: 'pending',
-            premium_amount: product.base_premium, // Prima base fija del producto
-            payment_frequency: product.fixed_payment_frequency, // Frecuencia de pago fija del producto
+            premium_amount: product.base_premium,
+            payment_frequency: product.fixed_payment_frequency,
             contract_details: contractDetails,
-            
-            // Campos específicos de salud (tomados del producto)
             deductible: policyDeductible ? parseFloat(policyDeductible) : null,
             coinsurance: policyCoinsurancePercentage ? parseInt(policyCoinsurancePercentage) : null,
             max_annual: policyMaxAnnualOutOfPocket ? parseFloat(policyMaxAnnualOutOfPocket) : null,
             wellness_rebate: policyWellnessRebatePercentage ? parseFloat(policyWellnessRebatePercentage) : null,
             max_age_inscription: product.coverage_details.max_age_for_inscription,
-            age_at_inscription: ageAtInscription ? parseInt(ageAtInscription) : null,
-            
-            // Campos de dental y visión (tomados del producto)
+            age_at_inscription: ageAtInscription,
             has_dental: policyIncludesDentalBasic || policyIncludesDentalPremium,
             has_dental_basic: policyIncludesDentalBasic,
             has_dental_premium: policyIncludesDentalPremium,
             has_vision: policyIncludesVisionBasic || policyIncludesVisionFull,
             has_vision_basic: policyIncludesVisionBasic,
             has_vision_full: policyIncludesVisionFull,
-
-            // Campos de dependientes
-            num_dependents: dependents.length, // Número de dependientes ingresados
-            dependents_details: JSON.parse(JSON.stringify(dependents)), // Convertir a JSON string, luego parsear
-
-            // Campos no aplicables para salud, se envían como null
+            num_dependents: dependents.length,
+            dependents_details: JSON.parse(JSON.stringify(dependents)),
             coverage_amount: null,
             beneficiaries: null,
             ad_d_included: null,
             ad_d_coverage: null,
             num_beneficiaries: null,
-            wants_dental_premium: null, // Asumiendo que has_dental_premium es suficiente para tu esquema
-            wants_vision: null, // Asumiendo que has_vision_full es suficiente para tu esquema
+            wants_dental_premium: null,
+            wants_vision: null,
         };
 
         try {
-            const { error } = await supabase
-                .from('policies')
-                .insert([newPolicy]);
-
-            if (error) {
-                throw error;
-            }
+            const { error } = await supabase.from('policies').insert([newPolicy]);
+            if (error) throw error;
 
             setMessage("Póliza de salud creada exitosamente.");
             setIsError(false);
-            // Limpiar formulario después de éxito
             setClientId('');
             setContractDetails('');
-            setAgeAtInscription('');
-            setDependents([]); // Limpiar dependientes
-
+            setDateOfBirth('');
+            setAgeAtInscription(null);
+            setDependents([]);
         } catch (err: any) {
-            console.error("Error al crear póliza de salud:", err);
             setMessage(`Error al crear póliza: ${err.message}`);
             setIsError(true);
         } finally {
@@ -260,10 +304,10 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
         }
     };
 
-    // Helper para Capitalizar la primera letra de la frecuencia de pago
     const capitalize = (s: string | null | undefined): string => {
         if (!s) return 'N/A';
-        return s.charAt(0).toUpperCase() + s.slice(1);
+        const trimmedS = s.trim();
+        return trimmedS.charAt(0).toUpperCase() + trimmedS.slice(1);
     };
 
     return (
@@ -271,15 +315,12 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
             <h3 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">Detalles de la Póliza de Salud</h3>
 
             {message && (
-                <div
-                    className={`p-4 mb-4 rounded-lg text-white ${isError ? 'bg-red-500' : 'bg-green-500'}`}
-                >
+                <div className={`p-4 mb-4 rounded-lg text-white ${isError ? 'bg-red-500' : 'bg-green-500'}`}>
                     {message}
                 </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Selector de Cliente */}
                 <div>
                     <label htmlFor="client_id" className="block text-sm font-medium text-gray-700">Seleccionar Cliente</label>
                     <select
@@ -298,7 +339,6 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
                     </select>
                 </div>
 
-                {/* Información de la Póliza (solo lectura) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-100 p-4 rounded-md">
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Producto de Seguro</label>
@@ -326,23 +366,31 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
                     </div>
                 </div>
 
-                {/* Edad del Asegurado al momento de la Inscripción */}
                 <div>
-                    <label htmlFor="ageAtInscription" className="block text-sm font-medium text-gray-700">Edad del Asegurado al Inscribirse (Máx del Producto: {product.coverage_details.max_age_for_inscription || 'N/A'})</label>
+                    <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
+                        Fecha de Nacimiento del Asegurado
+                    </label>
                     <input
-                        type="number"
-                        id="ageAtInscription"
-                        value={ageAtInscription}
-                        onChange={(e) => setAgeAtInscription(e.target.value)}
-                        min="0"
-                        max={product.coverage_details.max_age_for_inscription || undefined} // Limita por el max_age_for_inscription del producto
+                        type="date"
+                        id="dateOfBirth"
+                        value={dateOfBirth}
+                        onChange={handleDateOfBirthChange}
                         required
                         className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                        placeholder="Edad del asegurado"
+                        disabled={!clientId || loading}
                     />
+                    {dateOfBirthMismatch && (
+                        <p className="mt-2 text-sm text-red-600">
+                            La fecha ingresada no coincide con la registrada ({registeredDateOfBirth}).
+                        </p>
+                    )}
+                    {ageAtInscription !== null && !dateOfBirthMismatch && (
+                        <p className="mt-2 text-sm text-gray-600">
+                            Edad calculada: {ageAtInscription} años.
+                        </p>
+                    )}
                 </div>
-
-                {/* Campos de Cobertura de Salud (solo lectura o con valores preestablecidos) */}
+                
                 <h4 className="text-lg font-semibold text-gray-800 pt-4 border-t border-gray-200">Coberturas Definidas por el Producto</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-100 p-4 rounded-md">
                     {product.coverage_details.deductible !== undefined && (
@@ -359,58 +407,48 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
                     )}
                     {product.coverage_details.max_annual_out_of_pocket !== undefined && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Gasto Máximo Anual de Bolsillo</label>
+                            <label className="block text-sm font-medium text-gray-700">Gasto Máximo Anual</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">{policyMaxAnnualOutOfPocket} {product.currency}</p>
                         </div>
                     )}
-                    {product.coverage_details.wellness_rebate_percentage !== undefined && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Reembolso Bienestar</label>
-                            <p className="mt-1 text-sm text-gray-900 font-medium">{policyWellnessRebatePercentage}%</p>
-                        </div>
-                    )}
                     {product.coverage_details.max_dependents !== undefined && (
-                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Máx. de Dependientes Permitidos</label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Máx. de Dependientes</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">
                                 {policyMaxDependents === 0 ? 'No permitidos' : policyMaxDependents}
                             </p>
                         </div>
                     )}
-
-                    {/* Opciones de Dental y Visión */}
                     {product.coverage_details.includes_dental_basic !== undefined && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Incluye Dental Básico</label>
+                            <label className="block text-sm font-medium text-gray-700">Dental Básico</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">{policyIncludesDentalBasic ? 'Sí' : 'No'}</p>
                         </div>
                     )}
                     {product.coverage_details.includes_dental_premium !== undefined && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Incluye Dental Premium</label>
+                            <label className="block text-sm font-medium text-gray-700">Dental Premium</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">{policyIncludesDentalPremium ? 'Sí' : 'No'}</p>
                         </div>
                     )}
                     {product.coverage_details.includes_vision_basic !== undefined && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Incluye Visión Básico</label>
+                            <label className="block text-sm font-medium text-gray-700">Visión Básico</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">{policyIncludesVisionBasic ? 'Sí' : 'No'}</p>
                         </div>
                     )}
                     {product.coverage_details.includes_vision_full !== undefined && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Incluye Visión Completo</label>
+                            <label className="block text-sm font-medium text-gray-700">Visión Completo</label>
                             <p className="mt-1 text-sm text-gray-900 font-medium">{policyIncludesVisionFull ? 'Sí' : 'No'}</p>
                         </div>
                     )}
                 </div>
-
-                {/* Sección de Dependientes */}
+                
                 <h4 className="text-lg font-semibold text-gray-800 pt-4 border-t border-gray-200">Dependientes de la Póliza</h4>
                 {policyMaxDependents !== null && policyMaxDependents === 0 ? (
                     <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative">
-                        <strong className="font-bold">Información:</strong>
-                        <span className="block sm:inline"> Este producto de seguro no permite dependientes.</span>
+                        Este producto de seguro no permite dependientes.
                     </div>
                 ) : (
                     <DependentInputList
@@ -420,7 +458,6 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
                     />
                 )}
                 
-                {/* Detalles del Contrato (opcional) */}
                 <div>
                     <label htmlFor="contractDetails" className="block text-sm font-medium text-gray-700">Detalles del Contrato</label>
                     <textarea
@@ -429,14 +466,13 @@ const GenericHealthPolicyForm: React.FC<GenericHealthPolicyFormProps> = ({ produ
                         onChange={(e) => setContractDetails(e.target.value)}
                         rows={3}
                         className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                        placeholder="Cualquier detalle adicional o nota específica del contrato de esta póliza."
+                        placeholder="Cualquier detalle adicional o nota específica del contrato."
                     ></textarea>
                 </div>
-
-                {/* Botón de Envío */}
+                
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !clientId || dateOfBirthMismatch || ageAtInscription === null || (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription)}
                     className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? 'Creando Póliza...' : 'Crear Póliza de Salud'}

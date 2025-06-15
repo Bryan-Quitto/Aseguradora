@@ -1,27 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByAgentId, getInsuranceProductById } from '../../policies/policy_management'; // Ruta corregida
-import { getClientProfileById } from '../../clients/hooks/cliente_backend'; // Ruta corregida
+import { Policy, getPoliciesByAgentId, getInsuranceProductById } from '../../policies/policy_management';
+import { getClientProfileById } from '../../clients/hooks/cliente_backend';
 
 export default function AgentApplicationList() {
   const { user } = useAuth();
-  const [pendingApplications, setPendingApplications] = useState<Policy[]>([]);
+  const [applications, setApplications] = useState<Policy[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [clientNames, setClientNames] = useState<Map<string, string>>(new Map());
-  const [clientCedulas, setClientCedulas] = useState<Map<string, string>>(new Map()); // Nuevo estado para cédulas
+  const [clientCedulas, setClientCedulas] = useState<Map<string, string>>(new Map());
   const [productNames, setProductNames] = useState<Map<string, string>>(new Map());
-  const [searchCedula, setSearchCedula] = useState(''); // Estado para búsqueda por cédula
+  const [searchCedula, setSearchCedula] = useState('');
 
   useEffect(() => {
-    /**
-     * Función asíncrona para cargar las solicitudes de póliza pendientes.
-     * Filtra las pólizas con estado 'pending' y obtiene los nombres de clientes y productos asociados.
-     */
-    const fetchPendingApplications = async () => {
-      if (!user?.id) { // Usamos user?.id para obtener el ID del usuario autenticado
-        setError('No se pudo cargar el ID del agente. Asegúrate de estar logueado.');
+    const fetchApplications = async () => {
+      if (!user?.id) {
+        setError('No se pudo cargar el ID del agente.');
         setLoading(false);
         return;
       }
@@ -29,71 +25,60 @@ export default function AgentApplicationList() {
       setLoading(true);
       setError(null);
 
-      // Obtener todas las pólizas gestionadas por el agente.
-      // Si la función de backend pudiera filtrar por status, sería más eficiente.
-      const { data: policiesData, error: policiesError } = await getPoliciesByAgentId(user.id); // Usamos user.id
+      const { data: policiesData, error: policiesError } = await getPoliciesByAgentId(user.id);
 
       if (policiesError) {
-        console.error('Error al obtener pólizas para revisión:', policiesError);
-        setError('Error al cargar las solicitudes. Por favor, inténtalo de nuevo.');
+        setError('Error al cargar las solicitudes.');
         setLoading(false);
         return;
       }
 
       if (policiesData) {
-        // Filtrar solo las pólizas que están en estado 'pending'
-        const filteredApplications = policiesData.filter(policy => policy.status === 'pending');
-        setPendingApplications(filteredApplications);
+        const filteredApplications = policiesData.filter(
+          policy => policy.status === 'pending' || policy.status === 'awaiting_signature'
+        );
+        
+        filteredApplications.sort((a, b) => {
+            if (a.status === 'awaiting_signature' && b.status !== 'awaiting_signature') return -1;
+            if (a.status !== 'awaiting_signature' && b.status === 'awaiting_signature') return 1;
+            return 0;
+        });
 
-        // Crear conjuntos para IDs únicos de clientes y productos de las aplicaciones pendientes
+        setApplications(filteredApplications);
+
         const uniqueClientIds = new Set(filteredApplications.map(p => p.client_id));
         const uniqueProductIds = new Set(filteredApplications.map(p => p.product_id));
 
-        // Cargar nombres y cédulas de clientes
-        const newClientNames = new Map<string, string>(clientNames);
-        const newClientCedulas = new Map<string, string>(clientCedulas);
-        const clientPromises = Array.from(uniqueClientIds).map(async (clientId) => {
-          if (!newClientNames.has(clientId) || !newClientCedulas.has(clientId)) {
-            const { data: clientData, error: clientError } = await getClientProfileById(clientId);
-            if (clientError) {
-              console.error(`Error al obtener cliente ${clientId}:`, clientError);
-              newClientNames.set(clientId, 'Cliente Desconocido');
-              newClientCedulas.set(clientId, '');
-            } else if (clientData) {
-              newClientNames.set(clientId, clientData.full_name || `${clientData.primer_nombre || ''} ${clientData.primer_apellido || ''}`.trim() || 'Nombre no disponible');
+        const newClientNames = new Map<string, string>();
+        const newClientCedulas = new Map<string, string>();
+        for (const clientId of uniqueClientIds) {
+            const { data: clientData } = await getClientProfileById(clientId);
+            if (clientData) {
+              newClientNames.set(clientId, clientData.full_name || `${clientData.primer_nombre || ''} ${clientData.primer_apellido || ''}`.trim() || 'N/A');
               newClientCedulas.set(clientId, clientData.numero_identificacion || '');
             }
-          }
-        });
-        await Promise.all(clientPromises); // Esperar a que se carguen todos los nombres y cédulas de clientes
+        }
         setClientNames(newClientNames);
         setClientCedulas(newClientCedulas);
 
-        // Cargar nombres de productos
-        const newProductNames = new Map<string, string>(productNames);
-        const productPromises = Array.from(uniqueProductIds).map(async (productId) => {
-          if (!newProductNames.has(productId)) {
-            const { data: productData, error: productError } = await getInsuranceProductById(productId);
-            if (productError) {
-              console.error(`Error al obtener producto ${productId}:`, productError);
-              newProductNames.set(productId, 'Producto Desconocido');
-            } else if (productData) {
+        const newProductNames = new Map<string, string>();
+        for (const productId of uniqueProductIds) {
+            const { data: productData } = await getInsuranceProductById(productId);
+            if (productData) {
               newProductNames.set(productId, productData.name);
             }
-          }
-        });
-        await Promise.all(productPromises); // Esperar a que se carguen todos los nombres de productos
+        }
         setProductNames(newProductNames);
       }
       setLoading(false);
     };
 
-    fetchPendingApplications();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (user?.id) {
+      fetchApplications();
+    }
   }, [user?.id]);
 
-  // Filtrar por cédula
-  const filteredApplications = pendingApplications.filter((app) => {
+  const filteredApplications = applications.filter((app) => {
     const cedula = clientCedulas.get(app.client_id) || '';
     return searchCedula === '' || cedula.startsWith(searchCedula);
   });
@@ -101,7 +86,7 @@ export default function AgentApplicationList() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-blue-600 text-xl">Cargando solicitudes pendientes...</p>
+        <p className="text-blue-600 text-xl">Cargando solicitudes...</p>
       </div>
     );
   }
@@ -116,11 +101,8 @@ export default function AgentApplicationList() {
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-6xl border border-blue-100 mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-blue-700">Solicitudes de póliza pendientes</h2>
-      </div>
+      <h2 className="text-3xl font-bold text-blue-700 mb-6">Solicitudes Pendientes de Revisión</h2>
 
-      {/* Barra de búsqueda por cédula, ahora ocupa todo el ancho */}
       <div className="mb-6">
         <input
           type="text"
@@ -131,7 +113,6 @@ export default function AgentApplicationList() {
           inputMode="numeric"
           pattern="\d*"
           onChange={e => {
-            // Solo permite números y máximo 10 caracteres
             const value = e.target.value.replace(/\D/g, '').slice(0, 10);
             setSearchCedula(value);
           }}
@@ -140,60 +121,35 @@ export default function AgentApplicationList() {
 
       {filteredApplications.length === 0 ? (
         <p className="text-lg text-gray-600 text-center py-10">
-          No hay solicitudes de póliza pendientes de revisión en este momento.
+          No hay solicitudes pendientes de revisión en este momento.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-blue-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Número de Póliza
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cliente
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cédula
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Producto Solicitado
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número de Póliza</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cédula</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredApplications.map((app) => (
                 <tr key={app.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {app.policy_number}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {clientNames.get(app.client_id) || 'Cargando...'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {clientCedulas.get(app.client_id) || 'Cargando...'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {productNames.get(app.product_id) || 'Cargando...'}
-                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{app.policy_number}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{clientNames.get(app.client_id) || 'Cargando...'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{clientCedulas.get(app.client_id) || 'Cargando...'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{productNames.get(app.product_id) || 'Cargando...'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                      {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${app.status === 'awaiting_signature' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {app.status === 'awaiting_signature' ? 'Revisión de Firma' : 'Pendiente'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link
-                      to={`/agent/dashboard/applications/${app.id}`}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      Revisar
-                    </Link>
+                    <Link to={`/agent/dashboard/applications/${app.id}`} className="text-blue-600 hover:text-blue-900 mr-4">Revisar</Link>
                   </td>
                 </tr>
               ))}

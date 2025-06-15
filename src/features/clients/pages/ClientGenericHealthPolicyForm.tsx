@@ -103,7 +103,9 @@ interface ClientGenericHealthPolicyFormProps {
  */
 const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps> = ({ product, clientId, agentId }) => {
   // Estados para los campos de la tabla 'policies' relevantes para Seguros de Salud
-  const [ageAtInscription, setAgeAtInscription] = useState<string>('');
+  const [dateOfBirth, setDateOfBirth] = useState<string>(''); // Nuevo estado para la fecha de nacimiento ingresada
+  const [registeredDateOfBirth, setRegisteredDateOfBirth] = useState<string | null>(null); // Fecha de nacimiento del perfil
+  const [ageAtInscription, setAgeAtInscription] = useState<number | null>(null); // Edad calculada
   const [dependents, setDependents] = useState<Dependent[]>([]); // Lista de dependientes estructurada
 
   // Nuevo estado para almacenar el ID de la póliza una vez creada
@@ -124,37 +126,126 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
   const [loading, setLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState<boolean>(false);
+  const [dateOfBirthMismatch, setDateOfBirthMismatch] = useState<boolean>(false); // Nuevo estado para el error de fecha de nacimiento
 
   /**
-   * Hook useEffect para inicializar el cliente de Supabase.
+   * Hook useEffect para inicializar el cliente de Supabase y cargar la fecha de nacimiento del perfil.
    * En tu aplicación real, asegúrate de que tus variables de entorno estén configuradas.
    */
   useEffect(() => {
-    try {
-      // Intenta inicializar Supabase solo una vez si aún no está inicializado.
-      if (!supabase) {
-        // Estas variables de entorno deberían estar configuradas en tu .env.local, .env, o similar.
-        // Por ejemplo, en un proyecto Vite, se accedería a través de import.meta.env.VITE_...
-        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL;
-        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY;
+    const initializeSupabaseAndFetchProfile = async () => {
+      try {
+        // Intenta inicializar Supabase solo una vez si aún no está inicializado.
+        if (!supabase) {
+          // Estas variables de entorno deberían estar configuradas en tu .env.local, .env, o similar.
+          // Por ejemplo, en un proyecto Vite, se accedería a través de import.meta.env.VITE_...
+          const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL;
+          const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY;
 
-        if (!supabaseUrl || !supabaseAnonKey) {
-          // Es crucial que estas variables estén configuradas en tu entorno de desarrollo.
-          // En producción, deberían ser accesibles directamente.
-          console.error("Las variables de entorno de Supabase (VITE_REACT_APP_SUPABASE_URL y VITE_REACT_APP_SUPABASE_ANON_KEY) no están configuradas.");
-          setMessage("Error: Las variables de entorno de Supabase no están configuradas correctamente.");
-          setIsError(true);
-          return;
+          if (!supabaseUrl || !supabaseAnonKey) {
+            // Es crucial que estas variables estén configuradas en tu entorno de desarrollo.
+            // En producción, deberían ser accesibles directamente.
+            console.error("Las variables de entorno de Supabase (VITE_REACT_APP_SUPABASE_URL y VITE_REACT_APP_SUPABASE_ANON_KEY) no están configuradas.");
+            setMessage("Error: Las variables de entorno de Supabase no están configuradas correctamente.");
+            setIsError(true);
+            return;
+          }
+          supabase = createClient(supabaseUrl, supabaseAnonKey);
+          console.log("Cliente de Supabase inicializado en ClientGenericHealthPolicyForm.");
         }
-        supabase = createClient(supabaseUrl, supabaseAnonKey);
-        console.log("Cliente de Supabase inicializado en ClientGenericHealthPolicyForm.");
+
+        // Una vez que Supabase está inicializado, intentamos obtener la fecha de nacimiento del perfil
+        if (clientId) {
+          setLoading(true);
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('fecha_nacimiento')
+            .eq('user_id', clientId)
+            .single();
+
+          if (error) {
+            console.error("Error al obtener fecha de nacimiento del perfil:", error);
+            setMessage(`Error al cargar datos del perfil: ${error.message}`);
+            setIsError(true);
+            setRegisteredDateOfBirth(null); // Limpiar si hay error
+          } else if (data) {
+            const fetchedDateOfBirth = data.fecha_nacimiento;
+            setRegisteredDateOfBirth(fetchedDateOfBirth);
+            setDateOfBirth(fetchedDateOfBirth); // Precargar el input con la fecha registrada
+
+            // Calcular la edad y establecer el estado de coincidencia inmediatamente después de la carga
+            const initialCalculatedAge = calculateAge(fetchedDateOfBirth);
+            setAgeAtInscription(initialCalculatedAge);
+            setDateOfBirthMismatch(false); // No hay discrepancia si la fecha se precarga correctamente
+            setMessage(null); // Limpiar cualquier mensaje de error previo
+            setIsError(false);
+          } else {
+            setMessage("No se encontró la fecha de nacimiento en su perfil. Por favor, asegúrese de que su perfil esté completo.");
+            setIsError(true);
+            setRegisteredDateOfBirth(null);
+          }
+          setLoading(false);
+        }
+
+      } catch (err: any) {
+        console.error("Error al inicializar Supabase o cargar perfil:", err);
+        setMessage("Error al inicializar la aplicación. Verifique la configuración de Supabase.");
+        setIsError(true);
+        setLoading(false);
       }
-    } catch (err: any) {
-      console.error("Error al inicializar Supabase:", err);
-      setMessage("Error al inicializar la aplicación. Verifique la configuración de Supabase.");
-      setIsError(true);
+    };
+
+    initializeSupabaseAndFetchProfile();
+  }, [clientId]); // Dependencia en clientId para que se ejecute cuando esté disponible
+
+  /**
+   * Calcula la edad a partir de una fecha de nacimiento.
+   */
+  const calculateAge = (dobString: string): number | null => {
+    if (!dobString) return null;
+    const today = new Date();
+    const birthDate = new Date(dobString);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
     }
-  }, []); // El array vacío asegura que este efecto se ejecute solo una vez al montar.
+    return age;
+  };
+
+  /**
+   * Maneja el cambio en el campo de fecha de nacimiento.
+   * Valida la fecha ingresada contra la registrada y calcula la edad.
+   */
+  const handleDateOfBirthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const enteredDate = e.target.value;
+    setDateOfBirth(enteredDate);
+
+    if (registeredDateOfBirth) {
+      if (enteredDate === registeredDateOfBirth) {
+        setDateOfBirthMismatch(false);
+        setMessage(null);
+        setIsError(false);
+        const calculatedAge = calculateAge(enteredDate);
+        setAgeAtInscription(calculatedAge); // Actualizar la edad calculada
+      } else {
+        setDateOfBirthMismatch(true);
+        setMessage("La fecha de nacimiento ingresada no coincide con la registrada en su perfil. Por favor, contacte a administración para cualquier cambio.");
+        setIsError(true);
+        setAgeAtInscription(null); // Resetear la edad si hay un error
+      }
+    } else {
+      // Si no hay fecha registrada, asumimos que puede ser un flujo donde el cliente la ingresa por primera vez
+      // o que hay un problema al cargarla. En este caso, no hacemos la comparación estricta aquí.
+      // Sin embargo, es buena práctica tener la fecha de nacimiento en el perfil.
+      const calculatedAge = calculateAge(enteredDate);
+      setAgeAtInscription(calculatedAge); // Actualizar la edad calculada
+      setDateOfBirthMismatch(false);
+      setMessage(null);
+      setIsError(false);
+    }
+  };
+
 
   /**
    * Calcula la fecha de fin de la póliza basándose en la fecha de inicio (actual) y la duración del producto.
@@ -206,13 +297,25 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
       setLoading(false);
       return;
     }
-    if (!ageAtInscription || parseInt(ageAtInscription) <= 0) {
-      setMessage("Por favor, ingrese una edad de inscripción válida.");
+    if (dateOfBirthMismatch) {
+        setMessage("La fecha de nacimiento ingresada no coincide con la registrada. Por favor, corrija o contacte a administración.");
+        setIsError(true);
+        setLoading(false);
+        return;
+    }
+    if (ageAtInscription === null) {
+      setMessage("Por favor, ingrese una fecha de nacimiento válida para calcular su edad.");
       setIsError(true);
       setLoading(false);
       return;
     }
-    if (product.coverage_details.max_age_for_inscription !== undefined && parseInt(ageAtInscription) > product.coverage_details.max_age_for_inscription) {
+    if (ageAtInscription <= 0) {
+        setMessage("Su edad debe ser mayor a 0 para inscribirse.");
+        setIsError(true);
+        setLoading(false);
+        return;
+    }
+    if (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription) {
       setMessage(`Su edad (${ageAtInscription}) excede la edad máxima de inscripción permitida por este producto (${product.coverage_details.max_age_for_inscription}).`);
       setIsError(true);
       setLoading(false);
@@ -262,7 +365,7 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
       max_annual: policyMaxAnnualOutOfPocket ? parseFloat(policyMaxAnnualOutOfPocket) : null,
       wellness_rebate: policyWellnessRebatePercentage ? parseFloat(policyWellnessRebatePercentage) : null,
       max_age_inscription: product.coverage_details.max_age_for_inscription,
-      age_at_inscription: ageAtInscription ? parseInt(ageAtInscription) : null,
+      age_at_inscription: ageAtInscription, // Usamos la edad calculada
 
       // Campos de dental y visión (tomados del producto)
       has_dental: policyIncludesDentalBasic || policyIncludesDentalPremium,
@@ -366,20 +469,35 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
             </div>
           </div>
 
-          {/* Edad del Asegurado al momento de la Inscripción */}
+          {/* Fecha de Nacimiento del Asegurado */}
           <div>
-            <label htmlFor="ageAtInscription" className="block text-sm font-medium text-gray-700">Tu Edad al Inscribirte (Máx del Producto: {product.coverage_details.max_age_for_inscription || 'N/A'})</label>
+            <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">Tu Fecha de Nacimiento</label>
             <input
-              type="number"
-              id="ageAtInscription"
-              value={ageAtInscription}
-              onChange={(e) => setAgeAtInscription(e.target.value)}
-              min="0"
-              max={product.coverage_details.max_age_for_inscription || undefined}
+              type="date"
+              id="dateOfBirth"
+              value={dateOfBirth}
+              onChange={handleDateOfBirthChange}
               required
               className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              placeholder="Tu edad"
             />
+            {dateOfBirth && registeredDateOfBirth && dateOfBirth !== registeredDateOfBirth && (
+              <p className="mt-2 text-sm text-red-600">
+                La fecha ingresada no coincide con la fecha de nacimiento registrada en su perfil ({registeredDateOfBirth}). Por favor, contacte a administración si la fecha es incorrecta.
+              </p>
+            )}
+            {ageAtInscription !== null && !dateOfBirthMismatch && (
+              <p className="mt-2 text-sm text-gray-600">
+                Edad calculada: {ageAtInscription} años.
+                {product.coverage_details.max_age_for_inscription !== undefined && (
+                  ` (Máx. del Producto: ${product.coverage_details.max_age_for_inscription})`
+                )}
+              </p>
+            )}
+            {ageAtInscription !== null && product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription && (
+              <p className="mt-2 text-sm text-red-600">
+                Su edad ({ageAtInscription}) excede la edad máxima de inscripción permitida por este producto ({product.coverage_details.max_age_for_inscription}). No puede contratar esta póliza.
+              </p>
+            )}
           </div>
 
           {/* Campos de Cobertura de Salud (solo lectura) */}
@@ -463,7 +581,7 @@ const ClientGenericHealthPolicyForm: React.FC<ClientGenericHealthPolicyFormProps
           {/* Botón de Envío */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || dateOfBirthMismatch || ageAtInscription === null || (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription)}
             className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Contratando Póliza...' : 'Contratar Póliza de Salud'}

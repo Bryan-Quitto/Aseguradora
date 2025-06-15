@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-// La importación de uuidv4 se ha eliminado de aquí ya que solo se usa en BeneficiaryInput y BeneficiaryInputList.
 
 // Importa el componente de lista de beneficiarios y su interfaz
 import BeneficiaryInputList from '../../policies/components/BeneficiaryInputList';
@@ -40,12 +39,12 @@ interface InsuranceProduct {
     updated_at: string;
 }
 
-// Interfaz para los clientes (profiles)
+// Interfaz para los clientes (profiles) - AGREGADO fecha_nacimiento
 interface ClientProfile {
     user_id: string;
     full_name: string;
     email: string;
-    // Añade aquí cualquier otro campo relevante del perfil del cliente que quieras mostrar
+    fecha_nacimiento: string | null; // Añadido este campo para obtenerlo de Supabase
 }
 
 interface GenericLifePolicyFormProps {
@@ -55,22 +54,24 @@ interface GenericLifePolicyFormProps {
 
 /**
  * Componente de formulario genérico para la creación de pólizas de Seguro de Vida.
+ * Destinado a ser utilizado por agentes.
  * Se adapta según los 'coverage_details' del producto de seguro recibido.
  */
 const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, agentId }) => {
     // Estados para los campos de la tabla 'policies' relevantes para Seguros de Vida
-    const [clientId, setClientId] = useState<string>('');
+    const [clientId, setClientId] = useState<string>(''); // ID del cliente seleccionado
     const [contractDetails, setContractDetails] = useState<string>('');
-    const [ageAtInscription, setAgeAtInscription] = useState<string>('');
+    const [dateOfBirth, setDateOfBirth] = useState<string>(''); // Nuevo estado para la fecha de nacimiento ingresada
+    const [registeredDateOfBirth, setRegisteredDateOfBirth] = useState<string | null>(null); // Fecha de nacimiento del perfil del cliente seleccionado
+    const [ageAtInscription, setAgeAtInscription] = useState<number | null>(null); // Edad calculada a partir de la fecha de nacimiento
     const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]); // Lista de beneficiarios estructurada
 
     // Estados para los campos de cobertura específicos que se guardarán en 'policies'
-    // Estos campos ahora son de solo lectura y obtienen su valor directamente del producto
     const policyCoverageAmount = product.coverage_details.coverage_amount?.toString() || '';
     const policyAdDIncluded = product.coverage_details.ad_d_included || false;
     const policyAdDCoverageAmount = product.coverage_details.ad_d_coverage_amount?.toString() || '';
     const policyWellnessRebatePercentage = product.coverage_details.wellness_rebate_percentage?.toString() || '';
-    
+
     // Convertir policyMaxBeneficiaries a number | null para evitar el error de 'undefined'
     const policyMaxBeneficiaries: number | null = product.coverage_details.max_beneficiaries ?? null; // Número, 0 para ilimitado
 
@@ -78,6 +79,7 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
     const [message, setMessage] = useState<string | null>(null);
     const [isError, setIsError] = useState<boolean>(false);
     const [clients, setClients] = useState<ClientProfile[]>([]); // Lista de clientes para seleccionar
+    const [dateOfBirthMismatch, setDateOfBirthMismatch] = useState<boolean>(false); // Nuevo estado para el error de fecha de nacimiento
 
     /**
      * Hook useEffect para inicializar el cliente de Supabase y cargar los clientes.
@@ -96,7 +98,7 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
                 setLoading(true);
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('user_id, full_name, email') // Asegúrate de que 'full_name' y 'email' existan en tu tabla 'profiles'
+                    .select('user_id, full_name, email, fecha_nacimiento') // Asegúrate de que 'full_name' y 'email' existan en tu tabla 'profiles'
                     .eq('role', 'client');
 
                 if (error) {
@@ -119,13 +121,114 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
     }, []);
 
     /**
+     * Hook useEffect para cargar la fecha de nacimiento del cliente seleccionado.
+     */
+    useEffect(() => {
+        const fetchClientDateOfBirth = async () => {
+            if (clientId && supabase) {
+                setLoading(true);
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('fecha_nacimiento')
+                    .eq('user_id', clientId)
+                    .single();
+
+                if (error) {
+                    console.error("Error al obtener fecha de nacimiento del cliente:", error);
+                    setMessage(`Error al cargar datos del perfil del cliente: ${error.message}`);
+                    setIsError(true);
+                    setRegisteredDateOfBirth(null);
+                    setDateOfBirth(''); // Limpiar el campo de fecha de nacimiento
+                    setAgeAtInscription(null); // Limpiar la edad
+                    setDateOfBirthMismatch(true); // Asumir mismatch si hay error de carga
+                } else if (data && data.fecha_nacimiento) {
+                    setRegisteredDateOfBirth(data.fecha_nacimiento);
+                    setDateOfBirth(data.fecha_nacimiento); // Precargar el input con la fecha registrada
+
+                    const initialCalculatedAge = calculateAge(data.fecha_nacimiento);
+                    setAgeAtInscription(initialCalculatedAge);
+                    setDateOfBirthMismatch(false);
+                    setMessage(null);
+                    setIsError(false);
+                } else {
+                    setMessage("El cliente seleccionado no tiene una fecha de nacimiento registrada. Por favor, asegúrese de que su perfil esté completo.");
+                    setIsError(true);
+                    setRegisteredDateOfBirth(null);
+                    setDateOfBirth('');
+                    setAgeAtInscription(null);
+                    setDateOfBirthMismatch(true); // Marcar como mismatch si no hay fecha registrada
+                }
+                setLoading(false);
+            } else {
+                // Si no hay cliente seleccionado, limpiar los estados de fecha de nacimiento y edad
+                setRegisteredDateOfBirth(null);
+                setDateOfBirth('');
+                setAgeAtInscription(null);
+                setDateOfBirthMismatch(false);
+                setMessage(null);
+                setIsError(false);
+            }
+        };
+
+        fetchClientDateOfBirth();
+    }, [clientId]); // Este efecto se ejecuta cuando cambia el clientId
+
+
+    /**
+     * Calcula la edad a partir de una fecha de nacimiento.
+     */
+    const calculateAge = (dobString: string): number | null => {
+        if (!dobString) return null;
+        const today = new Date();
+        const birthDate = new Date(dobString);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
+    /**
+     * Maneja el cambio en el campo de fecha de nacimiento.
+     * Valida la fecha ingresada contra la registrada y calcula la edad.
+     */
+    const handleDateOfBirthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const enteredDate = e.target.value;
+        setDateOfBirth(enteredDate);
+
+        if (registeredDateOfBirth) {
+            if (enteredDate === registeredDateOfBirth) {
+                setDateOfBirthMismatch(false);
+                setMessage(null);
+                setIsError(false);
+                const calculatedAge = calculateAge(enteredDate);
+                setAgeAtInscription(calculatedAge);
+            } else {
+                setDateOfBirthMismatch(true);
+                setMessage("La fecha de nacimiento ingresada no coincide con la registrada en el perfil del cliente. Por favor, contacte a administración para cualquier cambio.");
+                setIsError(true);
+                setAgeAtInscription(null);
+            }
+        } else {
+            // Si no hay fecha registrada, asumimos que puede ser un flujo donde el cliente la ingresa por primera vez
+            // o que hay un problema al cargarla. En este caso, no hacemos la comparación estricta aquí.
+            const calculatedAge = calculateAge(enteredDate);
+            setAgeAtInscription(calculatedAge);
+            setDateOfBirthMismatch(false);
+            setMessage(null);
+            setIsError(false);
+        }
+    };
+
+    /**
      * Calcula la fecha de fin de la póliza basándose en la fecha de inicio (actual) y la duración del producto.
      */
     const calculateEndDate = (start: string, months: number | null): string => {
         if (!start || !months) return '';
         const startDateObj = new Date(start);
         startDateObj.setMonth(startDateObj.getMonth() + months);
-        startDateObj.setDate(startDateObj.getDate() - 1); 
+        startDateObj.setDate(startDateObj.getDate() - 1);
         return startDateObj.toISOString().split('T')[0];
     };
 
@@ -159,6 +262,26 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
             setLoading(false);
             return;
         }
+        // NUEVAS VALIDACIONES DE FECHA DE NACIMIENTO Y EDAD
+        if (dateOfBirthMismatch) {
+            setMessage("La fecha de nacimiento ingresada no coincide con la registrada. Por favor, corrija o contacte a administración.");
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
+        if (ageAtInscription === null || ageAtInscription <= 0) {
+            setMessage("Por favor, ingrese una fecha de nacimiento válida para el asegurado.");
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
+        if (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription) {
+            setMessage(`La edad del asegurado (${ageAtInscription}) excede la edad máxima de inscripción permitida por este producto (${product.coverage_details.max_age_for_inscription}).`);
+            setIsError(true);
+            setLoading(false);
+            return;
+        }
+        // FIN NUEVAS VALIDACIONES
 
         // Validación de beneficiarios: la suma de porcentajes debe ser 100%
         const totalBeneficiaryPercentage = beneficiaries.reduce((sum, b) => {
@@ -194,31 +317,31 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
         const calculatedEndDate = calculateEndDate(currentStartDate, product.duration_months);
 
         if (!calculatedEndDate) {
-             setMessage("Error: No se pudo calcular la fecha de fin de la póliza. Verifique la duración del producto.");
-             setIsError(true);
-             setLoading(false);
-             return;
+            setMessage("Error: No se pudo calcular la fecha de fin de la póliza. Verifique la duración del producto.");
+            setIsError(true);
+            setLoading(false);
+            return;
         }
 
         const newPolicy = {
             policy_number: generatePolicyNumber(),
             client_id: clientId,
-            agent_id: agentId, 
+            agent_id: agentId,
             product_id: product.id,
             start_date: currentStartDate, // Fecha actual, no seleccionable
             end_date: calculatedEndDate,
-            status: 'pending', 
+            status: 'pending',
             premium_amount: product.base_premium, // Prima base fija del producto
             payment_frequency: product.fixed_payment_frequency, // Frecuencia de pago fija del producto
             contract_details: contractDetails,
-            
+
             // Campos específicos de vida (tomados del producto o del input del agente)
             coverage_amount: parseFloat(policyCoverageAmount),
             ad_d_included: policyAdDIncluded,
             ad_d_coverage: policyAdDCoverageAmount ? parseFloat(policyAdDCoverageAmount) : null,
             wellness_rebate: policyWellnessRebatePercentage ? parseFloat(policyWellnessRebatePercentage) : null,
-            max_age_inscription: product.coverage_details.max_age_for_inscription, 
-            age_at_inscription: ageAtInscription ? parseInt(ageAtInscription) : null,
+            max_age_inscription: product.coverage_details.max_age_for_inscription,
+            age_at_inscription: ageAtInscription, // Usamos la edad calculada (tipo number)
             beneficiaries: JSON.parse(JSON.stringify(beneficiaries)), // Convertir a JSON string, luego parsear para asegurar deep copy
             num_beneficiaries: beneficiaries.length, // Número de beneficiarios ingresados
 
@@ -252,7 +375,8 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
             // Limpiar formulario después de éxito
             setClientId('');
             setContractDetails('');
-            setAgeAtInscription('');
+            setDateOfBirth(''); // Limpiar la fecha de nacimiento
+            setAgeAtInscription(null); // Limpiar la edad calculada
             setBeneficiaries([]); // Limpiar beneficiarios
 
         } catch (err: any) {
@@ -267,7 +391,9 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
     // Helper para Capitalizar la primera letra de la frecuencia de pago
     const capitalize = (s: string | null | undefined): string => {
         if (!s) return 'N/A';
-        return s.charAt(0).toUpperCase() + s.slice(1);
+        const trimmedS = s.trim();
+        if (trimmedS.length === 0) return 'N/A';
+        return trimmedS.charAt(0).toUpperCase() + trimmedS.slice(1);
     };
 
     return (
@@ -330,20 +456,42 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
                     </div>
                 </div>
 
-                {/* Edad del Asegurado al momento de la Inscripción */}
+                {/* Campo de Fecha de Nacimiento del Asegurado */}
                 <div>
-                    <label htmlFor="ageAtInscription" className="block text-sm font-medium text-gray-700">Edad del Asegurado al Inscribirse (Máx del Producto: {product.coverage_details.max_age_for_inscription || 'N/A'})</label>
+                    <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
+                        Fecha de Nacimiento del Asegurado
+                    </label>
                     <input
-                        type="number"
-                        id="ageAtInscription"
-                        value={ageAtInscription}
-                        onChange={(e) => setAgeAtInscription(e.target.value)}
-                        min="0"
-                        max={product.coverage_details.max_age_for_inscription || undefined} // Limita por el max_age_for_inscription del producto
+                        type="date"
+                        id="dateOfBirth"
+                        value={dateOfBirth}
+                        onChange={handleDateOfBirthChange}
                         required
                         className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                        placeholder="Edad del asegurado"
+                        // Deshabilitar si no se ha seleccionado un cliente para evitar errores
+                        disabled={!clientId || loading}
                     />
+                    {dateOfBirth && registeredDateOfBirth && dateOfBirth !== registeredDateOfBirth && (
+                        <p className="mt-2 text-sm text-red-600">
+                            La fecha ingresada no coincide con la fecha de nacimiento registrada en el perfil del cliente ({registeredDateOfBirth}). Por favor, contacte a administración para cualquier cambio.
+                        </p>
+                    )}
+                    {ageAtInscription !== null && !dateOfBirthMismatch && (
+                        <p className="mt-2 text-sm text-gray-600">
+                            Edad calculada: {ageAtInscription} años.
+                            {product.coverage_details.max_age_for_inscription !== undefined && (
+                                ` (Máx. del Producto: ${product.coverage_details.max_age_for_inscription})`
+                            )}
+                        </p>
+                    )}
+                    {ageAtInscription !== null && product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription && (
+                        <p className="mt-2 text-sm text-red-600">
+                            La edad del asegurado ({ageAtInscription}) excede la edad máxima de inscripción permitida por este producto ({product.coverage_details.max_age_for_inscription}). No se puede contratar esta póliza.
+                        </p>
+                    )}
+                    {!clientId && (
+                         <p className="mt-2 text-sm text-gray-600">Seleccione un cliente para ver su fecha de nacimiento y edad.</p>
+                    )}
                 </div>
 
                 {/* Campos de Cobertura de Vida (solo lectura o con valores preestablecidos) */}
@@ -390,7 +538,7 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
                     onChange={setBeneficiaries}
                     maxBeneficiaries={policyMaxBeneficiaries} // Pasar el valor ya convertido
                 />
-                
+
                 {/* Detalles del Contrato (opcional) */}
                 <div>
                     <label htmlFor="contractDetails" className="block text-sm font-medium text-gray-700">Detalles del Contrato</label>
@@ -407,7 +555,7 @@ const GenericLifePolicyForm: React.FC<GenericLifePolicyFormProps> = ({ product, 
                 {/* Botón de Envío */}
                 <button
                     type="submit"
-                    disabled={loading}
+                    disabled={loading || !clientId || dateOfBirthMismatch || ageAtInscription === null || (product.coverage_details.max_age_for_inscription !== undefined && ageAtInscription > product.coverage_details.max_age_for_inscription)}
                     className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? 'Creando Póliza...' : 'Crear Póliza de Vida'}
