@@ -219,6 +219,12 @@ export default function AdminInsuranceList() {
                                         >
                                             Editar
                                         </Link>
+                                        <Link
+                                        to={`/admin/dashboard/insurance-products/${product.id}/required-documents`}
+                                        className="text-blue-600 hover:text-blue-900"
+                                        >
+                                        Gestionar Documentos
+                                        </Link>
                                         {/* Botón de Eliminar - SOLO VISIBLE PARA SUPERADMINISTRADORES */}
                                         {currentUserRole === 'superadministrator' && (
                                             <button

@@ -1,17 +1,12 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import { lazy, ReactNode } from 'react'; // Añadido ReactNode para tipar
+import { lazy, ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 
-/* ***Layouts**** */
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
-// Dashboard (general)
 const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
 
-// Dashboard del Administrador
 const DashboardAdmin = Loadable(lazy(() => import('../features/admin/Dashboard_administrador')));
 const AdminPolicyList = Loadable(lazy(() => import('../features/admin/AdminPolicyList')));
 const AdminEditPolicy = Loadable(lazy(() => import('../features/admin/AdminEditPolicy')));
@@ -26,38 +21,42 @@ const ListarSoloAdmins = Loadable(lazy(() => import('../features/admin/ListarSol
 const AdminPolicyForm = Loadable(lazy(() => import('../features/admin/AdminPolicyForm')));
 const AdminInsuranceList = Loadable(lazy(() => import('../features/admin/AdminInsuranceList')));
 const AdminEditInsurance = Loadable(lazy(() => import('../features/admin/AdminEditInsurance')));
+const AdminPolicyDetail = Loadable(lazy(() => import('../features/admin/AdminPolicyDetail')));
+const AdminReimbursementList = Loadable(lazy(() => import('../features/admin/reimbursements/AdminReimbursementList')));
+const AdminReimbursementDetail = Loadable(lazy(() => import('../features/admin/reimbursements/AdminReimbursementDetail')));
+const AdminManageRequiredDocs = Loadable(lazy(() => import('../features/admin/reimbursements/AdminManageRequiredDocs')));
+const AdminEditReimbursement = Loadable(lazy(() => import('../features/admin/reimbursements/AdminEditReimbursement')));
 
-// Dashboard del Agente
 const DashboardAgent = Loadable(lazy(() => import('../features/agents/pages/Dashboard_agente')));
 const AgentPolicyList = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyList')));
-const AdminPolicyDetail = Loadable(lazy(() => import('../features/admin/AdminPolicyDetail')));
 const AgentPolicyForm = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyForm')));
 const AgentPolicyDetail = Loadable(lazy(() => import('../features/agents/pages/AgentPolicyDetail')));
 const AgentEditPolicy = Loadable(lazy(() => import('../features/agents/pages/AgentEditPolicy')));
-// CORRECCIÓN 1: Asegúrate de que el nombre del archivo en tu explorador sea 'CrearCliente.tsx' (con 'C' mayúscula)
-const CrearClienteAgente  = Loadable(lazy(() => import('../features/agents/pages/CrearClienteAgente')));
+const CrearClienteAgente = Loadable(lazy(() => import('../features/agents/pages/CrearClienteAgente')));
 const AgentApplicationList = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationList')));
 const AgentApplicationDetail = Loadable(lazy(() => import('../features/agents/pages/AgentApplicationDetail')));
+const AgentCreateSignatureLink = Loadable(lazy(() => import('../features/agents/pages/AgentCreateSignatureLink')));
+const AgentReimbursementList = Loadable(lazy(() => import('../features/agents/pages/reimbursements/AgentReimbursementList')));
+const AgentReimbursementDetail = Loadable(lazy(() => import('../features/agents/pages/reimbursements/AgentReimbursementDetail')));
+const AgentEditReimbursement = Loadable(lazy(() => import('../features/agents/pages/reimbursements/AgentEditReimbursement')));
 
-// Dashboard del Cliente
 const DashboardClient = Loadable(lazy(() => import('../features/clients/pages/Dashboard_cliente')));
 const ClientPolicyList = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyList')));
 const ClientPolicyForm = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyForm')));
 const ClientPolicyDetail = Loadable(lazy(() => import('../features/clients/pages/ClientPolicyDetail')));
 const ContractSignature = Loadable(lazy(() => import('../features/clients/pages/ContractSignature')));
 const ClientDocumentUpload = Loadable(lazy(() => import('../features/clients/pages/ClientDocumentUpload')));
-
-const AgentCreateSignatureLink = Loadable(lazy(() => import('../features/agents/pages/AgentCreateSignatureLink')));
+const ClientReimbursementList = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientReimbursementList')));
+const ClientNewReimbursement = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientNewReimbursement')));
+const ClientReimbursementDetail = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientReimbursementDetail')));
+const ClientEditReimbursement = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientEditReimbursement')));
 
 import AuthRoutes from '../features/auth/auth.routes';
 import LandingRoutes from '../features/landing/landing.routes';
-
 import { useAuth } from '../contexts/AuthContext';
-// CORRECCIÓN 2: Eliminamos la importación de 'path' que no se usa.
-// import path from 'path';
 
 interface PrivateRouteProps {
-    children: ReactNode; // Tipado correcto
+    children: ReactNode;
     allowedRoles?: string[];
 }
 
@@ -81,14 +80,12 @@ const PrivateRoute = ({ children, allowedRoles }: PrivateRouteProps) => {
     return children;
 };
 
-// Renombrado para evitar conflicto de nombres.
 const RouterConfig = [
     LandingRoutes,
     {
         path: '/',
         element: <FullLayout />,
         children: [
-            // 'exact' ya no se usa en react-router-dom v6
             { path: '/dashboard', element: <Dashboard /> },
             {
                 path: '/admin/dashboard',
@@ -113,6 +110,10 @@ const RouterConfig = [
                     { path: 'policies/new', element: <AdminPolicyForm /> },
                     { path: 'insurance-products', element: <AdminInsuranceList /> },
                     { path: 'insurance-products/:id/edit', element: <AdminEditInsurance /> },
+                    { path: 'insurance-products/:productId/required-documents', element: <AdminManageRequiredDocs /> },
+                    { path: 'reimbursements', element: <AdminReimbursementList /> },
+                    { path: 'reimbursements/:id', element: <AdminReimbursementDetail /> },
+                    { path: 'reimbursements/:id/edit', element: <AdminEditReimbursement /> },
                 ]
             },
             {
@@ -129,8 +130,11 @@ const RouterConfig = [
                     { path: 'applications', element: <AgentApplicationList /> },
                     { path: 'applications/:id', element: <AgentApplicationDetail /> },
                     { path: '', element: <Navigate to="policies" /> },
-                    {path: 'create-client', element: <CrearClienteAgente />},
+                    { path: 'create-client', element: <CrearClienteAgente /> },
                     { path: 'send-signature-link', element: <AgentCreateSignatureLink /> },
+                    { path: 'reimbursements', element: <AgentReimbursementList /> },
+                    { path: 'reimbursements/:id', element: <AgentReimbursementDetail /> },
+                    { path: 'reimbursements/:id/edit', element: <AgentEditReimbursement /> },
                 ]
             },
             {
@@ -145,16 +149,19 @@ const RouterConfig = [
                 path: '/client/dashboard',
                 element: (
                     <PrivateRoute allowedRoles={['client']}>
-                        <DashboardClient /> 
+                        <DashboardClient />
                     </PrivateRoute>
                 ),
                 children: [
-                    // Tu lógica de bienvenida ya está en DashboardClient, así que una redirección por defecto es una buena opción
                     { path: '', element: <Navigate to="policies" /> },
                     { path: 'policies', element: <ClientPolicyList /> },
                     { path: 'policies/new', element: <ClientPolicyForm /> },
                     { path: 'policies/:id', element: <ClientPolicyDetail /> },
                     { path: 'documents', element: <ClientDocumentUpload /> },
+                    { path: 'reimbursements', element: <ClientReimbursementList /> },
+                    { path: 'reimbursements/new', element: <ClientNewReimbursement /> },
+                    { path: 'reimbursements/:id', element: <ClientReimbursementDetail /> },
+                    { path: 'reimbursements/:id/edit', element: <ClientEditReimbursement /> },
                 ]
             },
             {

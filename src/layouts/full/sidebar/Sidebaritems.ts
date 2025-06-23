@@ -9,7 +9,7 @@ export interface ChildItem {
     url?: any;
     color?: string;
     isPro?: boolean;
-    requiredRole?: string; // Esta definición de tipo es correcta y la solución en Sidebar.tsx la maneja.
+    requiredRole?: string;
 }
 
 export interface MenuItem {
@@ -22,11 +22,10 @@ export interface MenuItem {
     children?: ChildItem[];
     url?: any;
     isPro?: boolean;
-    requiredRole?: string; // Esta definición de tipo es correcta y la solución en Sidebar.tsx la maneja.
+    requiredRole?: string;
 }
 
 const SidebarContent: MenuItem[] = [
-    // --- Sección: Inicio ---
     {
         heading: "Inicio",
         children: [
@@ -57,10 +56,9 @@ const SidebarContent: MenuItem[] = [
         ],
     },
 
-    // --- Sección: Administración de Clientes ---
     {
         heading: "Gestión de usuarios",
-        requiredRole: "admin", // Esta sección solo aparecerá para admins (y superadministrators, con la lógica en Sidebar.tsx)
+        requiredRole: "admin",
         children: [
             {
                 name: "Crear usuarios",
@@ -113,10 +111,9 @@ const SidebarContent: MenuItem[] = [
         ],
     },
 
-    // --- Sección: Administración de Seguros ---
     {
         heading: "Administración de seguros",
-        requiredRole: "admin", // Esta sección solo aparecerá para admins (y superadministrators)
+        requiredRole: "admin",
         children: [
             {
                 name: "Crear nuevo seguro",
@@ -128,9 +125,9 @@ const SidebarContent: MenuItem[] = [
             },
             {
                 name: "Gestión de seguros",
-                icon: "solar:eye-bold", 
+                icon: "solar:eye-bold",
                 id: uniqueId(),
-                url: "/admin/dashboard/insurance-products", 
+                url: "/admin/dashboard/insurance-products",
                 isPro: false,
                 requiredRole: "admin",
             },
@@ -150,10 +147,17 @@ const SidebarContent: MenuItem[] = [
                 isPro: false,
                 requiredRole: "admin",
             },
+            {
+                name: "Gestionar Reembolsos",
+                icon: "solar:wallet-money-line-duotone",
+                id: uniqueId(),
+                url: "/admin/dashboard/reimbursements",
+                isPro: false,
+                requiredRole: "admin",
+            },
         ],
     },
 
-    // --- Sección: Gestión de Agentes ---
     {
         heading: "Gestión de Agentes",
         requiredRole: "agent",
@@ -167,13 +171,13 @@ const SidebarContent: MenuItem[] = [
                 requiredRole: "agent",
             },
             {
-                    name: "Crear cliente",
-                    icon: "solar:user-plus-rounded-linear",
-                    id: uniqueId(),
-                    url: "/agent/dashboard/create-client", // Asegúrate de que esta URL sea correcta
-                    isPro: false,
-                    requiredRole: "agent", // Cambia esto de "admin" a "agent"
-                },
+                name: "Crear cliente",
+                icon: "solar:user-plus-rounded-linear",
+                id: uniqueId(),
+                url: "/agent/dashboard/create-client",
+                isPro: false,
+                requiredRole: "agent",
+            },
             {
                 name: "Crear póliza",
                 icon: "solar:document-add-line-duotone",
@@ -190,10 +194,17 @@ const SidebarContent: MenuItem[] = [
                 isPro: false,
                 requiredRole: "agent",
             },
+            {
+                name: "Gestionar Reembolsos",
+                icon: "solar:wallet-money-line-duotone",
+                id: uniqueId(),
+                url: "/agent/dashboard/reimbursements",
+                isPro: false,
+                requiredRole: "agent",
+            },
         ],
     },
 
-    // --- Sección: Servicios para Clientes ---
     {
         heading: "Servicios para clientes",
         requiredRole: "client",
@@ -211,6 +222,14 @@ const SidebarContent: MenuItem[] = [
                 icon: "solar:document-add-line-duotone",
                 id: uniqueId(),
                 url: "/client/dashboard/policies/new",
+                isPro: false,
+                requiredRole: "client",
+            },
+            {
+                name: "Mis Reembolsos",
+                icon: "solar:wallet-money-line-duotone",
+                id: uniqueId(),
+                url: "/client/dashboard/reimbursements",
                 isPro: false,
                 requiredRole: "client",
             },
