@@ -101,27 +101,27 @@ export default function ClientReimbursementDetail() {
                     <div className="bg-red-50 p-6 rounded-lg shadow-sm border border-red-200">
                         <h3 className="text-xl font-semibold text-red-800 mb-2 flex items-center">
                              <Icon icon="solar:close-circle-bold" className="mr-2 h-6 w-6" />
-                            Resultado: Se Requiere Acción
+                             Resultado: Se Requiere Acción
                         </h3>
                         <p className="mb-4">Tu solicitud necesita correcciones. Por favor, revisa los siguientes puntos, ajusta lo necesario y vuelve a enviarla.</p>
                         
                         {/* --- MEJORA: MOSTRAR LISTA DE RAZONES --- */}
                         {request.rejection_reasons && request.rejection_reasons.length > 0 && (
                              <div className="bg-white p-4 rounded-md border border-red-200 mb-4">
-                                <h4 className="font-semibold text-gray-800 mb-2">Motivos:</h4>
-                                <ul className="list-disc list-inside space-y-1 text-sm">
-                                    {request.rejection_reasons.map(reason => (
-                                        <li key={reason}>{rejectionReasonLabels[reason] || reason}</li>
-                                    ))}
-                                </ul>
-                            </div>
+                                 <h4 className="font-semibold text-gray-800 mb-2">Motivos:</h4>
+                                 <ul className="list-disc list-inside space-y-1 text-sm">
+                                     {request.rejection_reasons.map(reason => (
+                                         <li key={reason}>{rejectionReasonLabels[reason] || reason}</li>
+                                     ))}
+                                 </ul>
+                             </div>
                         )}
                         
                         {request.rejection_comments && (
-                            <div className="bg-white p-4 rounded-md border border-red-200 mb-6">
-                                 <h4 className="font-semibold text-gray-800 mb-2">Comentarios Adicionales del Revisor:</h4>
-                                <pre className="text-sm whitespace-pre-wrap font-sans text-gray-800">{request.rejection_comments}</pre>
-                            </div>
+                             <div className="bg-white p-4 rounded-md border border-red-200 mb-6">
+                                  <h4 className="font-semibold text-gray-800 mb-2">Comentarios Adicionales del Revisor:</h4>
+                                 <pre className="text-sm whitespace-pre-wrap font-sans text-gray-800">{request.rejection_comments}</pre>
+                             </div>
                         )}
                         <Link
                             to={`/client/dashboard/reimbursements/${request.id}/edit`}
@@ -155,7 +155,13 @@ export default function ClientReimbursementDetail() {
                 <div className="bg-gray-50 p-6 rounded-lg shadow-sm">
                     <h3 className="text-xl font-semibold text-gray-800 mb-4">Resumen de la Solicitud</h3>
                     <p><strong>Póliza:</strong> {request.policies?.policy_number}</p>
-                    <p><strong>Producto:</strong> {request.policies?.product_name}</p>
+                    {/* CAMBIO CLAVE AQUÍ: LÍNEA 166 */}
+                    <p><strong>Producto:</strong>
+                        {request.policies?.insurance_products && request.policies.insurance_products.length > 0
+                            ? request.policies.insurance_products[0].name
+                            : 'Producto Desconocido'
+                        }
+                    </p>
                     <p><strong>Fecha de Solicitud:</strong> {format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</p>
                     <p><strong>Monto Solicitado:</strong> {request.amount_requested ? `$${request.amount_requested.toFixed(2)}` : 'No especificado'}</p>
                     <p className="mt-2"><strong>Estado:</strong>

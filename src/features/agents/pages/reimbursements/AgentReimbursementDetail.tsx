@@ -61,10 +61,15 @@ export default function AgentReimbursementDetail() {
         setActionMessage(null);
 
         try {
+            console.log('1. Intentando obtener detalles de la solicitud con ID:', requestId);
             const { data: requestData, error: requestError } = await getReimbursementRequestById(requestId);
+            
+            console.log('2. Datos de la solicitud recibidos (requestData):', requestData);
+            console.log('3. Error de la solicitud (requestError):', requestError);
+
             if (requestError || !requestData) throw new Error('No se pudo cargar la solicitud.');
 
-            // @ts-ignore
+            // @ts-ignore (Si requestData.policies puede ser null, deberías añadir una comprobación aquí)
             if (requestData.policies?.agent_id !== user.id) {
                 setAccessDenied(true);
                 throw new Error('Acceso no autorizado.');
@@ -73,17 +78,32 @@ export default function AgentReimbursementDetail() {
             setRequest(requestData);
             setApprovalAmount(requestData.amount_requested?.toString() || '');
 
+            // --- DEPURACIÓN DEL OBJETO DE POLÍTICAS ---
+            console.log('4. Objeto de políticas anidado (requestData.policies):', requestData.policies);
+            console.log('5. Objeto de productos de seguro anidado (requestData.policies.insurance_products):', requestData.policies?.insurance_products);
+            if (requestData.policies?.insurance_products && requestData.policies.insurance_products.length > 0) {
+                console.log('6. Nombre del producto:', requestData.policies.insurance_products[0].name);
+            } else {
+                console.log('6. No se encontró el nombre del producto en requestData.policies.insurance_products.');
+            }
+            // --- FIN DEPURACIÓN ---
+
             const { data: submittedData, error: submittedError } = await getSubmittedDocuments(requestId);
             if (submittedError) throw new Error('Error al cargar documentos subidos.');
             setSubmittedDocs(submittedData || []);
 
             const productId = requestData.policies?.product_id;
             if (productId) {
+                console.log('7. Producto ID encontrado para buscar documentos requeridos:', productId);
                 const { data: requiredData, error: requiredError } = await getRequiredDocuments(productId);
                 if (requiredError) throw new Error('Error al cargar documentos requeridos.');
                 setRequiredDocs(requiredData || []);
+                console.log('8. Documentos requeridos cargados:', requiredData);
+            } else {
+                console.log('7. No se encontró un product_id en la póliza.');
             }
         } catch (err: any) {
+            console.error('Error en fetchAllDetails:', err);
             if (!accessDenied) setError(err.message);
         } finally {
             setLoading(false);
@@ -190,6 +210,15 @@ export default function AgentReimbursementDetail() {
                             <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General</h3>
                             <p><strong>Cliente:</strong> {request.profiles?.full_name}</p>
                             <p><strong>Póliza:</strong> {request.policies?.policy_number}</p>
+    <p>
+    <strong>Producto:</strong> 
+    {
+        (request.policies?.insurance_products as any)?.name || 'N/A'
+    }
+</p>
+                            <p><strong>Fecha Inicio Póliza:</strong> {request.policies?.start_date ? format(new Date(request.policies.start_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                            <p><strong>Fecha Fin Póliza:</strong> {request.policies?.end_date ? format(new Date(request.policies.end_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                            <p><strong>Fecha del Siniestro:</strong> {request.event_date ? format(new Date(request.event_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
                             <p><strong>Fecha Solicitud:</strong> {format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</p>
                             <p><strong>Monto Solicitado:</strong> <span className="font-bold">${request.amount_requested?.toFixed(2)}</span></p>
                             <p className="mt-2"><strong>Estado:</strong> <span className={`ml-2 px-2 inline-flex text-sm leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>{formatStatus(request.status)}</span></p>
@@ -197,7 +226,7 @@ export default function AgentReimbursementDetail() {
                         </div>
 
                         <div className="bg-yellow-50 p-6 rounded-lg shadow-sm">
-                            <h3 className="text-xl font-semibold text-yellow-800 mb-4">Checklist de Documentos</h3>
+                            <h3 className="text-xl font-semibold text-yellow-800 mb-4">Checklist de Documentos Requeridos</h3>
                             {requiredDocs.length > 0 ? (
                                 <ul className="space-y-2">
                                     {requiredDocs.map(reqDoc => (
@@ -229,23 +258,45 @@ export default function AgentReimbursementDetail() {
                             ) : <p>El cliente no ha subido ningún documento.</p>}
                         </div>
 
-                        {['pending', 'in_review'].includes(request.status) && (
-                            <div className="bg-gray-100 p-6 rounded-lg shadow-sm flex justify-end gap-4">
-                                <button onClick={() => setRejectionModalOpen(true)} disabled={loading} className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 disabled:opacity-50">Rechazar</button>
-                                <button onClick={() => setApprovalModalOpen(true)} disabled={loading} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">Aprobar</button>
+                        {(request.status === 'rejected' || request.status === 'more_info_needed') && (
+                            <div className="bg-red-50 p-6 rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-red-800 mb-4">
+                                    Detalles de {request.status === 'rejected' ? 'Rechazo' : 'Solicitud de Más Información'}
+                                </h3>
+                                {request.rejection_reasons && request.rejection_reasons.length > 0 && (
+                                    <div className="mb-4">
+                                        <p className="font-semibold text-red-700">Razones Seleccionadas:</p>
+                                        <ul className="list-disc list-inside text-sm text-gray-700">
+                                            {request.rejection_reasons.map((reasonId: string) => {
+                                                const config = rejectionReasonsConfig.find(r => r.id === reasonId);
+                                                return config ? <li key={reasonId}>{config.label}</li> : null;
+                                            })}
+                                        </ul>
+                                    </div>
+                                )}
+                                {request.rejection_comments && (
+                                    <div>
+                                        <p className="font-semibold text-red-700">Comentarios Adicionales:</p>
+                                        <pre className="text-sm whitespace-pre-wrap font-sans bg-white p-3 rounded border border-red-200">{request.rejection_comments}</pre>
+                                    </div>
+                                )}
+                                {!request.rejection_reasons && !request.rejection_comments && (
+                                    <p className="text-sm text-gray-700">No se proporcionaron detalles adicionales para esta {request.status === 'rejected' ? 'rechazo' : 'solicitud de información adicional'}.</p>
+                                )}
                             </div>
                         )}
                         
-                        {request.status === 'rejected' && request.rejection_comments && (
-                            <div className="bg-red-50 p-6 rounded-lg shadow-sm">
-                                <h3 className="text-xl font-semibold text-red-800 mb-4">Detalles del Rechazo</h3>
-                                <pre className="text-sm whitespace-pre-wrap font-sans">{request.rejection_comments}</pre>
-                            </div>
-                        )}
-                         {request.status === 'approved' && request.admin_notes && (
+                        {request.status === 'approved' && request.admin_notes && (
                             <div className="bg-green-50 p-6 rounded-lg shadow-sm">
                                 <h3 className="text-xl font-semibold text-green-800 mb-4">Notas de la Aprobación</h3>
                                 <p className="text-sm text-gray-700">{request.admin_notes}</p>
+                            </div>
+                        )}
+
+                        {['pending', 'in_review'].includes(request.status) && (
+                            <div className="bg-gray-100 p-6 rounded-lg shadow-sm flex justify-end gap-4">
+                                <button onClick={() => setRejectionModalOpen(true)} disabled={loading} className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 disabled:opacity-50">Rechazar / Solicitar Info</button>
+                                <button onClick={() => setApprovalModalOpen(true)} disabled={loading} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">Aprobar</button>
                             </div>
                         )}
                     </div>

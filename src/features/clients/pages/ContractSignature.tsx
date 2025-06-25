@@ -281,7 +281,7 @@ const ContractSignature = () => {
                 <div className="max-h-96 overflow-y-auto text-gray-800 p-2 border rounded-md bg-white">
                     <pre className="whitespace-pre-wrap text-xs font-mono">{contractText.trim()}</pre>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">Revise el contrato cuidadosamente.</p>
+                <p className="text-xs text-gray-500 mt-2">Los reemmbolsos solo pueden ser realizados en un plazo de 60 días. Revise el contrato cuidadosamente.</p>
             </div>
         );
     };

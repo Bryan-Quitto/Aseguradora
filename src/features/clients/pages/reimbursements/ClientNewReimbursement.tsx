@@ -20,10 +20,12 @@ export default function ClientNewReimbursement() {
     const [requiredDocs, setRequiredDocs] = useState<RequiredDocument[]>([]);
     const [uploadedFiles, setUploadedFiles] = useState<Map<string, File>>(new Map());
     const [amountRequested, setAmountRequested] = useState('');
+    const [eventDate, setEventDate] = useState<string>(''); // <-- Nuevo: Estado para la fecha del siniestro
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [fileErrors, setFileErrors] = useState<Map<string, string | null>>(new Map()); 
 
     useEffect(() => {
         const fetchPolicies = async () => {
@@ -46,6 +48,7 @@ export default function ClientNewReimbursement() {
                 setRequiredDocs([]);
                 return;
             }
+            // Aquí selectedPolicy.product_id sigue siendo correcto
             const { data, error: fetchError } = await getRequiredDocuments(selectedPolicy.product_id);
             if (fetchError) {
                 setError('Error al cargar los documentos requeridos para esta póliza.');
@@ -58,8 +61,33 @@ export default function ClientNewReimbursement() {
     }, [selectedPolicy]);
 
     const handleFileChange = (documentName: string, files: FileList | null) => {
+        setFileErrors(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(documentName);
+            return newMap;
+        });
+
         if (files && files.length > 0) {
-            setUploadedFiles(prev => new Map(prev).set(documentName, files[0]));
+            const file = files[0];
+            const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+            
+            if (!allowedTypes.includes(file.type)) {
+                setFileErrors(prev => new Map(prev).set(documentName, 'Formato de archivo no válido. Solo se permiten PDF, JPG y PNG.'));
+                setUploadedFiles(prev => {
+                    const newMap = new Map(prev);
+                    newMap.delete(documentName);
+                    return newMap;
+                });
+                return;
+            }
+            
+            setUploadedFiles(prev => new Map(prev).set(documentName, file));
+        } else {
+            setUploadedFiles(prev => {
+                const newMap = new Map(prev);
+                newMap.delete(documentName);
+                return newMap;
+            });
         }
     };
 
@@ -69,14 +97,20 @@ export default function ClientNewReimbursement() {
             newMap.delete(documentName);
             return newMap;
         });
+        setFileErrors(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(documentName);
+            return newMap;
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+        setFileErrors(new Map());
 
         if (!user?.id || !selectedPolicy) {
-            setError('Faltan datos del usuario o de la póliza.');
+            setError('Faltan datos del usuario o de la póliza. Por favor, recarga la página o contacta a soporte.');
             return;
         }
 
@@ -85,6 +119,35 @@ export default function ClientNewReimbursement() {
             setError('El monto del reembolso es obligatorio y debe ser un número mayor a cero.');
             return;
         }
+        
+        // --- VALIDACIÓN DE FECHA DE SINIESTRO ---
+        if (!eventDate) {
+            setError('La fecha del siniestro es obligatoria.');
+            return;
+        }
+
+        const siniestroDate = new Date(eventDate);
+        const policyStartDate = new Date(selectedPolicy.start_date);
+        const policyEndDate = new Date(selectedPolicy.end_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Normalizar a medianoche para comparación de días
+
+        // 1. Validación de vigencia de la póliza
+        if (siniestroDate < policyStartDate || siniestroDate > policyEndDate) {
+            setError(`La fecha del siniestro (${eventDate}) debe estar entre la fecha de inicio (${selectedPolicy.start_date}) y la fecha de fin (${selectedPolicy.end_date}) de tu póliza.`);
+            return;
+        }
+
+        // 2. Validación de plazo máximo de reclamación (60 días desde el siniestro)
+        const diffTime = Math.abs(today.getTime() - siniestroDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 60) {
+            setError('La solicitud de reembolso debe hacerse dentro de los 60 días posteriores a la fecha del siniestro.');
+            return;
+        }
+        // --- FIN VALIDACIONES DE FECHA ---
+
 
         const requiredDocsNames = requiredDocs.filter(d => d.is_required).map(d => d.document_name);
         for (const docName of requiredDocsNames) {
@@ -92,6 +155,15 @@ export default function ClientNewReimbursement() {
                 setError(`Falta subir el documento requerido: ${docName}`);
                 return;
             }
+            if (fileErrors.has(docName) && fileErrors.get(docName) !== null) {
+                setError(`Hay un problema con el formato del documento: ${docName}. Por favor, corrige los errores de archivo.`);
+                return;
+            }
+        }
+        
+        if (Array.from(fileErrors.values()).some(errorMsg => errorMsg !== null)) {
+            setError('Por favor, corrige los errores en los archivos subidos antes de enviar.');
+            return;
         }
 
         setSubmitting(true);
@@ -101,7 +173,8 @@ export default function ClientNewReimbursement() {
                 {
                     client_id: user.id,
                     policy_id: selectedPolicy.id,
-                    amount_requested: amount
+                    amount_requested: amount,
+                    event_date: eventDate // <-- Pasamos la fecha del siniestro
                 },
                 uploadedFiles,
                 user.id
@@ -133,12 +206,18 @@ export default function ClientNewReimbursement() {
                                 className="w-full text-left p-4 bg-gray-50 hover:bg-blue-100 border border-gray-200 rounded-lg transition"
                             >
                                 <p className="font-semibold text-blue-800">{policy.policy_number}</p>
-                                <p className="text-sm text-gray-600">{policy.product_name}</p>
+                                {/* CAMBIO CLAVE EN LÍNEA 208 */}
+                                <p className="text-sm text-gray-600">
+                                    {policy.insurance_products && policy.insurance_products.length > 0
+                                        ? policy.insurance_products[0].name
+                                        : 'Producto Desconocido'}
+                                </p>
+                                <p className="text-xs text-gray-500">Vigencia: {policy.start_date} al {policy.end_date}</p>
                             </button>
                         ))}
                     </div>
                 )}
-                 <div className="mt-6 text-center">
+                    <div className="mt-6 text-center">
                     <Link to="/client/dashboard/reimbursements" className="text-sm text-gray-600 hover:underline">Volver a mis reembolsos</Link>
                 </div>
             </div>
@@ -147,14 +226,23 @@ export default function ClientNewReimbursement() {
     
     const requiredDocsSatisfied = requiredDocs
         .filter(d => d.is_required)
-        .every(d => uploadedFiles.has(d.document_name));
+        .every(d => uploadedFiles.has(d.document_name) && !fileErrors.has(d.document_name));
+
+    // Deshabilitar botón si no se ha ingresado la fecha del siniestro o si hay errores en los archivos
+    const isSubmitDisabled = !requiredDocsSatisfied || submitting || !amountRequested || parseFloat(amountRequested) <= 0 || !eventDate || Array.from(fileErrors.values()).some(errorMsg => errorMsg !== null);
 
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold text-blue-700 mb-2">Paso 2: Completa tu Solicitud</h2>
             <div className="mb-6 bg-gray-100 p-3 rounded-md text-sm">
-                <p>Póliza: <strong className="text-blue-800">{selectedPolicy.policy_number}</strong> ({selectedPolicy.product_name})</p>
-                <button onClick={() => { setSelectedPolicy(null); setUploadedFiles(new Map()); }} className="text-xs text-blue-600 hover:underline">Cambiar Póliza</button>
+                <p>Póliza: <strong className="text-blue-800">{selectedPolicy.policy_number}</strong> ({
+                    // CAMBIO CLAVE EN LÍNEA 232
+                    selectedPolicy.insurance_products && selectedPolicy.insurance_products.length > 0
+                        ? selectedPolicy.insurance_products[0].name
+                        : 'Producto Desconocido'
+                })</p>
+                <p className="text-gray-600">Vigencia: {selectedPolicy.start_date} al {selectedPolicy.end_date}</p>
+                <button onClick={() => { setSelectedPolicy(null); setUploadedFiles(new Map()); setEventDate(''); /* Limpiar fecha al cambiar póliza */ }} className="text-xs text-blue-600 hover:underline">Cambiar Póliza</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -165,6 +253,23 @@ export default function ClientNewReimbursement() {
                         <input type="number" id="amount" value={amountRequested} onChange={e => setAmountRequested(e.target.value)} required className="block w-full rounded-md border-gray-300 pl-7 pr-2 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="0.00" step="0.01" />
                     </div>
                 </div>
+
+                {/* --- NUEVO: CAMPO PARA FECHA DEL SINIESTRO --- */}
+                <div>
+                    <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700">Fecha del Siniestro (Fecha del gasto / servicio médico) <span className="text-red-500">*</span></label>
+                    <div className="mt-1">
+                        <input 
+                            type="date" 
+                            id="eventDate" 
+                            value={eventDate} 
+                            onChange={e => setEventDate(e.target.value)} 
+                            required 
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" 
+                            max={new Date().toISOString().split('T')[0]} // No permitir fechas futuras al día actual
+                        />
+                    </div>
+                </div>
+                {/* --- FIN NUEVO CAMPO --- */}
 
                 <div>
                     <h3 className="text-lg font-medium text-gray-800 mb-2">Documentos Requeridos</h3>
@@ -198,10 +303,13 @@ export default function ClientNewReimbursement() {
                                             name={doc.document_name}
                                             label={'Seleccionar Archivo'}
                                             onChange={(files) => handleFileChange(doc.document_name, files)}
-                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            accept=".pdf,.jpg,.jpeg,.png" 
                                             disabled={submitting}
                                         />
                                     </div>
+                                )}
+                                {fileErrors.get(doc.document_name) && (
+                                    <p className="mt-2 text-red-500 text-xs">{fileErrors.get(doc.document_name)}</p>
                                 )}
                             </div>
                         ))}
@@ -211,7 +319,7 @@ export default function ClientNewReimbursement() {
                 {error && <div className="text-red-600 text-sm p-3 bg-red-50 rounded-md">{error}</div>}
 
                 <div className="flex justify-end pt-4 border-t">
-                    <button type="submit" disabled={!requiredDocsSatisfied || submitting || !amountRequested || parseFloat(amountRequested) <= 0} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <button type="submit" disabled={isSubmitDisabled} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         {submitting ? 'Enviando...' : 'Enviar Solicitud'}
                     </button>
                 </div>

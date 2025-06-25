@@ -231,7 +231,7 @@ export default function AgentApplicationDetail() {
         {application.status === 'pending' && (
             <div className="mt-8 flex justify-end gap-4">
                 <button onClick={() => setIsRejectionModalOpen(true)} disabled={loading} className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 disabled:opacity-50">Rechazar</button>
-                <button onClick={handleInitialApproval} disabled={loading} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">{loading ? 'Aprobando...' : 'Aprobar y Enviar a Firma'}</button>
+                <button onClick={handleInitialApproval} disabled={loading} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">{loading ? 'Aprobando...' : 'Aprobar y enviar a firmar'}</button>
             </div>
         )}
 
