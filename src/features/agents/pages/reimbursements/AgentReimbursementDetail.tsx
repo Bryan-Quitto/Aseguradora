@@ -14,7 +14,6 @@ import {
 } from 'src/features/reimbursements/reimbursement_management';
 import { Icon } from '@iconify/react';
 
-// --- COPIAMOS LA LÓGICA DE RECHAZO DEL ADMIN ---
 const rejectionReasonsConfig = [
     { id: 'illegible_document', label: 'Documento(s) Ilegible(s)', requiresComment: true, placeholder: "Especifica qué documento(s) no se pueden leer." },
     { id: 'missing_document', label: 'Falta(n) Documento(s)', requiresComment: true, placeholder: "Especifica qué documento(s) faltan." },
@@ -33,7 +32,7 @@ const getStatusStyles = (status: string) => {
     return styles[status] || 'bg-gray-100 text-gray-800';
 };
 
-const formatStatus = (status: string) => status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+const formatStatus = (status: string) => status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
 export default function AgentReimbursementDetail() {
     const { id: requestId } = useParams<{ id: string }>();
@@ -46,11 +45,11 @@ export default function AgentReimbursementDetail() {
     const [error, setError] = useState<string | null>(null);
     const [accessDenied, setAccessDenied] = useState(false);
     
-    // --- AÑADIMOS LOS ESTADOS PARA LAS ACCIONES ---
     const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
     const [isApprovalModalOpen, setApprovalModalOpen] = useState(false);
     const [isRejectionModalOpen, setRejectionModalOpen] = useState(false);
     const [approvalAmount, setApprovalAmount] = useState<string>('');
+    const [approvalNotes, setApprovalNotes] = useState<string>('');
     const [rejectionData, setRejectionData] = useState<{ reasons: Record<string, boolean>; comments: Record<string, string> }>({ reasons: {}, comments: {} });
     const [rejectionError, setRejectionError] = useState<string | null>(null);
 
@@ -61,32 +60,17 @@ export default function AgentReimbursementDetail() {
         setActionMessage(null);
 
         try {
-            console.log('1. Intentando obtener detalles de la solicitud con ID:', requestId);
             const { data: requestData, error: requestError } = await getReimbursementRequestById(requestId);
-            
-            console.log('2. Datos de la solicitud recibidos (requestData):', requestData);
-            console.log('3. Error de la solicitud (requestError):', requestError);
-
             if (requestError || !requestData) throw new Error('No se pudo cargar la solicitud.');
 
-            // @ts-ignore (Si requestData.policies puede ser null, deberías añadir una comprobación aquí)
             if (requestData.policies?.agent_id !== user.id) {
                 setAccessDenied(true);
-                throw new Error('Acceso no autorizado.');
+                throw new Error('No tienes permiso para ver esta solicitud.');
             }
 
             setRequest(requestData);
             setApprovalAmount(requestData.amount_requested?.toString() || '');
-
-            // --- DEPURACIÓN DEL OBJETO DE POLÍTICAS ---
-            console.log('4. Objeto de políticas anidado (requestData.policies):', requestData.policies);
-            console.log('5. Objeto de productos de seguro anidado (requestData.policies.insurance_products):', requestData.policies?.insurance_products);
-            if (requestData.policies?.insurance_products && requestData.policies.insurance_products.length > 0) {
-                console.log('6. Nombre del producto:', requestData.policies.insurance_products[0].name);
-            } else {
-                console.log('6. No se encontró el nombre del producto en requestData.policies.insurance_products.');
-            }
-            // --- FIN DEPURACIÓN ---
+            setApprovalNotes('');
 
             const { data: submittedData, error: submittedError } = await getSubmittedDocuments(requestId);
             if (submittedError) throw new Error('Error al cargar documentos subidos.');
@@ -94,16 +78,11 @@ export default function AgentReimbursementDetail() {
 
             const productId = requestData.policies?.product_id;
             if (productId) {
-                console.log('7. Producto ID encontrado para buscar documentos requeridos:', productId);
                 const { data: requiredData, error: requiredError } = await getRequiredDocuments(productId);
                 if (requiredError) throw new Error('Error al cargar documentos requeridos.');
                 setRequiredDocs(requiredData || []);
-                console.log('8. Documentos requeridos cargados:', requiredData);
-            } else {
-                console.log('7. No se encontró un product_id en la póliza.');
             }
         } catch (err: any) {
-            console.error('Error en fetchAllDetails:', err);
             if (!accessDenied) setError(err.message);
         } finally {
             setLoading(false);
@@ -114,7 +93,6 @@ export default function AgentReimbursementDetail() {
         fetchAllDetails();
     }, [fetchAllDetails]);
 
-    // --- AÑADIMOS TODAS LAS FUNCIONES DE MANEJO DE ACCIONES ---
     const handleConfirmApproval = async () => {
         if (!request || !user?.id) return;
         const amount = parseFloat(approvalAmount);
@@ -124,23 +102,26 @@ export default function AgentReimbursementDetail() {
         }
 
         setLoading(true);
-        const { data, error: updateError } = await updateReimbursementRequest(request.id, {
+        const finalNotes = `Aprobado por agente ${user.email}.\n\nJustificación:\n${approvalNotes || "No se proveyó una justificación detallada."}`;
+        
+        await updateReimbursementRequest(request.id, {
             status: 'approved',
             amount_approved: amount,
-            admin_notes: `Aprobado por agente ${user.email}.`,
-        });
-
-        if (updateError) {
-            setActionMessage({ type: 'error', text: `Error al aprobar: ${updateError.message}` });
-        } else if (data) {
-            setRequest(prev => prev ? { ...prev, ...data } : null);
-            setActionMessage({ type: 'success', text: 'Solicitud aprobada exitosamente.' });
-            setApprovalModalOpen(false);
-        }
-        setLoading(false);
+            rejection_reasons: null,
+            rejection_comments: null,
+            admin_notes: finalNotes,
+        }).then(({ error: updateError }) => {
+            if (updateError) {
+                setActionMessage({ type: 'error', text: `Error al aprobar: ${updateError.message}` });
+            } else {
+                fetchAllDetails();
+                setActionMessage({ type: 'success', text: 'Solicitud aprobada exitosamente.' });
+                setApprovalModalOpen(false);
+            }
+        }).finally(() => setLoading(false));
     };
 
-    const handleConfirmRejection = async () => {
+    const handleConfirmRejection = async (newStatus: 'rejected' | 'more_info_needed') => {
         if (!request || !user?.id) { setRejectionError('Faltan datos.'); return; }
         const selectedReasons = Object.keys(rejectionData.reasons).filter(key => rejectionData.reasons[key]);
         if (selectedReasons.length === 0) { setRejectionError('Debe seleccionar al menos una razón.'); return; }
@@ -149,36 +130,30 @@ export default function AgentReimbursementDetail() {
         for (const reasonId of selectedReasons) {
             const reasonConfig = rejectionReasonsConfig.find(r => r.id === reasonId);
             if (!reasonConfig) continue;
-
             const comment = rejectionData.comments[reasonId]?.trim();
             if (reasonConfig.requiresComment && !comment) {
                 setRejectionError(`Añada un comentario para: "${reasonConfig.label}"`);
                 return;
             }
-            if (comment) {
-                finalComments += `${reasonConfig.label}: ${comment}\n`;
-            } else {
-                finalComments += `${reasonConfig.label}\n`;
-            }
+            finalComments += comment ? `${reasonConfig.label}: ${comment}\n` : `${reasonConfig.label}\n`;
         }
 
         setLoading(true);
-        const { data, error: updateError } = await updateReimbursementRequest(request.id, {
-            status: 'rejected',
+        await updateReimbursementRequest(request.id, {
+            status: newStatus,
             rejection_reasons: selectedReasons,
             rejection_comments: finalComments.trim(),
-            admin_notes: `Rechazado por agente ${user.email}.`
-        });
-
-        if (updateError) {
-            setActionMessage({ type: 'error', text: `Error al rechazar: ${updateError.message}` });
-        } else if (data) {
-            setRequest(prev => prev ? { ...prev, ...data } : null);
-            setActionMessage({ type: 'success', text: 'Solicitud rechazada.' });
-            setRejectionModalOpen(false);
-            setRejectionData({ reasons: {}, comments: {} });
-        }
-        setLoading(false);
+            admin_notes: `${formatStatus(newStatus)} por agente ${user.email}.`
+        }).then(({ error: updateError }) => {
+            if (updateError) {
+                setActionMessage({ type: 'error', text: `Error al actualizar: ${updateError.message}` });
+            } else {
+                fetchAllDetails();
+                setActionMessage({ type: 'success', text: `Solicitud actualizada a "${formatStatus(newStatus)}".` });
+                setRejectionModalOpen(false);
+                setRejectionData({ reasons: {}, comments: {} });
+            }
+        }).finally(() => setLoading(false));
     };
 
     const handleRejectionChange = (type: 'reason' | 'comment', id: string, value: string | boolean) => {
@@ -188,7 +163,7 @@ export default function AgentReimbursementDetail() {
     };
 
     if (accessDenied) return <Navigate to="/agent/dashboard/reimbursements" replace />;
-    if (loading && !request) return <div className="text-center p-8">Cargando detalles de la solicitud...</div>;
+    if (loading) return <div className="text-center p-8">Cargando detalles de la solicitud...</div>;
     if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
     if (!request) return <div className="text-center p-8">Solicitud no encontrada.</div>;
 
@@ -208,94 +183,69 @@ export default function AgentReimbursementDetail() {
                     <div className="lg:col-span-1 space-y-6">
                         <div className="bg-blue-50 p-6 rounded-lg shadow-sm">
                             <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General</h3>
-                            <p><strong>Cliente:</strong> {request.profiles?.full_name}</p>
-                            <p><strong>Póliza:</strong> {request.policies?.policy_number}</p>
-    <p>
-    <strong>Producto:</strong> 
-    {
-        (request.policies?.insurance_products as any)?.name || 'N/A'
-    }
-</p>
-                            <p><strong>Fecha Inicio Póliza:</strong> {request.policies?.start_date ? format(new Date(request.policies.start_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
-                            <p><strong>Fecha Fin Póliza:</strong> {request.policies?.end_date ? format(new Date(request.policies.end_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
-                            <p><strong>Fecha del Siniestro:</strong> {request.event_date ? format(new Date(request.event_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                            <p><strong>Póliza:</strong> {request.policies?.policy_number || 'N/A'}</p>
+                            <p><strong>Producto:</strong> {request.policies?.insurance_products?.[0]?.name || 'N/A'}</p>
+                            <p><strong>Inicio Póliza:</strong> {request.policies?.start_date ? format(new Date(request.policies.start_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                            <p><strong>Fin Póliza:</strong> {request.policies?.end_date ? format(new Date(request.policies.end_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                            <p><strong>Fecha Siniestro:</strong> {request.event_date ? format(new Date(request.event_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
                             <p><strong>Fecha Solicitud:</strong> {format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</p>
                             <p><strong>Monto Solicitado:</strong> <span className="font-bold">${request.amount_requested?.toFixed(2)}</span></p>
                             <p className="mt-2"><strong>Estado:</strong> <span className={`ml-2 px-2 inline-flex text-sm leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>{formatStatus(request.status)}</span></p>
                             {request.status === 'approved' && <p><strong>Monto Aprobado:</strong> <span className="font-bold text-green-700">${request.amount_approved?.toFixed(2)}</span></p>}
                         </div>
 
+                        <div className="bg-indigo-50 p-6 rounded-lg shadow-sm">
+                            <h3 className="text-xl font-semibold text-indigo-800 mb-4">Información del Cliente</h3>
+                            {request.profiles ? (
+                                <>
+                                    <p><strong>Nombre:</strong> {request.profiles.full_name || 'N/A'}</p>
+                                    <p><strong>Email:</strong> <a href={`mailto:${request.profiles.email}`} className="text-blue-600 hover:underline">{request.profiles.email || 'N/A'}</a></p>
+                                    <p><strong>Identificación:</strong> {request.profiles.numero_identificacion || 'N/A'}</p>
+                                </>
+                            ) : <p>No se pudo cargar la información del cliente.</p>}
+                        </div>
+
                         <div className="bg-yellow-50 p-6 rounded-lg shadow-sm">
-                            <h3 className="text-xl font-semibold text-yellow-800 mb-4">Checklist de Documentos Requeridos</h3>
+                            <h3 className="text-xl font-semibold text-yellow-800 mb-4">Checklist de Documentos</h3>
                             {requiredDocs.length > 0 ? (
-                                <ul className="space-y-2">
+                                <ul className="space-y-3">
                                     {requiredDocs.map(reqDoc => (
-                                        <li key={reqDoc.id} className="flex items-center">
-                                            {submittedDocNames.has(reqDoc.document_name) ?
-                                                <Icon icon="solar:check-circle-bold" className="text-green-600 mr-2 h-5 w-5" /> :
-                                                <Icon icon="solar:close-circle-bold" className="text-red-600 mr-2 h-5 w-5" />
+                                        <li key={reqDoc.id} className="flex items-center justify-between">
+                                            <div className="flex items-center">
+                                                {submittedDocNames.has(reqDoc.document_name) ? <Icon icon="solar:check-circle-bold" className="text-green-600 mr-2 h-5 w-5 flex-shrink-0" /> : <Icon icon="solar:close-circle-bold" className="text-red-600 mr-2 h-5 w-5 flex-shrink-0" />}
+                                                <span title={reqDoc.description || ''}>{reqDoc.document_name}</span>
+                                            </div>
+                                            {reqDoc.is_required 
+                                                ? <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Obligatorio</span>
+                                                : <span className="text-xs font-semibold text-gray-700 bg-gray-200 px-2 py-0.5 rounded-full">Opcional</span>
                                             }
-                                            <span title={reqDoc.description || ''}>{reqDoc.document_name}</span>
                                         </li>
                                     ))}
                                 </ul>
-                            ) : <p>No hay documentos requeridos definidos para este producto.</p>}
+                            ) : <p>No hay documentos requeridos definidos.</p>}
                         </div>
                     </div>
 
                     <div className="lg:col-span-2 space-y-6">
-                        <div className="bg-indigo-50 p-6 rounded-lg shadow-sm">
-                            <h3 className="text-xl font-semibold text-indigo-800 mb-4">Documentos Subidos por el Cliente</h3>
+                        <div className="bg-gray-50 p-6 rounded-lg shadow-sm">
+                            <h3 className="text-xl font-semibold text-gray-800 mb-4">Documentos Subidos por Cliente</h3>
                             {submittedDocs.length > 0 ? (
-                                <ul className="bg-white rounded-lg p-4 border space-y-2">
-                                    {submittedDocs.map(doc => (
-                                        <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
-                                            <span>{doc.document_name}</span>
-                                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 text-white font-bold py-1 px-3 rounded-full text-sm hover:bg-indigo-600">Ver Documento</a>
-                                        </li>
-                                    ))}
-                                </ul>
+                                <ul className="bg-white rounded-lg p-4 border space-y-2">{submittedDocs.map(doc => (<li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0"><span>{doc.document_name}</span><a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 text-white font-bold py-1 px-3 rounded-full text-sm hover:bg-indigo-600">Ver</a></li>))}</ul>
                             ) : <p>El cliente no ha subido ningún documento.</p>}
                         </div>
 
-                        {(request.status === 'rejected' || request.status === 'more_info_needed') && (
-                            <div className="bg-red-50 p-6 rounded-lg shadow-sm">
-                                <h3 className="text-xl font-semibold text-red-800 mb-4">
-                                    Detalles de {request.status === 'rejected' ? 'Rechazo' : 'Solicitud de Más Información'}
-                                </h3>
-                                {request.rejection_reasons && request.rejection_reasons.length > 0 && (
-                                    <div className="mb-4">
-                                        <p className="font-semibold text-red-700">Razones Seleccionadas:</p>
-                                        <ul className="list-disc list-inside text-sm text-gray-700">
-                                            {request.rejection_reasons.map((reasonId: string) => {
-                                                const config = rejectionReasonsConfig.find(r => r.id === reasonId);
-                                                return config ? <li key={reasonId}>{config.label}</li> : null;
-                                            })}
-                                        </ul>
-                                    </div>
-                                )}
-                                {request.rejection_comments && (
-                                    <div>
-                                        <p className="font-semibold text-red-700">Comentarios Adicionales:</p>
-                                        <pre className="text-sm whitespace-pre-wrap font-sans bg-white p-3 rounded border border-red-200">{request.rejection_comments}</pre>
-                                    </div>
-                                )}
-                                {!request.rejection_reasons && !request.rejection_comments && (
-                                    <p className="text-sm text-gray-700">No se proporcionaron detalles adicionales para esta {request.status === 'rejected' ? 'rechazo' : 'solicitud de información adicional'}.</p>
-                                )}
-                            </div>
-                        )}
-                        
                         {request.status === 'approved' && request.admin_notes && (
                             <div className="bg-green-50 p-6 rounded-lg shadow-sm">
                                 <h3 className="text-xl font-semibold text-green-800 mb-4">Notas de la Aprobación</h3>
-                                <p className="text-sm text-gray-700">{request.admin_notes}</p>
+                                <pre className="text-sm whitespace-pre-wrap font-sans bg-white p-3 rounded border">{request.admin_notes}</pre>
                             </div>
                         )}
 
+                        {(request.status === 'rejected' || request.status === 'more_info_needed') && (<div className="bg-red-50 p-6 rounded-lg shadow-sm"><h3 className="text-xl font-semibold text-red-800 mb-4">Detalles de Acción Previa</h3><pre className="text-sm whitespace-pre-wrap font-sans bg-white p-3 rounded border">{request.rejection_comments || "No hay comentarios."}</pre></div>)}
+                        
                         {['pending', 'in_review'].includes(request.status) && (
                             <div className="bg-gray-100 p-6 rounded-lg shadow-sm flex justify-end gap-4">
-                                <button onClick={() => setRejectionModalOpen(true)} disabled={loading} className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 disabled:opacity-50">Rechazar / Solicitar Info</button>
+                                <button onClick={() => setRejectionModalOpen(true)} disabled={loading} className="bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 disabled:opacity-50">Solicitar Info / Rechazar</button>
                                 <button onClick={() => setApprovalModalOpen(true)} disabled={loading} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">Aprobar</button>
                             </div>
                         )}
@@ -307,15 +257,20 @@ export default function AgentReimbursementDetail() {
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
                     <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-md mx-4">
                         <h3 className="text-2xl font-bold mb-4">Aprobar Reembolso</h3>
-                        <p className="mb-2">Monto Solicitado: <strong>${request.amount_requested?.toFixed(2)}</strong></p>
-                        <div>
-                            <label htmlFor="approvalAmount" className="block text-sm font-medium text-gray-700">Monto a Aprobar</label>
-                            <div className="mt-1 relative rounded-md shadow-sm">
-                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
-                                <input type="number" id="approvalAmount" value={approvalAmount} onChange={(e) => setApprovalAmount(e.target.value)} className="block w-full rounded-md border-gray-300 pl-7 pr-12 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="0.00" />
+                        <div className="space-y-4">
+                            <div>
+                                <label htmlFor="approvalAmount" className="block text-sm font-medium text-gray-700">Monto a Aprobar</label>
+                                <div className="mt-1 relative rounded-md shadow-sm">
+                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"><span className="text-gray-500 sm:text-sm">$</span></div>
+                                    <input type="number" id="approvalAmount" value={approvalAmount} onChange={(e) => setApprovalAmount(e.target.value)} className="block w-full rounded-md border-gray-300 pl-7 pr-12" placeholder="0.00" />
+                                </div>
+                            </div>
+                            <div>
+                                <label htmlFor="approvalNotes" className="block text-sm font-medium text-gray-700">Justificación de la Aprobación (Opcional)</label>
+                                <textarea id="approvalNotes" value={approvalNotes} onChange={(e) => setApprovalNotes(e.target.value)} rows={4} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Ej: Se ajusta el monto según la cobertura del 80% para consultas médicas..."></textarea>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-4 mt-8">
+                        <div className="flex justify-end gap-4 mt-8 pt-4 border-t">
                             <button onClick={() => setApprovalModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded-md hover:bg-gray-400">Cancelar</button>
                             <button onClick={handleConfirmApproval} disabled={loading} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:opacity-50">{loading ? 'Procesando...' : 'Confirmar Aprobación'}</button>
                         </div>
@@ -326,20 +281,10 @@ export default function AgentReimbursementDetail() {
             {isRejectionModalOpen && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
                     <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg mx-4">
-                        <h3 className="text-2xl font-bold mb-4">Rechazar Solicitud</h3>
-                        <div className="space-y-4 max-h-80 overflow-y-auto pr-4">
-                            {rejectionReasonsConfig.map(reason => (
-                                <div key={reason.id}>
-                                    <label className="flex items-center"><input type="checkbox" className="h-4 w-4 rounded" checked={!!rejectionData.reasons[reason.id]} onChange={(e) => handleRejectionChange('reason', reason.id, e.target.checked)} /><span className="ml-3">{reason.label}</span></label>
-                                    {reason.requiresComment && rejectionData.reasons[reason.id] && <textarea className="mt-2 block w-full px-3 py-2 border rounded-md" rows={2} placeholder={reason.placeholder} value={rejectionData.comments[reason.id] || ''} onChange={(e) => handleRejectionChange('comment', reason.id, e.target.value)} />}
-                                </div>
-                            ))}
-                        </div>
+                        <h3 className="text-2xl font-bold mb-4">Acción sobre la Solicitud</h3>
+                        <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-4">{rejectionReasonsConfig.map(reason => (<div key={reason.id}><label className="flex items-center"><input type="checkbox" className="h-4 w-4 rounded" checked={!!rejectionData.reasons[reason.id]} onChange={(e) => handleRejectionChange('reason', reason.id, e.target.checked)} /><span className="ml-3">{reason.label}</span></label>{reason.requiresComment && rejectionData.reasons[reason.id] && <textarea className="mt-2 block w-full px-3 py-2 border rounded-md" rows={2} placeholder={reason.placeholder} value={rejectionData.comments[reason.id] || ''} onChange={(e) => handleRejectionChange('comment', reason.id, e.target.value)} />}</div>))}</div>
                         {rejectionError && <p className="text-red-600 text-sm mt-4">{rejectionError}</p>}
-                        <div className="flex justify-end gap-4 mt-8 pt-4 border-t">
-                            <button onClick={() => setRejectionModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded-md hover:bg-gray-400">Cancelar</button>
-                            <button onClick={handleConfirmRejection} disabled={loading} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50">{loading ? 'Procesando...' : 'Confirmar Rechazo'}</button>
-                        </div>
+                        <div className="flex justify-end gap-4 mt-8 pt-4 border-t"><button onClick={() => setRejectionModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded-md hover:bg-gray-400">Cancelar</button><button onClick={() => handleConfirmRejection('more_info_needed')} disabled={loading} className="bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600 disabled:opacity-50">{loading ? 'Procesando...' : 'Solicitar Más Info'}</button><button onClick={() => handleConfirmRejection('rejected')} disabled={loading} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50">{loading ? 'Procesando...' : 'Rechazar'}</button></div>
                     </div>
                 </div>
             )}

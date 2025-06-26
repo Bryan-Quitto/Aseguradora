@@ -11,6 +11,7 @@ import {
     ReimbursementDocument,
     RequiredDocument
 } from 'src/features/reimbursements/reimbursement_management';
+import { getAgentProfileById, AgentProfile } from 'src/features/policies/policy_management';
 import { Icon } from '@iconify/react';
 
 const getStatusStyles = (status: string) => {
@@ -22,7 +23,7 @@ const getStatusStyles = (status: string) => {
     return styles[status] || 'bg-gray-100 text-gray-800';
 };
 
-const formatStatus = (status: string) => status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+const formatStatus = (status: string) => status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
 const rejectionReasonLabels: { [key: string]: string } = {
     illegible_document: 'Documento(s) Ilegible(s)', missing_document: 'Falta(n) Documento(s)',
@@ -37,6 +38,7 @@ export default function ClientReimbursementDetail() {
     const [request, setRequest] = useState<ReimbursementRequestDetail | null>(null);
     const [submittedDocs, setSubmittedDocs] = useState<ReimbursementDocument[]>([]);
     const [requiredDocs, setRequiredDocs] = useState<RequiredDocument[]>([]);
+    const [agent, setAgent] = useState<AgentProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [accessDenied, setAccessDenied] = useState(false);
@@ -45,6 +47,7 @@ export default function ClientReimbursementDetail() {
         if (!requestId || !user?.id) return;
         setLoading(true);
         setError(null);
+        setAgent(null);
 
         try {
             const { data: requestData, error: requestError } = await getReimbursementRequestById(requestId);
@@ -54,6 +57,12 @@ export default function ClientReimbursementDetail() {
                 throw new Error('Acceso no autorizado.');
             }
             setRequest(requestData);
+
+            if (requestData.policies?.agent_id) {
+                const { data: agentData, error: agentError } = await getAgentProfileById(requestData.policies.agent_id);
+                if (agentError) console.error("Error al cargar datos del agente:", agentError);
+                else setAgent(agentData);
+            }
 
             const { data: submittedData, error: submittedError } = await getSubmittedDocuments(requestId);
             if (submittedError) throw new Error('Error al cargar los documentos de tu solicitud.');
@@ -94,6 +103,12 @@ export default function ClientReimbursementDetail() {
                         </h3>
                         <p>¡Buenas noticias! Tu solicitud de reembolso ha sido aprobada.</p>
                         <p className="mt-2 text-2xl font-bold text-green-700">Monto Aprobado: ${request.amount_approved?.toFixed(2)}</p>
+                        {request.admin_notes && (
+                             <div className="mt-4 bg-white p-4 rounded-md border border-green-200">
+                                  <h4 className="font-semibold text-gray-800 mb-2">Notas de la Aprobación:</h4>
+                                 <pre className="text-sm whitespace-pre-wrap font-sans text-gray-800">{request.admin_notes}</pre>
+                             </div>
+                        )}
                     </div>
                 );
             case 'rejected':
@@ -108,11 +123,7 @@ export default function ClientReimbursementDetail() {
                         {request.rejection_reasons && request.rejection_reasons.length > 0 && (
                              <div className="bg-white p-4 rounded-md border border-red-200 mb-4">
                                  <h4 className="font-semibold text-gray-800 mb-2">Motivos:</h4>
-                                 <ul className="list-disc list-inside space-y-1 text-sm">
-                                     {request.rejection_reasons.map(reason => (
-                                         <li key={reason}>{rejectionReasonLabels[reason] || reason}</li>
-                                     ))}
-                                 </ul>
+                                 <ul className="list-disc list-inside space-y-1 text-sm">{request.rejection_reasons.map(reason => (<li key={reason}>{rejectionReasonLabels[reason] || reason}</li>))}</ul>
                              </div>
                         )}
                         {request.rejection_comments && (
@@ -151,29 +162,44 @@ export default function ClientReimbursementDetail() {
                     <div className="bg-blue-50 p-6 rounded-lg shadow-sm">
                         <h3 className="text-xl font-semibold text-blue-800 mb-4">Información General</h3>
                         <p><strong>Póliza:</strong> {request.policies?.policy_number || 'N/A'}</p>
-                        <p><strong>Producto:</strong> {(request.policies?.insurance_products as any)?.name || 'N/A'}</p>
-                        <p><strong>Fecha Inicio Póliza:</strong> {request.policies?.start_date ? format(new Date(request.policies.start_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
-                        <p><strong>Fecha Fin Póliza:</strong> {request.policies?.end_date ? format(new Date(request.policies.end_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
-                        <p><strong>Fecha del Siniestro:</strong> {request.event_date ? format(new Date(request.event_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                        <p><strong>Producto:</strong> {request.policies?.insurance_products?.[0]?.name || 'N/A'}</p>
+                        <p><strong>Inicio Póliza:</strong> {request.policies?.start_date ? format(new Date(request.policies.start_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                        <p><strong>Fin Póliza:</strong> {request.policies?.end_date ? format(new Date(request.policies.end_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
+                        <p><strong>Fecha Siniestro:</strong> {request.event_date ? format(new Date(request.event_date), "dd 'de' MMMM, yyyy", { locale: es }) : 'N/A'}</p>
                         <p><strong>Fecha Solicitud:</strong> {format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</p>
                         <p><strong>Monto Solicitado:</strong> <span className="font-bold">${request.amount_requested?.toFixed(2)}</span></p>
                         <p className="mt-2"><strong>Estado:</strong> <span className={`ml-2 px-2 inline-flex text-sm leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>{formatStatus(request.status)}</span></p>
                     </div>
+
+                    <div className="bg-purple-50 p-6 rounded-lg shadow-sm">
+                        <h3 className="text-xl font-semibold text-purple-800 mb-4">Tu Agente Asignado</h3>
+                        {agent ? (
+                            <>
+                                <p><strong>Nombre:</strong> {agent.full_name || 'N/A'}</p>
+                                <p><strong>Email:</strong> <a href={`mailto:${agent.email}`} className="text-blue-600 hover:underline">{agent.email}</a></p>
+                                {agent.phone_number && <p><strong>Teléfono:</strong> {agent.phone_number}</p>}
+                            </>
+                        ) : <p>No hay un agente asignado a esta póliza.</p>}
+                    </div>
+                    
                     <div className="bg-yellow-50 p-6 rounded-lg shadow-sm">
                         <h3 className="text-xl font-semibold text-yellow-800 mb-4">Checklist de Documentos</h3>
                         {requiredDocs.length > 0 ? (
-                            <ul className="space-y-2">
+                            <ul className="space-y-3">
                                 {requiredDocs.map(reqDoc => (
-                                    <li key={reqDoc.id} className="flex items-center">
-                                        {submittedDocNames.has(reqDoc.document_name) ?
-                                            <Icon icon="solar:check-circle-bold" className="text-green-600 mr-2 h-5 w-5" /> :
-                                            <Icon icon="solar:close-circle-bold" className="text-red-600 mr-2 h-5 w-5" />
+                                    <li key={reqDoc.id} className="flex items-center justify-between">
+                                        <div className="flex items-center">
+                                            {submittedDocNames.has(reqDoc.document_name) ? <Icon icon="solar:check-circle-bold" className="text-green-600 mr-2 h-5 w-5 flex-shrink-0" /> : <Icon icon="solar:close-circle-bold" className="text-red-600 mr-2 h-5 w-5 flex-shrink-0" />}
+                                            <span title={reqDoc.description || ''}>{reqDoc.document_name}</span>
+                                        </div>
+                                        {reqDoc.is_required 
+                                            ? <span className="text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Obligatorio</span>
+                                            : <span className="text-xs font-semibold text-gray-700 bg-gray-200 px-2 py-0.5 rounded-full">Opcional</span>
                                         }
-                                        <span title={reqDoc.description || ''}>{reqDoc.document_name}</span>
                                     </li>
                                 ))}
                             </ul>
-                        ) : <p>No hay documentos requeridos definidos para este producto.</p>}
+                        ) : <p>No hay documentos requeridos definidos.</p>}
                     </div>
                 </div>
 
@@ -181,15 +207,8 @@ export default function ClientReimbursementDetail() {
                     <div className="bg-indigo-50 p-6 rounded-lg shadow-sm">
                         <h3 className="text-xl font-semibold text-indigo-800 mb-4">Documentos que Enviaste</h3>
                         {submittedDocs.length > 0 ? (
-                            <ul className="bg-white rounded-lg p-4 border space-y-2">
-                                {submittedDocs.map(doc => (
-                                    <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0">
-                                        <span>{doc.document_name}</span>
-                                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 text-white font-bold py-1 px-3 rounded-full text-sm hover:bg-indigo-600">Ver Documento</a>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : <p>No has subido ningún documento para esta solicitud.</p>}
+                            <ul className="bg-white rounded-lg p-4 border space-y-2">{submittedDocs.map(doc => (<li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0"><span>{doc.document_name}</span><a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="bg-indigo-500 text-white font-bold py-1 px-3 rounded-full text-sm hover:bg-indigo-600">Ver Documento</a></li>))}</ul>
+                        ) : <p>No has subido ningún documento.</p>}
                     </div>
                     {renderStatusDetails()}
                 </div>
