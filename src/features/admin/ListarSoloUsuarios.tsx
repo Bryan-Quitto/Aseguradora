@@ -1,5 +1,4 @@
-import { Button, Table, TextInput } from 'flowbite-react';
-import { HiSearch } from 'react-icons/hi';
+import { Button, Table} from 'flowbite-react';
 import { useState, useEffect, useMemo } from 'react';
 import { listOnlyUsuarios } from './hooks/listUsers';
 import { UserProfile } from './hooks/administrador_backend';

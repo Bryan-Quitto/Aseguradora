@@ -124,11 +124,6 @@ export default function CrearUsuarios() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
 
-  // Validaciones
-  const validateName = (value: string): boolean => {
-    return /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]+$/.test(value);
-  };
-
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
