@@ -3,14 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
-import {
-    getReimbursementRequestsByAgentId,
-    getPolicyInfoById,
-    getClientProfileById,
-    ReimbursementRequest,
-    PolicyInfo,
-    ClientProfileInfo
-} from 'src/features/reimbursements/reimbursement_management';
+import { getReimbursementRequestsByAgentId } from 'src/features/reimbursements/reimbursement_management';
+
+type ApiResultType = Awaited<ReturnType<typeof getReimbursementRequestsByAgentId>>;
+type EnhancedReimbursementRequest = ApiResultType['data'] extends (infer U)[] | null ? U : never;
 
 const getStatusStyles = (status: string) => {
     const styles: { [key: string]: string } = {
@@ -27,9 +23,7 @@ const formatStatus = (status: string) => status.replace('_', ' ').replace(/\b\w/
 
 export default function AgentReimbursementList() {
     const { user } = useAuth();
-    const [reimbursements, setReimbursements] = useState<ReimbursementRequest[]>([]);
-    const [clientDetails, setClientDetails] = useState<Map<string, ClientProfileInfo>>(new Map());
-    const [policyDetails, setPolicyDetails] = useState<Map<string, PolicyInfo>>(new Map());
+    const [reimbursements, setReimbursements] = useState<EnhancedReimbursementRequest[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [searchCedula, setSearchCedula] = useState('');
@@ -46,36 +40,10 @@ export default function AgentReimbursementList() {
             setError(null);
 
             try {
-                const { data: requestsData, error: requestsError } = await getReimbursementRequestsByAgentId(user.id);
+                const { data, error: requestsError } = await getReimbursementRequestsByAgentId(user.id);
                 if (requestsError) throw requestsError;
-                if (!requestsData) {
-                    setReimbursements([]);
-                    setLoading(false);
-                    return;
-                };
-
-                const pendingOrReviewRequests = requestsData.filter(
-                    req => req.status === 'pending' || req.status === 'in_review'
-                );
                 
-                setReimbursements(pendingOrReviewRequests);
-
-                const clientIds = new Set(pendingOrReviewRequests.map(r => r.client_id));
-                const policyIds = new Set(pendingOrReviewRequests.map(r => r.policy_id));
-
-                const newClientDetails = new Map<string, ClientProfileInfo>();
-                for (const id of clientIds) {
-                    const { data } = await getClientProfileById(id);
-                    if (data) newClientDetails.set(id, data);
-                }
-                setClientDetails(newClientDetails);
-
-                const newPolicyDetails = new Map<string, PolicyInfo>();
-                for (const id of policyIds) {
-                    const { data } = await getPolicyInfoById(id);
-                    if (data) newPolicyDetails.set(id, data);
-                }
-                setPolicyDetails(newPolicyDetails);
+                setReimbursements(data || []);
 
             } catch (err: any) {
                 setError(`Error al cargar las solicitudes: ${err.message}`);
@@ -88,8 +56,7 @@ export default function AgentReimbursementList() {
     }, [user?.id]);
 
     const filteredReimbursements = reimbursements.filter((request) => {
-        const clientInfo = clientDetails.get(request.client_id);
-        const cedula = clientInfo?.numero_identificacion || '';
+        const cedula = request.profiles?.numero_identificacion || '';
         return searchCedula === '' || cedula.startsWith(searchCedula);
     });
 
@@ -111,7 +78,7 @@ export default function AgentReimbursementList() {
 
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-7xl border border-blue-100 mx-auto">
-            <h2 className="text-3xl font-bold text-blue-700 mb-6">Reembolsos Pendientes de Clientes</h2>
+            <h2 className="text-3xl font-bold text-blue-700 mb-6">Historial de Reembolsos de Clientes</h2>
             
             <div className="mb-6">
                 <input
@@ -131,74 +98,51 @@ export default function AgentReimbursementList() {
 
             {filteredReimbursements.length === 0 ? (
                 <p className="text-lg text-gray-600 text-center py-10">
-                    No hay solicitudes de reembolso pendientes en este momento.
+                    No hay solicitudes de reembolso para los clientes asignados.
                 </p>
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-blue-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Cliente
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Cédula
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Nº de Póliza
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Fecha Solicitud
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Estado
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Acciones
-                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cédula</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº de Póliza</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Solicitud</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Solicitado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Aprobado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredReimbursements.map((request) => {
-                                const clientInfo = clientDetails.get(request.client_id);
-                                const policyInfo = policyDetails.get(request.policy_id);
-
-                                return (
-                                    <tr key={request.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {clientInfo?.full_name || 'Cargando...'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {clientInfo?.numero_identificacion || 'Cargando...'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {policyInfo?.policy_number || 'Cargando...'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>
-                                                {formatStatus(request.status)}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex space-x-2">
-                                            <Link
-                                                to={`/agent/dashboard/reimbursements/${request.id}`}
-                                                className="text-blue-600 hover:text-blue-900"
-                                            >
-                                                Revisar
-                                            </Link>
-                                            <Link
-                                                to={`/agent/dashboard/reimbursements/${request.id}/edit`}
-                                                className="text-indigo-600 hover:text-indigo-900"
-                                            >
+                            {filteredReimbursements.map((request) => (
+                                <tr key={request.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{request.profiles?.full_name || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.profiles?.numero_identificacion || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.policies?.policy_number || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.amount_requested ? `$${request.amount_requested.toFixed(2)}` : '-'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-700">
+                                        {request.status === 'approved' && request.amount_approved ? `$${request.amount_approved.toFixed(2)}` : '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>
+                                            {formatStatus(request.status)}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex items-center space-x-4">
+                                        <Link to={`/agent/dashboard/reimbursements/${request.id}`} className="text-blue-600 hover:text-blue-900">
+                                            Ver Detalles
+                                        </Link>
+                                        {['pending', 'in_review', 'more_info_needed','rejected','approved'].includes(request.status) && (
+                                            <Link to={`/agent/dashboard/reimbursements/${request.id}/edit`} className="text-indigo-600 hover:text-indigo-900">
                                                 Editar
                                             </Link>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>

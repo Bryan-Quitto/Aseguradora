@@ -3,13 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from 'src/supabase/client';
 import FileUpload from 'src/components/shared/FileUpload';
 import { User } from '@supabase/supabase-js';
+import html2pdf from 'html2pdf.js';
+import ContractTemplate from 'src/components/contracts/ContractTemplate';
 
 interface Policy {
     id: string;
     policy_number: string;
-    description: string;
     client_id: string;
-    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature';
+    status: 'pending' | 'active' | 'cancelled' | 'expired' | 'rejected' | 'awaiting_signature' | 'awaiting_review';
     signed_at: string | null;
     start_date: string;
     end_date: string; 
@@ -17,7 +18,7 @@ interface Policy {
     payment_frequency: 'monthly' | 'quarterly' | 'annually'; 
     contract_details: string | null; 
     insurance_products: { name: string; type?: 'life' | 'health' | 'other'; description?: string | null; } | null; 
-    profiles: { email: string } | null;
+    profiles: { email: string; full_name?: string | null } | null;
     deductible: number | null; 
     coinsurance: number | null; 
     max_annual: number | null; 
@@ -43,9 +44,44 @@ interface SignatureDocument {
     path: string;
 }
 
+const generateAndSaveContractPDF = async (elementId: string, policyId: string): Promise<string> => {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        throw new Error(`Elemento con ID '${elementId}' no fue encontrado.`);
+    }
+
+    const options = {
+        margin: [0.5, 0.5, 0.5, 0.5],
+        filename: `contrato_${policyId}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    try {
+        const pdfBlob = await html2pdf().from(element).set(options).output('blob');
+        const pdfFile = new File([pdfBlob], options.filename, { type: 'application/pdf' });
+        const filePath = `contracts/${policyId}/contract-${Date.now()}.pdf`;
+        const { error: uploadError } = await supabase.storage
+            .from('contracts')
+            .upload(filePath, pdfFile);
+
+        if (uploadError) {
+            throw new Error(`Error al subir el PDF a Supabase: ${uploadError.message}`);
+        }
+        
+        return filePath;
+
+    } catch (error) {
+        console.error("Error en la generación o subida del PDF:", error);
+        throw error;
+    }
+};
+
 const ContractSignature = () => {
     const [loading, setLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isDownloading, setIsDownloading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [policyDetails, setPolicyDetails] = useState<Policy | null>(null);
     const [uploadedSignature, setUploadedSignature] = useState<SignatureDocument | null>(null);
@@ -54,6 +90,7 @@ const ContractSignature = () => {
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [isSubmittedForReview, setIsSubmittedForReview] = useState(false);
+    const [submissionSuccessMessage, setSubmissionSuccessMessage] = useState<string | null>(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -71,7 +108,7 @@ const ContractSignature = () => {
             try {
                 const { data: policyData, error: policyError } = await supabase
                     .from('policies')
-                    .select(`*, insurance_products ( name, type, description ), profiles!policies_client_id_fkey ( email )`)
+                    .select(`*, insurance_products ( name, type, description ), profiles!policies_client_id_fkey ( email, full_name )`)
                     .eq('id', policyId)
                     .single();
 
@@ -128,28 +165,32 @@ const ContractSignature = () => {
         setError(null); 
         setUploadError(null);
         setDeleteSuccessMessage(null); 
-
+        setSubmissionSuccessMessage(null);
+    
         if (!files || files.length === 0 || !policyId || !user) {
             setUploadError("Por favor, seleccione un archivo de firma válido.");
             return;
         }
-
+    
         const file = files[0];
         const acceptedFileTypes = ["image/jpeg", "image/png", "image/svg+xml", "application/pdf"];
         if (!acceptedFileTypes.includes(file.type)) {
             setUploadError("Formato no permitido. Solo se aceptan JPG, PNG, SVG o PDF.");
             return;
         }
-
+    
         setIsProcessing(true);
         try {
             const filePath = `signatures/${policyId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
             const { data: uploadData, error: uploadErrorRes } = await supabase.storage.from('documents').upload(filePath, file);
             if (uploadErrorRes) throw uploadErrorRes;
             
+            const fileExtension = file.name.split('.').pop()?.toUpperCase() || 'FILE';
+            const standardizedSignatureName = `Firma del Cliente (${fileExtension})`;
+    
             const { data: dbData, error: dbError } = await supabase.from('policy_documents').insert({ 
                 policy_id: policyId, 
-                document_name: file.name, 
+                document_name: standardizedSignatureName,
                 file_path: uploadData.path, 
                 uploaded_by: user.id, 
                 document_type: 'signature'
@@ -161,7 +202,10 @@ const ContractSignature = () => {
             }
             
             const { data: urlData } = supabase.storage.from('documents').getPublicUrl(uploadData.path);
-            setUploadedSignature({ id: dbData!.id, name: file.name, path: uploadData.path, url: urlData.publicUrl });
+            
+            // --- ESTA ES LA LÍNEA CORREGIDA ---
+            setUploadedSignature({ id: dbData!.id, name: standardizedSignatureName, path: uploadData.path, url: urlData.publicUrl });
+    
         } catch (err) { 
             setUploadError(err instanceof Error ? err.message : 'Error al subir la firma.'); 
         } finally { 
@@ -170,51 +214,131 @@ const ContractSignature = () => {
     };
 
     const handleConfirmSignatureAndSubmitForReview = async () => {
-        if (!policyDetails || !uploadedSignature) {
-            setError("No hay una firma subida para confirmar.");
+        if (!policyDetails || !uploadedSignature || !user) {
+            setError("Faltan datos para procesar. Por favor, asegúrese de que la firma esté subida.");
             return;
         }
-
+    
         setIsProcessing(true);
         setError(null);
+        setSubmissionSuccessMessage(null);
+    
         try {
+            const contractPdfPath = await generateAndSaveContractPDF('contract-to-print', policyDetails.id);
+    
+            const { error: contractDocError } = await supabase
+                .from('policy_documents')
+                .insert({
+                    policy_id: policyDetails.id,
+                    document_name: 'Contrato de Póliza (Generado)',
+                    file_path: contractPdfPath,
+                    uploaded_by: user.id,
+                    document_type: 'contract_snapshot'
+                });
+    
+            if (contractDocError) {
+                await supabase.storage.from('contracts').remove([contractPdfPath]);
+                throw new Error(`Error al guardar el registro del contrato en la base de datos: ${contractDocError.message}`);
+            }
+    
+            // --- CAMBIO CLAVE: YA NO CAMBIAMOS EL ESTADO, SOLO LA FECHA DE FIRMA ---
             const { error: policyUpdateError } = await supabase
                 .from('policies')
-                .update({ status: 'awaiting_signature', signed_at: new Date().toISOString() })
-                .eq('id', policyId);
-
+                .update({
+                    signed_at: new Date().toISOString() // Solo registramos cuándo se firmó
+                    // El estado 'status' se mantiene como 'awaiting_signature'
+                })
+                .eq('id', policyDetails.id);
+    
             if (policyUpdateError) {
-                throw new Error("Hubo un error al enviar su firma a revisión.");
+                throw new Error(`Error al actualizar la fecha de firma de la póliza: ${policyUpdateError.message}`);
             }
-
+    
             setIsSubmittedForReview(true);
+            setSubmissionSuccessMessage("¡Firma enviada con éxito! Su solicitud está lista para la revisión final del agente.");
+    
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Error desconocido al confirmar la firma.');
+            const errorMessage = err instanceof Error ? err.message : 'Error desconocido al confirmar y generar el contrato.';
+            console.error("FALLÓ EL PROCESO DE FIRMA:", errorMessage);
+            setError(errorMessage); 
         } finally {
             setIsProcessing(false);
         }
     };
     
+    const handleDownloadContractPDF = async () => {
+        if (!policyDetails) {
+            setError("No se pueden cargar los detalles de la póliza para generar el PDF.");
+            return;
+        }
+    
+        setIsDownloading(true);
+        setError(null);
+    
+        try {
+            const element = document.getElementById('contract-to-print');
+            if (!element) {
+                throw new Error("No se encontró la plantilla del contrato para descargar.");
+            }
+    
+            const options = {
+                margin: [0.5, 0.5, 0.5, 0.5],
+                filename: `borrador_contrato_${policyDetails.policy_number}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+    
+            await html2pdf().from(element).set(options).save();
+    
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Error desconocido al generar el PDF para descarga.');
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     const confirmDeleteSignature = () => {
         setShowConfirmDeleteSignatureModal(true);
     };
 
     const executeDeleteSignature = async () => {
         if (!uploadedSignature || !policyId) return; 
-
+    
         setIsProcessing(true);
         setError(null);
         setDeleteSuccessMessage(null); 
         setShowConfirmDeleteSignatureModal(false); 
-
+    
         try {
+            const { data: contractDocs, error: findError } = await supabase
+                .from('policy_documents')
+                .select('id, file_path')
+                .eq('policy_id', policyId)
+                .eq('document_type', 'contract_snapshot');
+    
+            if (findError) {
+                console.error("Error buscando contratos para borrar:", findError);
+            }
+    
+            if (contractDocs && contractDocs.length > 0) {
+                const contractPaths = contractDocs.map(doc => doc.file_path);
+                const contractIds = contractDocs.map(doc => doc.id);
+    
+                await supabase.storage.from('contracts').remove(contractPaths);
+                await supabase.from('policy_documents').delete().in('id', contractIds);
+            }
+    
             await supabase.storage.from('documents').remove([uploadedSignature.path]);
             await supabase.from('policy_documents').delete().eq('id', uploadedSignature.id);
+            
             await supabase.from('policies').update({ status: 'awaiting_signature', signed_at: null }).eq('id', policyId);
-
+    
             setUploadedSignature(null); 
             setPolicyDetails(prev => prev ? { ...prev, status: 'awaiting_signature', signed_at: null } : null); 
-            setDeleteSuccessMessage("La firma ha sido eliminada. Ahora puede subir una nueva.");
+            setDeleteSuccessMessage("La firma y los contratos asociados han sido eliminados. Ahora puede subir una nueva.");
+            setIsSubmittedForReview(false);
+            setSubmissionSuccessMessage(null);
         } catch (err) { 
             setError(err instanceof Error ? err.message : 'Error desconocido al eliminar la firma.'); 
         } finally { 
@@ -235,81 +359,36 @@ const ContractSignature = () => {
                         <a href={uploadedSignature.url} download={uploadedSignature.name} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">Descargar</a>
                     </div>
                 </div>
-                <div className="mt-6 text-center">
-                    <button onClick={confirmDeleteSignature} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50">
-                        {isProcessing ? 'Eliminando...' : 'Eliminar y Subir de Nuevo'}
-                    </button>
-                </div>
+                {!isSubmittedForReview && (
+                    <div className="mt-6 text-center">
+                        <button onClick={confirmDeleteSignature} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50">
+                            {isProcessing ? 'Eliminando...' : 'Eliminar y Subir de Nuevo'}
+                        </button>
+                    </div>
+                )}
             </div>
         );
     };
 
     const renderContractContent = () => {
-        if (!policyDetails || !policyDetails.insurance_products) {
+        if (!policyDetails) {
             return <p className="text-gray-600 italic">Cargando detalles del contrato...</p>;
         }
-        const product = policyDetails.insurance_products;
-        const capitalize = (s: string | null | undefined): string => s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : 'N/A';
-        let contractText = `CONTRATO DE PÓLIZA DE SEGURO\n\nEste contrato se celebra entre las partes involucradas para la prestación de servicios de seguro bajo las siguientes condiciones:\n\n--- INFORMACIÓN GENERAL DE LA PÓLIZA ---\nNúmero de Póliza: ${policyDetails.policy_number}\nProducto de Seguro: ${product.name}\nTipo de Póliza: ${capitalize(product.type)}\nDescripción: ${product.description || 'N/A'}\nFecha de Inicio: ${policyDetails.start_date}\nFecha de Fin: ${policyDetails.end_date}\nMonto de Prima: $${policyDetails.premium_amount?.toFixed(2) || 'N/A'} ${capitalize(policyDetails.payment_frequency)}\nEstado Actual: ${capitalize(policyDetails.status)}\n`;
-
-        switch (product.type) {
-            case 'health':
-                contractText += `\n--- DETALLES DEL PLAN DE SALUD ---\n- Deducible: $${policyDetails.deductible?.toFixed(2) || 'N/A'}\n- Coaseguro: ${policyDetails.coinsurance || 'N/A'}%\n- Máximo Desembolsable: $${policyDetails.max_annual?.toFixed(2) || 'N/A'}\n- Dental Básico: ${policyDetails.has_dental_basic ? 'Sí' : 'No'}\n`;
-                if (policyDetails.dependents_details?.length) {
-                    contractText += `\n--- DEPENDIENTES INCLUIDOS ---\n`;
-                    policyDetails.dependents_details.forEach(dep => {
-                        contractText += `- ${dep.first_name1} ${dep.last_name1} (Cédula: ${dep.id_card}, Edad: ${dep.age}, Relación: ${capitalize(dep.relation)})\n`;
-                    });
-                }
-                break;
-            case 'life':
-                contractText += `\n--- DETALLES DEL SEGURO DE VIDA ---\n- Monto Cobertura: $${policyDetails.coverage_amount?.toFixed(2) || 'N/A'}\n- AD&D Incluido: ${policyDetails.ad_d_included ? 'Sí' : 'No'}\n`;
-                if (policyDetails.beneficiaries?.length) {
-                    contractText += `\n--- BENEFICIARIOS DESIGNADOS ---\n`;
-                    policyDetails.beneficiaries.forEach(ben => {
-                        contractText += `- ${ben.first_name1} ${ben.last_name1} (Cédula: ${ben.id_card}) - Relación: ${capitalize(ben.relation)} - Porcentaje: ${ben.percentage}%\n`;
-                    });
-                }
-                break;
-        }
-
-        contractText += `\n--- TÉRMINOS Y CONDICIONES ---\n(Términos y condiciones generales aquí...)\nFecha de Emisión: ${new Date().toLocaleDateString('es-EC')}`;
-
-        return (
-            <div className="flex-grow p-4 rounded-md border border-gray-300">
-                <h2 className="text-xl font-semibold text-gray-800 mb-2">Contrato:</h2>
-                <div className="max-h-96 overflow-y-auto text-gray-800 p-2 border rounded-md bg-white">
-                    <pre className="whitespace-pre-wrap text-xs font-mono">{contractText.trim()}</pre>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">Los reemmbolsos solo pueden ser realizados en un plazo de 60 días. Revise el contrato cuidadosamente.</p>
-            </div>
-        );
+        
+        return <ContractTemplate policy={policyDetails as any} />;
     };
 
     if (loading) return <div className="text-center p-10">Verificando enlace, por favor espere...</div>;
     if (error && !policyDetails) return <div className="text-center p-10 bg-red-100 text-red-700 rounded-lg max-w-lg mx-auto my-10">{error}</div>;
     if (!policyDetails) return <div className="text-center p-10">No se encontraron detalles de la póliza.</div>;
 
-    if (isSubmittedForReview) {
+    const relevantStatuses = ['active', 'awaiting_review'];
+    if (relevantStatuses.includes(policyDetails.status)) {
         return (
             <div className="max-w-lg mx-auto my-10 p-8 bg-white rounded-lg shadow-xl border border-green-200">
-                <h1 className="text-3xl font-extrabold text-green-700 mb-4 text-center">¡Firma Enviada!</h1>
-                <p className="text-gray-700 text-center mb-6">Gracias. Hemos recibido tu firma y tu solicitud ha sido enviada a revisión final. Serás notificado por correo electrónico una vez que tu póliza sea activada.</p>
-                <div className="mt-8 text-center">
-                    <button onClick={() => navigate('/client/dashboard')} className="text-blue-600 hover:underline">
-                        Volver al Panel de Cliente
-                    </button>
-                </div>
-            </div>
-        );
-    }
-    
-    if (policyDetails.status === 'active' && uploadedSignature) {
-        return (
-            <div className="max-w-lg mx-auto my-10 p-8 bg-white rounded-lg shadow-xl border border-green-200">
-                <h1 className="text-3xl font-extrabold text-green-700 mb-4 text-center">¡Póliza Ya Activa!</h1>
-                <p className="text-gray-700 text-center mb-6">Esta póliza ya ha sido firmada y activada previamente.</p>
-                {renderDocumentViewer()}
+                <h1 className="text-3xl font-extrabold text-green-700 mb-4 text-center">¡Póliza Ya Procesada!</h1>
+                <p className="text-gray-700 text-center mb-6">Esta póliza ya ha sido firmada y se encuentra activa o en revisión.</p>
+                {uploadedSignature && renderDocumentViewer()}
                    <div className="mt-8 text-center">
                     <button onClick={() => navigate('/client/dashboard')} className="text-blue-600 hover:underline">
                         Volver al Panel de Cliente
@@ -341,14 +420,27 @@ const ContractSignature = () => {
             <h1 className="text-3xl font-extrabold text-gray-800 mb-6 text-center">Firma de la Póliza</h1>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="flex flex-col">
-                    <div className="bg-gray-50 p-4 rounded-md mb-6 border border-gray-200">
-                        <h2 className="text-xl font-semibold text-gray-700 mb-2">Detalles de la Póliza:</h2>
-                        <p><strong>Nº Póliza:</strong> {policyDetails.policy_number}</p>
-                        <p><strong>Producto:</strong> {policyDetails.insurance_products?.name || 'Cargando...'}</p>
-                        <p><strong>Cliente:</strong> {policyDetails.profiles?.email || 'Cargando...'}</p>
+                <div className="flex flex-col border border-gray-200 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                        <h2 className="text-xl font-semibold text-gray-800">Vista Previa del Contrato</h2>
+                        <button
+                            onClick={handleDownloadContractPDF}
+                            disabled={isDownloading || isProcessing}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                            {isDownloading ? (
+                                <>
+                                    <div className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                                    Generando...
+                                </>
+                            ) : (
+                                'Descargar (PDF)'
+                            )}
+                        </button>
                     </div>
-                    {renderContractContent()}
+                    <div className="overflow-auto max-h-[80vh] bg-gray-50 p-1 rounded-lg shadow-inner">
+                      {renderContractContent()}
+                    </div>
                 </div>
 
                 <div className="p-4 border border-gray-300 rounded-md flex flex-col justify-between">
@@ -360,18 +452,24 @@ const ContractSignature = () => {
                                     <div className="mt-6 text-center">
                                         <button 
                                             onClick={handleConfirmSignatureAndSubmitForReview} 
-                                            disabled={isProcessing} 
-                                            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-50 text-lg font-semibold"
+                                            disabled={isProcessing || isSubmittedForReview} 
+                                            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition disabled:opacity-50 text-lg font-semibold w-full"
                                         >
-                                            {isProcessing ? 'Enviando...' : 'Confirmar Firma y Enviar a Revisión'}
+                                            {isProcessing ? 'Enviando...' : (isSubmittedForReview ? 'Enviado a Revisión' : 'Confirmar Firma y Enviar a Revisión')}
                                         </button>
+                                        {submissionSuccessMessage && (
+                                            <div className="mt-4 p-3 bg-green-100 text-green-800 border border-green-200 rounded-lg text-center">
+                                                {submissionSuccessMessage}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </>
                         ) : (
                             <div>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-2">Paso Final: Tu Firma</h3>
                                 <p className="text-gray-700 mb-5 leading-relaxed">
-                                    Por favor, suba un documento con su firma para aceptar los términos de esta póliza.
+                                    Por favor, suba un documento con su firma para aceptar los términos de esta póliza y completar el proceso.
                                 </p>
                                 <FileUpload
                                     id="signature-upload"
@@ -379,7 +477,7 @@ const ContractSignature = () => {
                                     label="Seleccionar Documento (JPG, PNG, SVG, PDF)"
                                     accept="image/*,.pdf" 
                                     onChange={handleSignatureUpload}
-                                    disabled={isProcessing}
+                                    disabled={isProcessing || isDownloading}
                                 />
                                 {uploadError && <div className="text-red-600 text-sm mt-2">{uploadError}</div>}
                                 {deleteSuccessMessage && <div className="text-green-600 text-sm mt-2">{deleteSuccessMessage}</div>}
@@ -387,12 +485,13 @@ const ContractSignature = () => {
                         )}
                     </div>
 
-                    {isProcessing && (
+                    {(isProcessing || isDownloading) && (
                         <div className="text-center text-blue-600 font-medium py-4">
                             <div className="animate-spin inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full mr-2"></div>
-                            Procesando...
+                            {isProcessing ? 'Procesando y generando contrato...' : 'Generando PDF...'}
                         </div>
                     )}
+                    {error && <div className="text-red-600 text-sm mt-2 text-center">{error}</div>}
                 </div>
             </div>
             

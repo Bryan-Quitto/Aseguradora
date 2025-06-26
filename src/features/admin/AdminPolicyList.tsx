@@ -178,12 +178,12 @@ export default function AdminPolicyList() {
   };
 
   const executeDeletePolicy = async () => {
-    if (!policyToDelete) return; 
+    if (!policyToDelete) return;
 
-    setIsDeleting(true); 
-    setError(null); 
-    setDeleteStatusMessage(null); 
-    setShowDeleteModal(false); 
+    setIsDeleting(true);
+    setError(null);
+    setDeleteStatusMessage(null);
+    setShowDeleteModal(false);
 
     try {
       const { data: documents } = await getPolicyDocumentsForDeletion(policyToDelete.id);
@@ -193,20 +193,32 @@ export default function AdminPolicyList() {
         await supabase.from('policy_documents').delete().eq('policy_id', policyToDelete.id);
       }
 
+      const { error: reimbursementDeleteError } = await supabase
+        .from('reimbursement_requests')
+        .delete()
+        .eq('policy_id', policyToDelete.id);
+
+      if (reimbursementDeleteError) {
+        throw new Error(`Error al eliminar las solicitudes de reembolso asociadas: ${reimbursementDeleteError.message}`);
+      }
+
       const { error: policyDeleteError } = await supabase
         .from('policies')
         .delete()
         .eq('id', policyToDelete.id);
+      
       if (policyDeleteError) throw new Error(`Error al eliminar la póliza: ${policyDeleteError.message}`);
 
       setPolicies(prevPolicies => prevPolicies.filter(p => p.id !== policyToDelete.id));
       setDeleteStatusMessage(`Póliza ${policyToDelete.policy_number} eliminada exitosamente.`);
-      setPolicyToDelete(null); 
+      setPolicyToDelete(null);
+
     } catch (err: any) {
-      setError(err instanceof Error ? err.message : 'Error desconocido al eliminar la póliza.');
-      setDeleteStatusMessage(`Error al eliminar la póliza: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al eliminar la póliza.';
+      setError(errorMessage);
+      console.error(err);
     } finally {
-      setIsDeleting(false); 
+      setIsDeleting(false);
     }
   };
 
@@ -272,7 +284,7 @@ export default function AdminPolicyList() {
       </div>
 
       {deleteStatusMessage && (
-        <div className={`mb-4 p-3 rounded-md text-center ${error ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+        <div className="mb-4 p-3 rounded-md text-center bg-green-100 text-green-700">
           {deleteStatusMessage}
         </div>
       )}

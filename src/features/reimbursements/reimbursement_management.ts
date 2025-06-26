@@ -63,28 +63,29 @@ export interface ReimbursementRequestDetail extends ReimbursementRequest {
 export async function getAllReimbursementRequests() {
     const { data, error } = await supabase
         .from('reimbursement_requests')
-        .select('*')
+        .select(`*, policies!reimbursement_requests_policy_id_fkey(policy_number), profiles!reimbursement_requests_client_id_fkey(full_name, numero_identificacion)`)
         .order('request_date', { ascending: false });
-    return { data: data as ReimbursementRequest[] | null, error };
+
+    return { data: data as (ReimbursementRequest & { policies: { policy_number: string } | null; profiles: { full_name: string; numero_identificacion: string; } | null; })[] | null, error };
 }
 
 export async function getReimbursementRequestsByClientId(clientId: string) {
     const { data, error } = await supabase
         .from('reimbursement_requests')
-        .select('*')
+        .select(`*, policies!reimbursement_requests_policy_id_fkey(policy_number)`)
         .eq('client_id', clientId)
         .order('request_date', { ascending: false });
     
-    return { data: data as ReimbursementRequest[] | null, error };
+    return { data: data as (ReimbursementRequest & { policies: { policy_number: string } | null; })[] | null, error };
 }
 
 export async function getReimbursementRequestsByAgentId(agentId: string) {
     const { data, error } = await supabase
         .from('reimbursement_requests')
-        .select('*, policies!inner(agent_id, policy_number, start_date, end_date, product_id, insurance_products(name))')
-        .eq('policies.agent_id', agentId)
-        .order('request_date', { ascending: false });
-    return { data: data as ReimbursementRequest[] | null, error }; 
+        .select(`*, policies!inner(agent_id, policy_number), profiles!reimbursement_requests_client_id_fkey(full_name, numero_identificacion)`)
+        .eq('policies.agent_id', agentId);
+    
+    return { data: data as (ReimbursementRequest & { policies: any; profiles: ClientProfileInfo | null; })[] | null, error };
 }
 
 export async function getActivePoliciesByClientId(clientId: string) {
@@ -100,7 +101,7 @@ export async function getActivePoliciesByClientId(clientId: string) {
         id: p.id,
         policy_number: p.policy_number,
         product_id: p.product_id,
-        insurance_products: p.insurance_products as InsuranceProduct[] || null, 
+        insurance_products: (p.insurance_products ? (Array.isArray(p.insurance_products) ? p.insurance_products : [p.insurance_products]) : []) as InsuranceProduct[],
         start_date: p.start_date,
         end_date: p.end_date
     }));
@@ -117,13 +118,14 @@ export async function getPolicyInfoById(policyId: string) {
     
     if (error) return { data: null, error };
     
+    const policyData = data as any;
     const policyInfo: PolicyInfo = {
-        id: data.id,
-        policy_number: data.policy_number,
-        product_id: data.product_id,
-        insurance_products: data.insurance_products as InsuranceProduct[] || null,
-        start_date: data.start_date, 
-        end_date: data.end_date      
+        id: policyData.id,
+        policy_number: policyData.policy_number,
+        product_id: policyData.product_id,
+        insurance_products: policyData.insurance_products ? (Array.isArray(policyData.insurance_products) ? policyData.insurance_products : [policyData.insurance_products]) : [],
+        start_date: policyData.start_date, 
+        end_date: policyData.end_date      
     };
     return { data: policyInfo, error: null };
 }
@@ -131,16 +133,13 @@ export async function getPolicyInfoById(policyId: string) {
 export async function getReimbursementRequestById(id: string) {
     const { data, error } = await supabase
         .from('reimbursement_requests')
-        .select(`
-            *,
-            policies!reimbursement_requests_policy_id_fkey (
-                id, policy_number, product_id, start_date, end_date, agent_id, 
-                insurance_products!policies_product_id_fkey ( id, name )
-            ),
-            profiles!reimbursement_requests_client_id_fkey ( full_name, numero_identificacion, email )
-        `)
+        .select(`*, policies!reimbursement_requests_policy_id_fkey(*, insurance_products!policies_product_id_fkey(*)), profiles!reimbursement_requests_client_id_fkey(*)`)
         .eq('id', id)
         .single();
+
+    if (data && data.policies && data.policies.insurance_products && !Array.isArray(data.policies.insurance_products)) {
+        (data.policies.insurance_products as any) = [data.policies.insurance_products];
+    }
     
     return { data: data as ReimbursementRequestDetail | null, error };
 }
@@ -173,18 +172,10 @@ export async function updateReimbursementRequest(id: string, updates: Partial<Re
     return { data: data as ReimbursementRequest, error }; 
 }
 
-export async function createReimbursementRequest(
-    requestData: Omit<ReimbursementRequest, 'id' | 'request_date' | 'status'>,
-    filesToUpload: Map<string, File>,
-    userId: string
-) {
+export async function createReimbursementRequest(requestData: Omit<ReimbursementRequest, 'id' | 'request_date' | 'status'>, filesToUpload: Map<string, File>, userId: string) {
     const { data: newRequest, error: requestError } = await supabase
         .from('reimbursement_requests')
-        .insert({
-            ...requestData,
-            request_date: new Date().toISOString(),
-            status: 'pending'
-        })
+        .insert({ ...requestData, request_date: new Date().toISOString(), status: 'pending' })
         .select()
         .single();
 
@@ -194,9 +185,7 @@ export async function createReimbursementRequest(
     const uploadedDocuments: { document_name: string; file_url: string; reimbursement_request_id: string; uploaded_by: string }[] = [];
     for (const [docName, file] of filesToUpload.entries()) {
         const filePath = `reimbursement-docs/${newRequest.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-        const { error: uploadError } = await supabase.storage
-            .from('reimbursement-docs')
-            .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage.from('reimbursement-docs').upload(filePath, file);
 
         if (uploadError) {
             await supabase.from('reimbursement_requests').delete().eq('id', newRequest.id);
@@ -211,12 +200,8 @@ export async function createReimbursementRequest(
     }
     
     if (uploadedDocuments.length > 0) {
-        const { error: docsError } = await supabase
-            .from('reimbursement_documents')
-            .insert(uploadedDocuments);
-        if (docsError) {
-            throw new Error(`Error al registrar los documentos: ${docsError.message}`);
-        }
+        const { error: docsError } = await supabase.from('reimbursement_documents').insert(uploadedDocuments);
+        if (docsError) throw new Error(`Error al registrar los documentos: ${docsError.message}`);
     }
 
     return { data: newRequest, error: null };
@@ -279,22 +264,13 @@ export async function deleteReimbursementDocument(docId: string, filePath: strin
     return { success: true };
 }
 
-export async function updateReimbursementWithDocs(
-    requestId: string,
-    updates: Partial<ReimbursementRequest>,
-    filesToAdd: Map<string, File>,
-    docsToDelete: { id: string, file_url: string }[],
-    userId: string
-) {
+export async function updateReimbursementWithDocs(requestId: string, updates: Partial<ReimbursementRequest>, filesToAdd: Map<string, File>, docsToDelete: { id: string, file_url: string }[], userId: string) {
     for (const doc of docsToDelete) {
         const { error: storageDeleteError } = await supabase.storage.from('reimbursement-docs').remove([doc.file_url]);
-        if (storageDeleteError) {
-            console.error(`Error deleting file from storage: ${storageDeleteError.message}`);
-        }
+        if (storageDeleteError) console.error(`Error deleting file from storage: ${storageDeleteError.message}`);
+        
         const { error: dbDeleteError } = await supabase.from('reimbursement_documents').delete().eq('id', doc.id);
-        if (dbDeleteError) {
-            console.error(`Error deleting document record from DB: ${dbDeleteError.message}`);
-        }
+        if (dbDeleteError) console.error(`Error deleting document record from DB: ${dbDeleteError.message}`);
     }
 
     const newDocsData = [];
@@ -312,19 +288,12 @@ export async function updateReimbursementWithDocs(
 
     if (newDocsData.length > 0) {
         const { error: insertDocsError } = await supabase.from('reimbursement_documents').insert(newDocsData);
-        if (insertDocsError) {
-            throw new Error(`Error insertando nuevos documentos: ${insertDocsError.message}`);
-        }
+        if (insertDocsError) throw new Error(`Error insertando nuevos documentos: ${insertDocsError.message}`);
     }
 
     const { data, error } = await supabase
         .from('reimbursement_requests')
-        .update({ 
-            ...updates, 
-            status: 'pending',
-            rejection_reasons: null, 
-            rejection_comments: null 
-        })
+        .update({ ...updates, status: 'pending', rejection_reasons: null, rejection_comments: null })
         .eq('id', requestId)
         .select()
         .single();
@@ -337,7 +306,7 @@ export async function getClientProfileById(profileId: string) {
     const { data, error } = await supabase
         .from('profiles')
         .select('full_name, numero_identificacion, email')
-        .eq('id', profileId)
+        .eq('user_id', profileId)
         .single();
     
     return { data: data as ClientProfileInfo | null, error };

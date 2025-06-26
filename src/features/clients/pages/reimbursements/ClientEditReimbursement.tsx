@@ -10,8 +10,7 @@ import {
     updateReimbursementWithDocs,
     RequiredDocument,
     ReimbursementDocument,
-    // Asegúrate de importar ReimbursementRequest si la usas directamente para tipado
-    ReimbursementRequest // <--- Añadir esta importación si no está
+    ReimbursementRequest
 } from 'src/features/reimbursements/reimbursement_management';
 
 export default function ClientEditReimbursement() {
@@ -19,12 +18,12 @@ export default function ClientEditReimbursement() {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    const [request, setRequest] = useState<any>(null); // Considera tipar 'any' a ReimbursementRequestDetail
+    const [request, setRequest] = useState<any>(null);
     const [requiredDocs, setRequiredDocs] = useState<RequiredDocument[]>([]);
     const [submittedDocs, setSubmittedDocs] = useState<ReimbursementDocument[]>([]);
     
     const [amountRequested, setAmountRequested] = useState('');
-    const [eventDate, setEventDate] = useState(''); // <--- NUEVO STATE PARA FECHA DEL SINIESTRO
+    const [eventDate, setEventDate] = useState<string>('');
     const [filesToAdd, setFilesToAdd] = useState<Map<string, File>>(new Map());
     const [docsToDelete, setDocsToDelete] = useState<ReimbursementDocument[]>([]);
     
@@ -39,7 +38,6 @@ export default function ClientEditReimbursement() {
             const { data: reqData, error: reqError } = await getReimbursementRequestById(requestId);
             if (reqError || !reqData || reqData.client_id !== user.id) throw new Error("No se pudo cargar o no tienes acceso a esta solicitud.");
             
-            // Si la solicitud ya está aprobada, redirigir
             if (reqData.status === 'approved') {
                 navigate(`/client/dashboard/reimbursements/${requestId}`);
                 return;
@@ -51,7 +49,7 @@ export default function ClientEditReimbursement() {
 
             setRequest(reqData);
             setAmountRequested(reqData.amount_requested?.toString() || '');
-            setEventDate(reqData.event_date || ''); // <--- INICIALIZAR eventDate
+            setEventDate(reqData.event_date || '');
             
             const { data: subData, error: subError } = await getSubmittedDocuments(requestId);
             if (subError) throw new Error("Error al cargar documentos existentes.");
@@ -74,14 +72,12 @@ export default function ClientEditReimbursement() {
     const handleFileChange = (docName: string, files: FileList | null) => {
         if (files && files.length > 0) {
             setFilesToAdd(prev => new Map(prev).set(docName, files[0]));
-            // Si se sube un nuevo archivo, elimina cualquier documento existente con el mismo nombre que estuviera marcado para borrado
             setDocsToDelete(prev => prev.filter(d => d.document_name !== docName));
         }
     };
 
     const handleMarkForDeletion = (doc: ReimbursementDocument) => {
         setDocsToDelete(prev => [...prev, doc]);
-        // Si el documento se marca para eliminación, asegúrate de que no esté en filesToAdd (si por alguna razón se añadió antes de marcarlo)
         setFilesToAdd(prev => {
             const newMap = new Map(prev);
             newMap.delete(doc.document_name);
@@ -91,7 +87,7 @@ export default function ClientEditReimbursement() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!requestId || !user?.id || !request) return; // Asegurarse de que 'request' esté cargado
+        if (!requestId || !user?.id || !request) return;
         
         setError(null);
         const amount = parseFloat(amountRequested);
@@ -100,20 +96,19 @@ export default function ClientEditReimbursement() {
             return;
         }
 
-        // --- VALIDACIONES DE FECHA DEL SINIESTRO (copiadas de ClientNewReimbursement) ---
         if (!eventDate) {
             setError('La fecha del siniestro es obligatoria.');
             return;
         }
 
         const siniestroDate = new Date(eventDate);
-        const policyStartDate = new Date(request.policies.start_date); // Usa request.policies aquí
-        const policyEndDate = new Date(request.policies.end_date); // Usa request.policies aquí
+        const policyStartDate = new Date(request.policies.start_date);
+        const policyEndDate = new Date(request.policies.end_date);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         if (siniestroDate < policyStartDate || siniestroDate > policyEndDate) {
-            setError(`La fecha del siniestro (${eventDate}) debe estar entre la fecha de inicio (${request.policies.start_date}) y la fecha de fin (${request.policies.end_date}) de tu póliza.`);
+            setError(`La fecha del siniestro debe estar dentro de la vigencia de la póliza.`);
             return;
         }
 
@@ -124,16 +119,14 @@ export default function ClientEditReimbursement() {
             setError('La solicitud de reembolso debe hacerse dentro de los 60 días posteriores a la fecha del siniestro.');
             return;
         }
-        // --- FIN VALIDACIONES DE FECHA ---
 
         setSubmitting(true);
         try {
             const newStatus = 'pending'; 
 
-            // Construir los updates a enviar
             const updates: Partial<ReimbursementRequest> = {
                 amount_requested: amount,
-                event_date: eventDate, // <--- INCLUIR LA FECHA DEL SINIESTRO EN LA ACTUALIZACIÓN
+                event_date: eventDate,
                 status: newStatus,
                 rejection_reasons: null,
                 rejection_comments: null
@@ -141,12 +134,12 @@ export default function ClientEditReimbursement() {
 
             await updateReimbursementWithDocs(
                 requestId,
-                updates, // Pasar el objeto 'updates'
+                updates,
                 filesToAdd,
                 docsToDelete,
                 user.id
             );
-            navigate(`/client/dashboard/reimbursements/${requestId}`);
+            navigate('/client/dashboard/reimbursements');
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -161,10 +154,12 @@ export default function ClientEditReimbursement() {
         ? "Corregir Solicitud de Reembolso" 
         : "Editar Solicitud de Reembolso";
 
+    const cancelUrl = '/client/dashboard/reimbursements';
+
     return (
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold text-blue-700 mb-2">{pageTitle}</h2>
-            <p className="text-sm text-gray-600 mb-6">Póliza: {request.policies?.policy_number} (Vigencia: {request.policies?.start_date} al {request.policies?.end_date})</p> {/* Puedes mostrar aquí la vigencia para referencia */}
+            <p className="text-sm text-gray-600 mb-6">Póliza: {request.policies?.policy_number}</p>
             
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
@@ -175,9 +170,8 @@ export default function ClientEditReimbursement() {
                     </div>
                 </div>
 
-                {/* --- NUEVO CAMPO PARA LA FECHA DEL SINIESTRO --- */}
                 <div>
-                    <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700">Fecha del Siniestro (Fecha del gasto / servicio médico) <span className="text-red-500">*</span></label>
+                    <label htmlFor="eventDate" className="block text-sm font-medium text-gray-700">Fecha del Siniestro (del gasto/servicio) <span className="text-red-500">*</span></label>
                     <div className="mt-1">
                         <input
                             type="date"
@@ -186,10 +180,10 @@ export default function ClientEditReimbursement() {
                             onChange={e => setEventDate(e.target.value)}
                             required
                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            max={new Date().toISOString().split('T')[0]}
                         />
                     </div>
                 </div>
-                {/* --- FIN CAMPO FECHA DEL SINIESTRO --- */}
 
                 <div>
                     <h3 className="text-lg font-medium text-gray-800 mb-2">Documentos</h3>
@@ -248,7 +242,7 @@ export default function ClientEditReimbursement() {
                 {error && <div className="text-red-600 text-sm p-3 bg-red-50 rounded-md">{error}</div>}
 
                 <div className="flex justify-between items-center pt-4 border-t">
-                    <Link to={`/client/dashboard/reimbursements/${requestId}`} className="text-sm text-gray-600 hover:underline">Cancelar</Link>
+                    <Link to={cancelUrl} className="text-sm text-gray-600 hover:underline">Cancelar</Link>
                     <button type="submit" disabled={submitting} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400">
                         {submitting ? 'Guardando Cambios...' : 'Guardar y Reenviar'}
                     </button>

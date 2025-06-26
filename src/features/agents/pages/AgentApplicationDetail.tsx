@@ -83,19 +83,36 @@ export default function AgentApplicationDetail() {
   const fetchDocumentsForPolicy = async (policyId: string) => {
     setLoadingDocuments(true);
     try {
-      const { data, error: docsError } = await supabase.from('policy_documents').select('*').eq('policy_id', policyId).order('uploaded_at', { ascending: false });
-      if (docsError) throw docsError;
-      const documentsWithUrls = await Promise.all((data || []).map(async (doc: PolicyDocument) => {
-        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(doc.file_path);
-        return { ...doc, file_url: urlData?.publicUrl || '#' };
-      }));
-      setDocuments(documentsWithUrls);
+        const { data, error: docsError } = await supabase
+            .from('policy_documents')
+            .select('*')
+            .eq('policy_id', policyId)
+            .order('uploaded_at', { ascending: false });
+
+        if (docsError) throw docsError;
+
+        const documentsWithUrls = await Promise.all((data || []).map(async (doc: PolicyDocument) => {
+            let fileUrl = '#';
+            // Lógica condicional: decide el bucket basado en la ruta del archivo
+            if (doc.file_path.startsWith('contracts/')) {
+                // Si la ruta es de un contrato, busca en el bucket 'contracts'
+                const { data: urlData } = supabase.storage.from('contracts').getPublicUrl(doc.file_path);
+                fileUrl = urlData?.publicUrl || '#';
+            } else {
+                // Para cualquier otra ruta (como las firmas), busca en el bucket 'documents'
+                const { data: urlData } = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+                fileUrl = urlData?.publicUrl || '#';
+            }
+            return { ...doc, file_url: fileUrl };
+        }));
+        
+        setDocuments(documentsWithUrls);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar documentos.');
+        setError(err instanceof Error ? err.message : 'Error al cargar documentos.');
     } finally {
-      setLoadingDocuments(false);
+        setLoadingDocuments(false);
     }
-  };
+};
 
   const handleInitialApproval = async () => {
     if (!application || !client?.email) return;

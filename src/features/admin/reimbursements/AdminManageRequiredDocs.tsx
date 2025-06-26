@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Icon } from '@iconify/react';
+import { Button, Modal, Label, TextInput, Textarea, Checkbox } from 'flowbite-react';
 import {
     getRequiredDocuments,
     createRequiredDocument,
@@ -14,7 +15,7 @@ const emptyDoc: Omit<RequiredDocument, 'id' | 'product_id'> = {
     document_name: '',
     description: '',
     is_required: true,
-    sort_order: 0
+    sort_order: 1
 };
 
 export default function AdminManageRequiredDocs() {
@@ -27,6 +28,10 @@ export default function AdminManageRequiredDocs() {
     const [isModalOpen, setModalOpen] = useState(false);
     const [currentDoc, setCurrentDoc] = useState<Partial<RequiredDocument>>(emptyDoc);
     const [isEditing, setIsEditing] = useState(false);
+    const [availablePriorities, setAvailablePriorities] = useState<number[]>([]);
+    
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [docToDelete, setDocToDelete] = useState<RequiredDocument | null>(null);
 
     const fetchProductAndDocs = useCallback(async () => {
         if (!productId) return;
@@ -43,7 +48,8 @@ export default function AdminManageRequiredDocs() {
 
             const { data: docsData, error: docsError } = await getRequiredDocuments(productId);
             if (docsError) throw new Error('Error al cargar los documentos requeridos.');
-            setDocuments(docsData || []);
+            const sortedDocs = (docsData || []).sort((a, b) => a.sort_order - b.sort_order);
+            setDocuments(sortedDocs);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -55,24 +61,46 @@ export default function AdminManageRequiredDocs() {
         fetchProductAndDocs();
     }, [fetchProductAndDocs]);
 
+    const calculateAvailablePriorities = (editingDoc: Partial<RequiredDocument> | null) => {
+        const usedPriorities = documents.map(doc => doc.sort_order);
+        const priorities = [];
+        const limit = documents.length + 5; 
+
+        for (let i = 1; i <= limit; i++) {
+            if (!usedPriorities.includes(i)) {
+                priorities.push(i);
+            }
+        }
+
+        if (isEditing && editingDoc?.sort_order && !priorities.includes(editingDoc.sort_order)) {
+            priorities.push(editingDoc.sort_order);
+            priorities.sort((a, b) => a - b);
+        }
+        
+        setAvailablePriorities(priorities);
+    };
+
     const handleOpenModal = (doc: RequiredDocument | null = null) => {
         if (doc) {
             setIsEditing(true);
             setCurrentDoc(doc);
+            calculateAvailablePriorities(doc);
         } else {
             setIsEditing(false);
             const maxOrder = documents.reduce((max, d) => Math.max(max, d.sort_order), 0);
-            setCurrentDoc({ ...emptyDoc, sort_order: maxOrder + 1 });
+            const newDoc = { ...emptyDoc, sort_order: maxOrder + 1 };
+            setCurrentDoc(newDoc);
+            calculateAvailablePriorities(newDoc);
         }
         setModalOpen(true);
     };
 
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
         const checked = (e.target as HTMLInputElement).checked;
         setCurrentDoc(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : (type === 'number' ? parseInt(value) || 0 : value)
+            [name]: type === 'checkbox' ? checked : (name === 'sort_order' ? parseInt(value) : value)
         }));
     };
 
@@ -86,7 +114,7 @@ export default function AdminManageRequiredDocs() {
                     document_name: currentDoc.document_name,
                     description: currentDoc.description || null,
                     is_required: currentDoc.is_required || false,
-                    sort_order: currentDoc.sort_order || 0
+                    sort_order: currentDoc.sort_order || 1
                 });
             } else {
                 await createRequiredDocument({
@@ -94,7 +122,7 @@ export default function AdminManageRequiredDocs() {
                     document_name: currentDoc.document_name,
                     description: currentDoc.description || null,
                     is_required: currentDoc.is_required || false,
-                    sort_order: currentDoc.sort_order || 0
+                    sort_order: currentDoc.sort_order || 1
                 });
             }
             setModalOpen(false);
@@ -104,14 +132,20 @@ export default function AdminManageRequiredDocs() {
         }
     };
 
-    const handleDelete = async (docId: string) => {
-        if (window.confirm('¿Estás seguro de que quieres eliminar este documento requerido?')) {
-            try {
-                await deleteRequiredDocument(docId);
-                fetchProductAndDocs();
-            } catch (err: any) {
-                setError(err.message);
-            }
+    const handleDeleteClick = (doc: RequiredDocument) => {
+        setDocToDelete(doc);
+        setShowDeleteModal(true);
+    };
+
+    const confirmDelete = async () => {
+        if (!docToDelete) return;
+        try {
+            await deleteRequiredDocument(docToDelete.id);
+            setShowDeleteModal(false);
+            setDocToDelete(null);
+            fetchProductAndDocs();
+        } catch (err: any) {
+            setError(err.message);
         }
     };
 
@@ -126,21 +160,21 @@ export default function AdminManageRequiredDocs() {
                         <Link to="/admin/dashboard/insurance-products" className="text-sm text-blue-600 hover:underline">← Volver a Productos</Link>
                         <h2 className="text-3xl font-bold text-blue-700">Documentos para: {productName}</h2>
                     </div>
-                    <button onClick={() => handleOpenModal()} className="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700">
+                    <Button color="success" onClick={() => handleOpenModal()}>
+                        <Icon icon="solar:add-circle-bold" className="mr-2 h-5 w-5" />
                         Añadir Documento
-                    </button>
+                    </Button>
                 </div>
 
                 {documents.length === 0 ? (
-                    <p className="text-center text-gray-500 py-10">No hay documentos requeridos definidos para este producto.</p>
+                    <p className="text-center text-gray-500 py-10">No hay documentos requeridos definidos.</p>
                 ) : (
                     <div className="overflow-x-auto rounded-lg border">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Orden</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prioridad</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre del Documento</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requerido</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
                                 </tr>
@@ -148,13 +182,12 @@ export default function AdminManageRequiredDocs() {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {documents.map(doc => (
                                     <tr key={doc.id}>
-                                        <td className="px-6 py-4">{doc.sort_order}</td>
+                                        <td className="px-6 py-4 font-bold text-lg text-gray-700">{doc.sort_order}</td>
                                         <td className="px-6 py-4 font-medium">{doc.document_name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{doc.description}</td>
-                                        <td className="px-6 py-4">{doc.is_required ? <Icon icon="solar:check-circle-bold" className="text-green-500 h-5 w-5" /> : <Icon icon="solar:close-circle-bold" className="text-red-500 h-5 w-5" />}</td>
+                                        <td className="px-6 py-4">{doc.is_required ? <Icon icon="solar:check-circle-bold" className="text-green-500 h-6 w-6" /> : <Icon icon="solar:close-circle-bold" className="text-red-500 h-6 w-6" />}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button onClick={() => handleOpenModal(doc)} className="text-indigo-600 hover:text-indigo-900 mr-4">Editar</button>
-                                            <button onClick={() => handleDelete(doc.id)} className="text-red-600 hover:text-red-900">Eliminar</button>
+                                            <Button size="xs" color="light" onClick={() => handleOpenModal(doc)}>Editar</Button>
+                                            <Button size="xs" color="failure" onClick={() => handleDeleteClick(doc)} className="ml-2">Eliminar</Button>
                                         </td>
                                     </tr>
                                 ))}
@@ -164,35 +197,51 @@ export default function AdminManageRequiredDocs() {
                 )}
             </div>
             
-            {isModalOpen && (
-                 <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
-                    <div className="bg-white p-8 rounded-lg shadow-2xl w-full max-w-lg">
-                        <h3 className="text-2xl font-bold mb-6">{isEditing ? 'Editar' : 'Añadir'} Documento Requerido</h3>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label htmlFor="document_name" className="block text-sm font-medium">Nombre del Documento</label>
-                                <input type="text" name="document_name" id="document_name" value={currentDoc.document_name || ''} onChange={handleFormChange} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"/>
-                            </div>
-                            <div>
-                                <label htmlFor="description" className="block text-sm font-medium">Descripción (para el cliente)</label>
-                                <textarea name="description" id="description" value={currentDoc.description || ''} onChange={handleFormChange} rows={3} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"/>
-                            </div>
-                            <div>
-                                <label htmlFor="sort_order" className="block text-sm font-medium">Orden de Visualización</label>
-                                <input type="number" name="sort_order" id="sort_order" value={currentDoc.sort_order || 0} onChange={handleFormChange} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"/>
-                            </div>
-                            <div className="flex items-center">
-                                <input type="checkbox" name="is_required" id="is_required" checked={currentDoc.is_required || false} onChange={handleFormChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded"/>
-                                <label htmlFor="is_required" className="ml-2 block text-sm">Este documento es obligatorio</label>
-                            </div>
-                            <div className="flex justify-end gap-4 pt-4">
-                                <button type="button" onClick={() => setModalOpen(false)} className="bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300">Cancelar</button>
-                                <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">{isEditing ? 'Guardar Cambios' : 'Añadir Documento'}</button>
-                            </div>
-                        </form>
+            <Modal show={isModalOpen} onClose={() => setModalOpen(false)} size="lg">
+                <Modal.Header>{isEditing ? 'Editar' : 'Añadir'} Documento Requerido</Modal.Header>
+                <Modal.Body>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div>
+                            <Label htmlFor="document_name" value="Nombre del Documento" />
+                            <TextInput id="document_name" name="document_name" value={currentDoc.document_name || ''} onChange={handleFormChange} required />
+                        </div>
+                        <div>
+                            <Label htmlFor="description" value="Descripción (visible para el cliente)" />
+                            <Textarea id="description" name="description" value={currentDoc.description || ''} onChange={handleFormChange} rows={3} />
+                        </div>
+                        <div>
+                            <Label htmlFor="sort_order" value="Prioridad de Visualización" />
+                            <select id="sort_order" name="sort_order" value={currentDoc.sort_order} onChange={handleFormChange} required className="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                                {availablePriorities.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox id="is_required" name="is_required" checked={currentDoc.is_required || false} onChange={handleFormChange} />
+                            <Label htmlFor="is_required">Este documento es obligatorio</Label>
+                        </div>
+                    </form>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button color="gray" onClick={() => setModalOpen(false)}>Cancelar</Button>
+                    <Button color="blue" onClick={handleSubmit}>{isEditing ? 'Guardar Cambios' : 'Añadir Documento'}</Button>
+                </Modal.Footer>
+            </Modal>
+
+            <Modal show={showDeleteModal} size="md" popup onClose={() => setShowDeleteModal(false)}>
+                <Modal.Header />
+                <Modal.Body>
+                    <div className="text-center">
+                        <Icon icon="solar:danger-bold-duotone" className="mx-auto mb-4 h-14 w-14 text-gray-400" />
+                        <h3 className="mb-5 text-lg font-normal text-gray-500">
+                            ¿Estás seguro de que quieres eliminar el documento "{docToDelete?.document_name}"?
+                        </h3>
+                        <div className="flex justify-center gap-4">
+                            <Button color="failure" onClick={confirmDelete}>Sí, eliminar</Button>
+                            <Button color="gray" onClick={() => setShowDeleteModal(false)}>No, cancelar</Button>
+                        </div>
                     </div>
-                 </div>
-            )}
+                </Modal.Body>
+            </Modal>
         </>
     );
 }

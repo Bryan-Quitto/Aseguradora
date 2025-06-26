@@ -1,56 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from 'src/supabase/client'; // Importa el cliente de Supabase real
-import FileUpload from 'src/components/shared/FileUpload'; // Importa el componente FileUpload real
+import { supabase } from 'src/supabase/client';
+import FileUpload from 'src/components/shared/FileUpload';
+import { Policy, getPoliciesByClientId } from '../../policies/policy_management';
 
-// Importa los tipos y funciones necesarios desde tu archivo de gestión de pólizas
-import {
-    Policy, // Importa la interfaz Policy de policy_management.ts
-    getPoliciesByClientId, // Importa la función para obtener pólizas por ID de cliente
-} from '../../policies/policy_management'; // Ajusta esta ruta según la ubicación real de tu archivo
-
-// Define tipos para los documentos que se manejarán localmente.
 interface Document {
     id: string;
     policy_id: string;
     document_name: string;
     file_path: string;
     uploaded_at: string;
-    file_url?: string; // URL pública para descarga
+    file_url?: string;
     uploaded_by: string;
-    document_type?: string; // <--- Añadido el tipo de documento
+    document_type?: string;
 }
 
 const ClientDocumentUpload: React.FC = () => {
-    // Variables de estado para la carga y el manejo de errores
     const [loadingPolicies, setLoadingPolicies] = useState(true);
     const [loadingDocuments, setLoadingDocuments] = useState(false);
     const [uploadingDocument, setUploadingDocument] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-    // Estado para los datos
     const [policies, setPolicies] = useState<Policy[]>([]);
     const [selectedPolicyId, setSelectedPolicyId] = useState<string | null>(null);
-    const [documents, setDocuments] = useState<Document[]>([]);// Usamos la interfaz Document actualizada
+    const [documents, setDocuments] = useState<Document[]>([]);
     const [userId, setUserId] = useState<string | null>(null);
-
-    // Estados para el modal de eliminación
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [docToDelete, setDocToDelete] = useState<{ id: string; filePath: string; name: string } | null>(null);
 
-    // Formatos de archivo aceptados
     const acceptedFileTypes = ".pdf,.jpg,.jpeg,.png,.svg";
-    const acceptedFileTypesDisplay = acceptedFileTypes.replace(/\./g, '').toUpperCase().split(',').join(', '); // Formatear para mostrar
+    const acceptedFileTypesDisplay = acceptedFileTypes.replace(/\./g, '').toUpperCase().split(',').join(', ');
 
-    // Efecto para obtener el ID del usuario actual y cargar las pólizas al montar el componente
     useEffect(() => {
         const fetchUserAndPolicies = async () => {
             setLoadingPolicies(true);
             setError(null);
-            setSuccessMessage(null); // Limpia mensajes de éxito anteriores
+            setSuccessMessage(null);
 
             try {
-                // Obtener la sesión autenticada actual
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession();
                 if (sessionError) {
                     throw new Error(`Error al obtener sesión: ${sessionError.message}`);
@@ -58,7 +44,6 @@ const ClientDocumentUpload: React.FC = () => {
 
                 if (session?.user) {
                     setUserId(session.user.id);
-                    // Usa la función importada de policy_management para obtener las pólizas
                     const { data: policiesData, error: policiesError } = await getPoliciesByClientId(session.user.id);
 
                     if (policiesError) {
@@ -67,15 +52,11 @@ const ClientDocumentUpload: React.FC = () => {
 
                     if (policiesData && policiesData.length > 0) {
                         setPolicies(policiesData);
-                        // Seleccionar automáticamente la primera póliza si está disponible
                         setSelectedPolicyId(policiesData[0].id);
-                        // Consola para depuración: Comprueba la estructura de policy.insurance_products
-                        console.log("Datos de pólizas recibidos:", policiesData);
-                        policiesData.forEach(p => console.log(`Póliza ID: ${p.id}, Nombre del producto: `, p.insurance_products));
                     } else {
                         setPolicies([]);
-                        setSelectedPolicyId(null); // Asegúrate de que no haya una póliza seleccionada
-                        setSuccessMessage("No tienes pólizas activas. Por favor, crea una para subir documentos.");
+                        setSelectedPolicyId(null);
+                        setSuccessMessage("No tienes pólizas. Por favor, crea una para subir documentos.");
                     }
                 } else {
                     setError("No se pudo obtener la información del usuario. Por favor, inicie sesión.");
@@ -89,12 +70,11 @@ const ClientDocumentUpload: React.FC = () => {
         };
 
         fetchUserAndPolicies();
-    }, []); // Se ejecuta una vez al montar el componente
+    }, []);
 
-    // Función auxiliar para recargar documentos de una póliza específica
     const fetchDocumentsForPolicy = async (policyId: string) => {
         setLoadingDocuments(true);
-        setError(null); // Limpiar errores antes de una nueva carga
+        setError(null);
         try {
             const { data, error: docsError } = await supabase
                 .from('policy_documents')
@@ -107,12 +87,17 @@ const ClientDocumentUpload: React.FC = () => {
             }
 
             const documentsWithUrls = await Promise.all((data || []).map(async (doc: Document) => {
-                const { data: urlData } = supabase.storage
-                    .from('documents') // Asegúrate de que el bucket se llame 'documents' en Supabase Storage
-                    .getPublicUrl(doc.file_path);
-                return { ...doc, file_url: urlData?.publicUrl || '#' };
+                let fileUrl = '#';
+                if (doc.file_path.startsWith('contracts/')) {
+                    const { data: urlData } = supabase.storage.from('contracts').getPublicUrl(doc.file_path);
+                    fileUrl = urlData?.publicUrl || '#';
+                } else {
+                    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(doc.file_path);
+                    fileUrl = urlData?.publicUrl || '#';
+                }
+                return { ...doc, file_url: fileUrl };
             }));
-            setDocuments(documentsWithUrls as Document[]); // Aseguramos el tipo
+            setDocuments(documentsWithUrls as Document[]);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error desconocido al recargar los documentos.');
             console.error('Error re-fetching documents:', err);
@@ -121,16 +106,14 @@ const ClientDocumentUpload: React.FC = () => {
         }
     };
 
-    // Efecto para cargar documentos cuando cambia selectedPolicyId
     useEffect(() => {
         if (selectedPolicyId) {
             fetchDocumentsForPolicy(selectedPolicyId);
         } else {
-            setDocuments([]); // Limpiar documentos si no hay póliza seleccionada
+            setDocuments([]);
         }
-    }, [selectedPolicyId]); // Se vuelve a ejecutar cuando cambia selectedPolicyId
+    }, [selectedPolicyId]);
 
-    // Manejador para cuando se selecciona un nuevo archivo para subir
     const handleDocumentUpload = async (files: FileList | null) => {
         if (!files || files.length === 0) {
             setError('Por favor seleccione un documento para subir.');
@@ -153,7 +136,6 @@ const ClientDocumentUpload: React.FC = () => {
         setError(null);
         setSuccessMessage(null);
 
-        // --- VALIDACIÓN DE TIPO DE ARCHIVO AÑADIDA ---
         const allowedExtensions = acceptedFileTypes.split(',').map(ext => ext.trim().toLowerCase());
         const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
@@ -162,23 +144,19 @@ const ClientDocumentUpload: React.FC = () => {
             setUploadingDocument(false);
             return;
         }
-        // --- FIN VALIDACIÓN ---
 
-        let uploadedFilePath: string | null = null; // Para guardar la ruta si la subida es exitosa
+        let uploadedFilePath: string | null = null;
 
         try {
-            // Generar un nombre de archivo único y una ruta que incluya policy_id para organización
-            // Eliminar caracteres especiales que puedan causar problemas en la ruta del archivo
-            const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_'); // Permite guiones bajos y guiones
+            const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
             const uniqueFileName = `${Date.now()}-${sanitizedFileName}`;
-            const filePath = `policies/${selectedPolicyId}/${uniqueFileName}`; // Ruta en Supabase Storage
+            const filePath = `policies/${selectedPolicyId}/${uniqueFileName}`;
 
-            // Subir el archivo al bucket 'documents' de Supabase Storage
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('documents') // Asegúrate de tener un bucket llamado 'documents' en Supabase Storage
+                .from('documents')
                 .upload(filePath, file, {
-                    cacheControl: '3600', // Cache por 1 hora
-                    upsert: false, // No sobrescribir si el archivo existe
+                    cacheControl: '3600',
+                    upsert: false,
                 });
 
             if (uploadError) {
@@ -187,34 +165,27 @@ const ClientDocumentUpload: React.FC = () => {
             if (!uploadData?.path) {
                 throw new Error('La ruta del archivo subido es nula o indefinida.');
             }
-            uploadedFilePath = uploadData.path; // Guarda la ruta para posible limpieza
+            uploadedFilePath = uploadData.path;
 
-            // Guardar los metadatos del documento en la tabla 'policy_documents'
             const { error: dbError } = await supabase
                 .from('policy_documents')
                 .insert({
                     policy_id: selectedPolicyId,
-                    document_name: file.name, // Nombre original del archivo
-                    file_path: uploadedFilePath, // Ruta devuelta por Supabase Storage
+                    document_name: file.name,
+                    file_path: uploadedFilePath,
                     uploaded_by: userId,
-                    document_type: 'policies', // <--- Tipo de documento por defecto 'policies'
+                    document_type: 'policies',
                 });
 
             if (dbError) {
-                // Si la inserción falla después de la subida, intenta eliminar el archivo de storage
                 console.error('Error al insertar metadatos del documento en DB, intentando limpiar el archivo subido:', dbError);
                 if (uploadedFilePath) {
-                    const { error: removeError } = await supabase.storage.from('documents').remove([uploadedFilePath]);
-                    if (removeError) {
-                        console.error('Error al intentar eliminar el archivo subido de Storage:', removeError.message);
-                    }
+                    await supabase.storage.from('documents').remove([uploadedFilePath]);
                 }
                 throw new Error(`Error al guardar información del documento: ${dbError.message}`);
             }
 
             setSuccessMessage('¡Documento subido exitosamente!');
-            console.log('Document uploaded successfully:', uploadedFilePath);
-            // Vuelve a cargar los documentos para actualizar la lista
             if (selectedPolicyId) {
                 await fetchDocumentsForPolicy(selectedPolicyId);
             }
@@ -222,36 +193,26 @@ const ClientDocumentUpload: React.FC = () => {
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error desconocido al subir el documento.');
             console.error('Error during document upload:', err);
-            setSuccessMessage(null); // Borra el mensaje de éxito en caso de error
+            setSuccessMessage(null);
         } finally {
             setUploadingDocument(false);
         }
     };
 
-    /**
-     * Inicia el proceso de eliminación de un documento, mostrando el modal de confirmación.
-     * @param docId El ID del documento a eliminar.
-     * @param filePath La ruta del archivo en Storage.
-     * @param docName El nombre del documento para mostrar en el modal.
-     */
     const confirmDelete = (docId: string, filePath: string, docName: string) => {
         setDocToDelete({ id: docId, filePath: filePath, name: docName });
         setShowDeleteModal(true);
     };
 
-    /**
-     * Ejecuta la eliminación del documento después de la confirmación del modal.
-     */
     const handleDeleteDocument = async () => {
-        if (!docToDelete) return; // No debería pasar si el modal se dispara correctamente
+        if (!docToDelete) return;
 
-        setUploadingDocument(true); // Reutilizamos este estado para indicar una operación en curso
+        setUploadingDocument(true);
         setError(null);
         setSuccessMessage(null);
-        setShowDeleteModal(false); // Cierra el modal inmediatamente
+        setShowDeleteModal(false);
 
         try {
-            // 1. Eliminar el registro del documento de la tabla 'policy_documents'
             const { error: dbDeleteError } = await supabase
                 .from('policy_documents')
                 .delete()
@@ -261,20 +222,16 @@ const ClientDocumentUpload: React.FC = () => {
                 throw new Error(`Error al eliminar el registro del documento de la base de datos: ${dbDeleteError.message}`);
             }
 
-            // 2. Eliminar el archivo de Supabase Storage
             const { error: storageDeleteError } = await supabase.storage
-                .from('documents') // Asegúrate de que el bucket es 'documents'
+                .from('documents')
                 .remove([docToDelete.filePath]);
 
             if (storageDeleteError) {
-                // Si falla la eliminación del Storage, lo registramos pero no bloqueamos la operación general
                 console.error(`Error al eliminar el archivo de Storage: ${storageDeleteError.message}`);
-                // Podrías considerar un mensaje de error más específico aquí si solo falla Storage
             }
 
             setSuccessMessage(`Documento "${docToDelete.name}" eliminado exitosamente.`);
-            setDocToDelete(null); // Limpia el estado del documento a eliminar
-            // Recarga la lista de documentos para reflejar los cambios
+            setDocToDelete(null);
             if (selectedPolicyId) {
                 await fetchDocumentsForPolicy(selectedPolicyId);
             }
@@ -286,7 +243,6 @@ const ClientDocumentUpload: React.FC = () => {
         }
     };
 
-    // Renderizar estado de carga para pólizas
     if (loadingPolicies) {
         return (
             <div className="flex justify-center items-center h-64">
@@ -296,7 +252,6 @@ const ClientDocumentUpload: React.FC = () => {
         );
     }
 
-    // Renderizar mensaje si no se encuentran pólizas
     if (!policies || policies.length === 0) {
         return (
             <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100 text-center">
@@ -310,27 +265,21 @@ const ClientDocumentUpload: React.FC = () => {
         );
     }
 
-    // Función auxiliar para obtener el nombre del producto de forma segura
     const getProductName = (policy: Policy) => {
         if (policy.insurance_products) {
-            // Verifica si es un array (según la interfaz)
             if (Array.isArray(policy.insurance_products) && policy.insurance_products.length > 0) {
                 return policy.insurance_products[0]?.name;
             } else {
-                // Si no es un array, pero existe, asume que es el objeto directo (según el console.log)
-                // Usamos una aserción de tipo para que TypeScript lo acepte.
                 return (policy.insurance_products as { name?: string })?.name;
             }
         }
-        return undefined; // Retorna undefined si no se encuentra el nombre
+        return undefined;
     };
 
-    // Renderizado principal del componente
     return (
         <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
             <h2 className="text-2xl font-bold text-blue-800 mb-6 text-center">Mis Documentos por Póliza</h2>
 
-            {/* Policy Selector */}
             <div className="mb-6">
                 <label htmlFor="policy-select" className="block text-gray-700 text-lg font-medium mb-2">
                     Selecciona una Póliza:
@@ -354,7 +303,6 @@ const ClientDocumentUpload: React.FC = () => {
                 </div>
             </div>
 
-            {/* Document List for Selected Policy */}
             <div className="mb-8">
                 <h3 className="text-xl font-semibold text-blue-700 mb-4">Documentos de la Póliza Seleccionada</h3>
                 {loadingDocuments ? (
@@ -363,66 +311,64 @@ const ClientDocumentUpload: React.FC = () => {
                     <div className="text-gray-600 italic">No hay documentos subidos para esta póliza aún.</div>
                 ) : (
                     <ul className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        {documents.map((doc) => (
-                            <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
-                                <span className="text-gray-800 break-words flex-grow mr-4">
-                                    {doc.document_type === 'signature' ? 'Firma' : doc.document_name} {/* <-- Texto condicional */}
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                    <a
-                                        href={doc.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
-                                    >
-                                        Ver
-                                    </a>
-                                    {doc.document_type !== 'signature' && ( // <-- Botón de eliminar condicional
-                                        <button
-                                            onClick={() => confirmDelete(doc.id, doc.file_path, doc.document_name)}
-                                            className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                                            disabled={uploadingDocument} // Deshabilitar durante la subida/eliminación
+                        {documents.map((doc) => {
+                            const isProtectedDocument = doc.document_type === 'signature' || doc.document_type === 'contract_snapshot';
+                            return (
+                                <li key={doc.id} className="flex justify-between items-center py-2 border-b last:border-b-0 border-gray-200">
+                                    <span className="text-gray-800 break-words flex-grow mr-4">
+                                        {doc.document_name}
+                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                        <a
+                                            href={doc.file_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out"
                                         >
-                                            Eliminar
-                                        </button>
-                                    )}
-                                </div>
-                            </li>
-                        ))}
+                                            Ver
+                                        </a>
+                                        {!isProtectedDocument && (
+                                            <button
+                                                onClick={() => confirmDelete(doc.id, doc.file_path, doc.document_name)}
+                                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-full text-sm transition duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                                                disabled={uploadingDocument}
+                                            >
+                                                Eliminar
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
             </div>
 
-            {/* File Upload Section */}
             <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-xl font-semibold text-blue-700 mb-4">Subir Nuevo Documento</h3>
                 <p className="text-gray-600 mb-4">
                     Por favor, seleccione el documento que desea subir para la póliza seleccionada.
                 </p>
-
                 <FileUpload
                     id="document-upload"
                     name="document-upload"
                     label={`Seleccionar Documento (Formatos: ${acceptedFileTypesDisplay})`}
                     onChange={handleDocumentUpload}
-                    accept={acceptedFileTypes} // Usar la constante definida
-                    disabled={!selectedPolicyId || uploadingDocument} // Deshabilitar si no hay póliza seleccionada o si se está subiendo
+                    accept={acceptedFileTypes}
+                    disabled={!selectedPolicyId || uploadingDocument}
                 />
-
                 {error && (
                     <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4" role="alert">
                         <strong className="font-bold">¡Error!</strong>
                         <span className="block sm:inline ml-2">{error}</span>
                     </div>
                 )}
-
                 {successMessage && (
                     <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mt-4" role="alert">
                         <strong className="font-bold">¡Éxito!</strong>
                         <span className="block sm:inline ml-2">{successMessage}</span>
                     </div>
                 )}
-
                 {uploadingDocument && (
                     <div className="flex items-center justify-center text-gray-600 mt-4">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mr-3"></div>
@@ -431,7 +377,6 @@ const ClientDocumentUpload: React.FC = () => {
                 )}
             </div>
 
-            {/* Modal de Confirmación de Eliminación */}
             {showDeleteModal && docToDelete && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">

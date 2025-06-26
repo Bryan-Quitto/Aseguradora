@@ -5,8 +5,6 @@ import Loadable from 'src/layouts/full/shared/loadable/Loadable';
 const FullLayout = Loadable(lazy(() => import('../layouts/full/FullLayout')));
 const BlankLayout = Loadable(lazy(() => import('../layouts/blank/BlankLayout')));
 
-const Dashboard = Loadable(lazy(() => import('../views/dashboards/Dashboard')));
-
 const DashboardAdmin = Loadable(lazy(() => import('../features/admin/Dashboard_administrador')));
 const AdminPolicyList = Loadable(lazy(() => import('../features/admin/AdminPolicyList')));
 const AdminEditPolicy = Loadable(lazy(() => import('../features/admin/AdminEditPolicy')));
@@ -86,7 +84,7 @@ const RouterConfig = [
         path: '/',
         element: <FullLayout />,
         children: [
-            { path: '/dashboard', element: <Dashboard /> },
+            { path: '/dashboard', element: <Navigate to="/auth/404" replace /> },
             {
                 path: '/admin/dashboard',
                 element: (

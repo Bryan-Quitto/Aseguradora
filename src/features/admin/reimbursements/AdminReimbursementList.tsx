@@ -3,29 +3,19 @@ import { Link } from 'react-router-dom';
 import { useAuth } from 'src/contexts/AuthContext';
 import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
-import { 
-    getAllReimbursementRequests, 
-    ReimbursementRequest,
-    getClientProfileById,
-    getPolicyInfoById,
-    ClientProfileInfo,
-    PolicyInfo
-} from 'src/features/reimbursements/reimbursement_management';
+import { getAllReimbursementRequests } from 'src/features/reimbursements/reimbursement_management';
+
+type ApiResultType = Awaited<ReturnType<typeof getAllReimbursementRequests>>;
+type EnhancedReimbursementRequest = ApiResultType['data'] extends (infer U)[] | null ? U : never;
 
 const getStatusStyles = (status: string) => {
     switch (status) {
-        case 'approved':
-            return 'bg-green-100 text-green-800';
-        case 'in_review':
-            return 'bg-blue-100 text-blue-800';
-        case 'pending':
-            return 'bg-yellow-100 text-yellow-800';
-        case 'more_info_needed':
-            return 'bg-orange-100 text-orange-800';
-        case 'rejected':
-            return 'bg-red-100 text-red-800';
-        default:
-            return 'bg-gray-100 text-gray-800';
+        case 'approved': return 'bg-green-100 text-green-800';
+        case 'in_review': return 'bg-blue-100 text-blue-800';
+        case 'pending': return 'bg-yellow-100 text-yellow-800';
+        case 'more_info_needed': return 'bg-orange-100 text-orange-800';
+        case 'rejected': return 'bg-red-100 text-red-800';
+        default: return 'bg-gray-100 text-gray-800';
     }
 };
 
@@ -34,9 +24,7 @@ const formatStatus = (status: string) => {
 };
 
 export default function AdminReimbursementList() {
-    const [reimbursements, setReimbursements] = useState<ReimbursementRequest[]>([]);
-    const [clientDetails, setClientDetails] = useState<Map<string, ClientProfileInfo>>(new Map());
-    const [policyDetails, setPolicyDetails] = useState<Map<string, PolicyInfo>>(new Map());
+    const [reimbursements, setReimbursements] = useState<EnhancedReimbursementRequest[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [searchCedula, setSearchCedula] = useState('');
@@ -54,33 +42,10 @@ export default function AdminReimbursementList() {
             setError(null);
 
             try {
-                // 1. Obtener la lista plana de reembolsos
-                const { data: requestsData, error: requestsError } = await getAllReimbursementRequests();
+                const { data, error: requestsError } = await getAllReimbursementRequests();
                 if (requestsError) throw requestsError;
-                if (!requestsData) return;
-
-                setReimbursements(requestsData);
-
-                // 2. Recopilar IDs únicos para clientes y pólizas
-                const clientIds = new Set(requestsData.map(r => r.client_id));
-                const policyIds = new Set(requestsData.map(r => r.policy_id));
-
-                // 3. Obtener detalles de clientes y guardarlos en un mapa
-                const newClientDetails = new Map<string, ClientProfileInfo>();
-                for (const id of clientIds) {
-                    const { data } = await getClientProfileById(id);
-                    if (data) newClientDetails.set(id, data);
-                }
-                setClientDetails(newClientDetails);
-
-                // 4. Obtener detalles de pólizas y guardarlos en un mapa
-                const newPolicyDetails = new Map<string, PolicyInfo>();
-                for (const id of policyIds) {
-                    const { data } = await getPolicyInfoById(id);
-                    if (data) newPolicyDetails.set(id, data);
-                }
-                setPolicyDetails(newPolicyDetails);
-
+                
+                setReimbursements(data || []);
             } catch (err: any) {
                 setError(`Error al cargar los datos: ${err.message}`);
             } finally {
@@ -88,12 +53,13 @@ export default function AdminReimbursementList() {
             }
         };
 
-        fetchAllData();
+        if (userRole) {
+            fetchAllData();
+        }
     }, [userRole]);
 
     const filteredReimbursements = reimbursements.filter((request) => {
-        const clientInfo = clientDetails.get(request.client_id);
-        const cedula = clientInfo?.numero_identificacion || '';
+        const cedula = request.profiles?.numero_identificacion || '';
         return searchCedula === '' || cedula.startsWith(searchCedula);
     });
 
@@ -144,90 +110,47 @@ export default function AdminReimbursementList() {
 
             {filteredReimbursements.length === 0 ? (
                 <p className="text-lg text-gray-600 text-center py-10">
-                    No se encontraron solicitudes de reembolso que coincidan con la búsqueda.
+                    No se encontraron solicitudes de reembolso.
                 </p>
             ) : (
                 <div className="overflow-x-auto rounded-lg border border-gray-200">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-blue-50">
                             <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Cliente
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Cédula
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Nº de Póliza
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Fecha Solicitud
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Monto Solicitado
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Estado
-                                </th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Acciones
-                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cédula</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº de Póliza</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Solicitud</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Solicitado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Aprobado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredReimbursements.map((request) => {
-                                const clientInfo = clientDetails.get(request.client_id);
-                                const policyInfo = policyDetails.get(request.policy_id);
-
-                                const clientFullName = clientInfo?.full_name || 'Cargando...';
-                                const clientCedula = clientInfo?.numero_identificacion || 'Cargando...';
-                                const policyNumber = policyInfo?.policy_number || 'Cargando...';
-                                const requestDate = format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es });
-                                const amount = request.amount_requested ? `$${request.amount_requested.toFixed(2)}` : 'No especificado';
-
-                                return (
-                                    <tr key={request.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {clientFullName}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {clientCedula}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {policyNumber}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {requestDate}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                            {amount}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>
-                                                {formatStatus(request.status)}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <Link
-                                            to={`/admin/dashboard/reimbursements/${request.id}`}
-                                            className="text-blue-600 hover:text-blue-900 mr-4"
-                                        >
-                                            Revisar Solicitud
-                                        </Link>
-                                        
-                                        {/* --- AÑADE ESTE NUEVO LINK AQUÍ --- */}
-                                        {request.status !== 'approved' && (
-                                            <Link
-                                                to={`/admin/dashboard/reimbursements/${request.id}/edit`}
-                                                className="text-indigo-600 hover:text-indigo-900"
-                                            >
+                            {filteredReimbursements.map((request) => (
+                                <tr key={request.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{request.profiles?.full_name || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.profiles?.numero_identificacion || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.policies?.policy_number || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{format(new Date(request.request_date), "dd 'de' MMMM, yyyy", { locale: es })}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{request.amount_requested ? `$${request.amount_requested.toFixed(2)}` : 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{request.status === 'approved' && request.amount_approved ? `$${request.amount_approved.toFixed(2)}` : '-'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusStyles(request.status)}`}>
+                                            {formatStatus(request.status)}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex items-center space-x-4">
+                                        <Link to={`/admin/dashboard/reimbursements/${request.id}`} className="text-blue-600 hover:text-blue-900">Revisar</Link>
+                                        {['pending', 'in_review', 'more_info_needed', 'approved', 'rejected'].includes(request.status) && (
+                                            <Link to={`/admin/dashboard/reimbursements/${request.id}/edit`} className="text-indigo-600 hover:text-indigo-900">
                                                 Editar
                                             </Link>
                                         )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>

@@ -6,42 +6,33 @@ import Header from './header/Header';
 import Topbar from './header/Topbar';
 
 const FullLayout: FC = () => {
-  const location = useLocation();
-  const isLandingPage = location.pathname === '/';
-  // Detecta si es una ruta del admin dashboard
-  const isAdminDashboard = location.pathname.startsWith('/admin/dashboard');
+    const location = useLocation();
+    const isLandingPage = location.pathname === '/';
 
-  return (
-    <>
-      <Topbar />
-      {/* Contenedor principal de la página. Asegúrate de que este div pueda crecer horizontalmente si es necesario. */}
-      {/* Puedes agregar 'flex-grow' aquí si este div es parte de un flex column padre para que ocupe el espacio. */}
-      <div className={`flex w-full min-h-screen bg-blue-50 dark:bg-dark ${isLandingPage ? 'no-sidebar-layout' : ''}`}>
-        <div className="page-wrapper flex w-full">
-          {/* Header/sidebar */}
-          {!isLandingPage && <Sidebar />} {/* Renderiza Sidebar condicionalmente */}
+    return (
+        <>
+            <Topbar />
+            <div className={`flex w-full min-h-screen bg-blue-50 dark:bg-dark ${isLandingPage ? 'no-sidebar-layout' : ''}`}>
+                <div className="page-wrapper flex w-full">
+                    {!isLandingPage && <Sidebar />}
 
-          {/* Contenido principal con barra lateral si no es la landing page */}
-          <div className="page-wrapper-sub flex flex-col w-full dark:bg-darkgray">
-            {/* Top Header */}
-            {!isLandingPage && !isAdminDashboard && <Header />}
+                    <div className="page-wrapper-sub flex flex-col w-full dark:bg-darkgray">
+                        {!isLandingPage && <Header />}
 
-            {/* Contenedor del contenido del cuerpo. Aquí es donde se agrega el overflow-x-auto. */}
-            <div className="h-full min-h-screen overflow-x-auto">
-              {/* Body Content */}
-              <div className="w-full">
-                <ScrollToTop>
-                  <div className="w-full px-4 py-8">
-                    <Outlet /> {/* Aquí se renderiza el contenido de tu ruta actual */}
-                  </div>
-                </ScrollToTop>
-              </div>
+                        <div className="h-full min-h-screen overflow-x-auto">
+                            <div className="w-full">
+                                <ScrollToTop>
+                                    <div className="w-full px-4 py-8">
+                                        <Outlet />
+                                    </div>
+                                </ScrollToTop>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+        </>
+    );
 };
 
 export default FullLayout;
