@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from 'src/contexts/AuthContext';
+import { useAuth } from 'src/contexts/useAuth';
 import { useNavigate, Link } from 'react-router-dom';
 import FileUpload from 'src/components/shared/FileUpload';
 import { Icon } from '@iconify/react';

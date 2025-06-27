@@ -1,7 +1,7 @@
 import { Button, Dropdown } from "flowbite-react";
 import user1 from "/src/assets/images/profile/user-1.jpg";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from 'src/contexts/AuthContext'; // Importar useAuth
+import { useAuth } from 'src/contexts/useAuth'; // Importar useAuth
 import { supabase } from 'src/supabase/client'; // Importar supabase
 
 const Profile = () => {

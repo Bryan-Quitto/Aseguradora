@@ -1,10 +1,11 @@
-import { Button, Table } from 'flowbite-react'; // Ya no necesitamos TextInput
+import { Button, Table, Spinner, Modal } from 'flowbite-react';
 import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { listOnlyAgentes } from './hooks/listUsers';
 import { UserProfile } from './hooks/administrador_backend';
 import { enviarCorreo } from '../../utils/enviarCorreo';
 import { supabase } from 'src/supabase/client';
+import PageContainer from 'src/components/container/PageContainer';
 
 export default function ListarSoloAgentes() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -12,7 +13,6 @@ export default function ListarSoloAgentes() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState('');
   const [modalTitle, setModalTitle] = useState('');
@@ -36,7 +36,6 @@ export default function ListarSoloAgentes() {
     fetchUsersAndCurrentUser();
   }, []);
 
-  // ========= LÓGICA DE FILTRADO MEJORADA =========
   const filteredUsers = useMemo(() => {
     if (!searchTerm) {
       return users;
@@ -46,7 +45,6 @@ export default function ListarSoloAgentes() {
     );
   }, [users, searchTerm]);
 
-  // Tu lógica de enviar correo está bien
   const handleEnviarCorreo = async (to_email: string, name: string) => {
     if (!currentUserEmail) {
       setModalTitle('Error');
@@ -65,16 +63,13 @@ export default function ListarSoloAgentes() {
     setShowModal(true);
   };
 
-  if (loading) return <div className="text-center p-10">Cargando agentes...</div>;
+  if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="xl" /></div>;
   if (error) return <div className="text-center p-10 text-red-600">Error: {error}</div>;
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-lg p-6 border border-blue-100">
-      <h2 className="text-2xl font-bold mb-4 text-blue-800">Lista de Agentes</h2>
-      <div className="flex justify-between items-center mb-6">
-        
-        {/* ========= INPUT DE BÚSQUEDA MEJORADO ========= */}
-        <div className="w-1/3 relative">
+    <PageContainer title="Lista de Agentes">
+      <div className="mb-4">
+        <div className="w-full md:w-1/3 relative">
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
              <HiSearch className="h-5 w-5 text-gray-500" />
           </div>
@@ -93,7 +88,6 @@ export default function ListarSoloAgentes() {
         </div>
       </div>
 
-      {/* He eliminado el overflow-y-auto y maxHeight para consistencia con los otros listados */}
       <div className="overflow-x-auto">
         <Table hoverable>
           <Table.Head>
@@ -107,7 +101,7 @@ export default function ListarSoloAgentes() {
           <Table.Body className="divide-y">
             {filteredUsers.length === 0 ? (
               <Table.Row>
-                <Table.Cell colSpan={6} className="text-center text-gray-500">
+                <Table.Cell colSpan={6} className="text-center text-gray-500 py-4">
                   No se encontraron agentes.
                 </Table.Cell>
               </Table.Row>
@@ -153,18 +147,19 @@ export default function ListarSoloAgentes() {
         </Table>
       </div>
 
-      {/* Modal se mantiene sin cambios */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="rounded-lg bg-white p-6 shadow-lg">
-            <h3 className="mb-2 font-bold">{modalTitle}</h3>
-            <p>{modalMessage}</p>
-            <div className="mt-4 flex justify-end">
-              <Button size="xs" onClick={() => setShowModal(false)}>Cerrar</Button>
-            </div>
+      <Modal show={showModal} size="md" onClose={() => setShowModal(false)}>
+        <Modal.Header>{modalTitle}</Modal.Header>
+        <Modal.Body>
+          <div className="text-center">
+            <p className="text-base leading-relaxed text-gray-500 dark:text-gray-400">
+              {modalMessage}
+            </p>
           </div>
-        </div>
-      )}
-    </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button onClick={() => setShowModal(false)}>Aceptar</Button>
+        </Modal.Footer>
+      </Modal>
+    </PageContainer>
   );
 }

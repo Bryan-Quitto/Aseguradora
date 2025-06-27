@@ -1,129 +1,155 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from 'src/contexts/AuthContext';
-import { Policy, getPoliciesByClientId } from '../../policies/policy_management';
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { useAuth } from 'src/contexts/useAuth';
+import ClientGenericLifePolicyForm from './ClientGenericLifePolicyForm';
+import ClientGenericHealthPolicyForm from './ClientGenericHealthPolicyForm';
+import PageContainer from 'src/components/container/PageContainer';
+import { Spinner } from 'flowbite-react';
 
-export default function ClientPolicyList() {
+interface InsuranceProduct {
+    id: string;
+    name: string;
+    type: 'life' | 'health' | 'other';
+    description: string | null;
+    duration_months: number | null;
+    coverage_details: { [key: string]: any; };
+    base_premium: number;
+    currency: string;
+    terms_and_conditions: string | null;
+    is_active: boolean;
+    admin_notes: string | null;
+    fixed_payment_frequency: 'monthly' | 'quarterly' | 'annually' | null;
+    created_at: string;
+    updated_at: string;
+}
+
+interface AgentProfile {
+    user_id: string;
+    full_name: string;
+    email: string;
+}
+
+declare const __app_id: string | undefined;
+declare const __firebase_config: string | undefined;
+declare const __initial_auth_token: string | undefined;
+
+let supabase: any = null;
+
+async function getActiveInsuranceProducts(): Promise<{ data: InsuranceProduct[] | null; error: any }> {
+    if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    const { data, error } = await supabase.from('insurance_products').select('*').eq('is_active', true);
+    return { data, error };
+}
+
+async function getActiveAgents(): Promise<{ data: AgentProfile[] | null; error: any }> {
+    if (!supabase) {
+        const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+        const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+        supabase = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    const { data, error } = await supabase.from('profiles').select('user_id, full_name, email').eq('role', 'agent').eq('status', 'active');
+    return { data, error };
+}
+
+export default function ClientPolicyForm() {
     const { user } = useAuth();
-    const [policies, setPolicies] = useState<Policy[]>([]);
+    const [products, setProducts] = useState<InsuranceProduct[]>([]);
+    const [agents, setAgents] = useState<AgentProfile[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<InsuranceProduct | null>(null);
 
     useEffect(() => {
-        const fetchPolicies = async () => {
-            if (!user?.id) {
-                setError('No se pudo identificar al cliente.');
+        const initializeAndFetch = async () => {
+            try {
+                if (!supabase) {
+                    const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL || 'YOUR_SUPABASE_URL';
+                    const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+                    supabase = createClient(supabaseUrl, supabaseAnonKey);
+                }
+                setLoading(true);
+                setError(null);
+                const { data: productsData, error: productsError } = await getActiveInsuranceProducts();
+                if (productsError) setError('Error al cargar los productos de seguro: ' + productsError.message);
+                else if (productsData) setProducts(productsData);
+
+                const { data: agentsData, error: agentsError } = await getActiveAgents();
+                if (agentsError) setError(prev => prev ? `${prev}; Error al cargar agentes.` : 'Error al cargar agentes: ' + agentsError.message);
+                else if (agentsData) setAgents(agentsData);
+            } catch (err: any) {
+                setError("Error fatal al cargar datos: " + err.message);
+            } finally {
                 setLoading(false);
-                return;
             }
-
-            setLoading(true);
-            setError(null);
-
-            const { data, error: policiesError } = await getPoliciesByClientId(user.id);
-
-            if (policiesError) {
-                setError('Error al cargar tus pólizas.');
-                setPolicies([]);
-            } else {
-                setPolicies(data || []);
-            }
-
-            setLoading(false);
         };
+        initializeAndFetch();
+    }, []);
 
-        if (user?.id) {
-            fetchPolicies();
-        }
-    }, [user?.id]);
-
-    if (loading) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <p className="text-blue-600 text-xl">Cargando tus pólizas...</p>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <p className="text-red-600 text-xl">{error}</p>
-            </div>
-        );
-    }
-
-    const capitalizeStatus = (status: Policy['status'] | undefined | null) => {
-        if (!status) return 'Desconocido';
-        const trimmedStatus = status.trim().replace('_', ' ');
-        if (trimmedStatus.length === 0) return 'Desconocido';
-        return trimmedStatus.charAt(0).toUpperCase() + trimmedStatus.slice(1);
+    const selectRandomAgentId = (): string | null => {
+        if (agents.length === 0) return null;
+        const randomIndex = Math.floor(Math.random() * agents.length);
+        return agents[randomIndex].user_id;
     };
 
-    return (
-        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-4xl border border-blue-100 mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-blue-700">Mis Pólizas</h2>
-                <Link
-                    to="/client/dashboard/policies/new"
-                    className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition duration-300 shadow-md"
-                >
-                    Contratar Póliza
-                </Link>
-            </div>
+    const handleProductSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const productId = e.target.value;
+        setSelectedProductId(productId);
+        const product = products.find(p => p.id === productId);
+        setSelectedProduct(product || null);
+        setError(null);
+    };
 
-            {policies.length === 0 ? (
-                <div className="text-center py-10 bg-gray-50 rounded-lg">
-                    <p className="text-lg text-gray-600">No tienes pólizas contratadas aún.</p>
-                     <Link to="/client/dashboard/policies/new" className="mt-4 inline-block bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition">
-                        Contratar mi primera póliza
-                    </Link>
-                </div>
-            ) : (
-                <div className="overflow-x-auto rounded-lg border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-blue-50">
-                            <tr>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Número de Póliza</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto Prima</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {policies.map((policy) => (
-                                <tr key={policy.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{policy.policy_number}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                        {policy.insurance_products?.name || 'N/A'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                                        {typeof policy.premium_amount === 'number' ? `$${policy.premium_amount.toFixed(2)}` : 'N/A'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                            policy.status === 'active' ? 'bg-green-100 text-green-800' :
-                                            policy.status === 'pending' || policy.status === 'awaiting_signature' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-red-100 text-red-800'
-                                        }`}>
-                                            {capitalizeStatus(policy.status)}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <Link
-                                            to={`/client/dashboard/policies/${policy.id}`}
-                                            className="text-blue-600 hover:text-blue-900 mr-4"
-                                        >
-                                            Ver Detalles
-                                        </Link>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
+    const resetProductSelection = () => {
+        setSelectedProductId(null);
+        setSelectedProduct(null);
+        setError(null);
+    };
+
+    if (loading) return <div className="flex justify-center items-center h-64"><Spinner size="xl" /></div>;
+    if (error) return <div className="text-red-500 text-center p-4">{error}<button onClick={resetProductSelection} className="ml-4 text-sm underline">Reintentar</button></div>;
+    if (!user || !user.id) return <div className="text-yellow-500 text-center p-4">No se pudo obtener el ID del cliente. Asegúrese de estar autenticado.</div>;
+
+    const assignedAgentId = selectedProduct ? selectRandomAgentId() : null;
+    if (selectedProduct && !assignedAgentId) return <div className="text-red-500 text-center p-4">No hay agentes activos disponibles. No se puede crear la póliza.<button onClick={resetProductSelection} className="ml-4 text-sm underline">Volver</button></div>;
+
+    const content = !selectedProduct ? (
+        <div className="w-full max-w-md mx-auto">
+            <label htmlFor="product_id" className="block text-sm font-medium text-gray-700 mb-1">
+                Selecciona un Producto de Seguro
+            </label>
+            <select id="product_id" name="product_id" value={selectedProductId || ''} onChange={handleProductSelectChange} required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                <option value="">-- Selecciona un producto --</option>
+                {products.map((product) => (
+                    <option key={product.id} value={product.id}>{product.name} ({product.type.charAt(0).toUpperCase() + product.type.slice(1)})</option>
+                ))}
+            </select>
+        </div>
+    ) : (
+        <div>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-semibold text-gray-800">Formulario para: {selectedProduct.name}</h3>
+                <button type="button" onClick={resetProductSelection} className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Volver
+                </button>
+            </div>
+            {selectedProduct.type === 'life' && <ClientGenericLifePolicyForm product={selectedProduct} clientId={user.id} agentId={assignedAgentId!} />}
+            {selectedProduct.type === 'health' && <ClientGenericHealthPolicyForm product={selectedProduct} clientId={user.id} agentId={assignedAgentId!} />}
+            {selectedProduct.type !== 'life' && selectedProduct.type !== 'health' && <div className="text-red-500 text-center">Tipo de producto no soportado para la contratación en línea: {selectedProduct.type}.</div>}
+        </div>
+    );
+    
+    return (
+        <div className="flex justify-center w-full">
+            <div className="w-full max-w-4xl">
+                 <PageContainer title="Contratar Nueva Póliza">
+                    {content}
+                 </PageContainer>
+            </div>
         </div>
     );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from 'src/contexts/AuthContext';
+import { useAuth } from 'src/contexts/useAuth';
 import { format } from 'date-fns';
 import es from 'date-fns/locale/es';
 import { getReimbursementRequestsByClientId } from 'src/features/reimbursements/reimbursement_management';

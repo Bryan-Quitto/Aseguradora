@@ -3,10 +3,9 @@ import { HiSearch } from 'react-icons/hi';
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from 'src/supabase/client';
-import { getAllUserProfiles, UserProfile, deleteUserProfile, updateUserProfileStatus } from 'src/features/admin/hooks/administrador_backend';
+import { getAllUserProfiles, UserProfile, updateUserProfileStatus } from 'src/features/admin/hooks/administrador_backend';
 import { enviarCorreo } from 'src/utils/enviarCorreo';
 
-// Interfaz para el modal
 interface CustomModalProps {
     show: boolean;
     onClose: () => void;
@@ -16,7 +15,6 @@ interface CustomModalProps {
     onConfirm?: () => void;
 }
 
-// Componente para el modal
 const CustomModal = ({ show, onClose, message, title, type, onConfirm }: CustomModalProps) => {
     if (!show) return null;
 
@@ -47,12 +45,10 @@ export default function ListarUsuarios() {
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Estados para roles y usuario actual
     const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
 
-    // Estados para el modal
     const [showModal, setShowModal] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [modalTitle, setModalTitle] = useState('');
@@ -122,23 +118,32 @@ export default function ListarUsuarios() {
     };
 
     const handleDeleteClick = (userId: string, userEmail: string) => {
-        setModalTitle('Confirmar Eliminación');
-        setModalMessage(`¿Seguro que quieres eliminar al usuario ${userEmail}? Esta acción es permanente.`);
+        setModalTitle('Confirmar Eliminación Completa');
+        setModalMessage(`¿Seguro que quieres eliminar permanentemente al usuario ${userEmail}? Esta acción eliminará su perfil y su cuenta de autenticación. No se puede deshacer.`);
         setModalType('confirm');
         setModalAction(() => () => confirmDelete(userId)); 
         setShowModal(true);
     };
 
     const confirmDelete = async (userId: string) => {
-        const { error: deleteError } = await deleteUserProfile(userId);
-        if (deleteError) {
-            setModalTitle('Error');
-            setModalMessage(`Error al eliminar usuario: ${deleteError.message}`);
-        } else {
+        try {
+            const { error: functionError } = await supabase.functions.invoke('delete-user', {
+                body: { userId: userId },
+            });
+
+            if (functionError) {
+                throw functionError;
+            }
+
             setModalTitle('Éxito');
             setModalMessage('Usuario eliminado correctamente.');
             fetchUsers();
+
+        } catch (deleteError: any) {
+            setModalTitle('Error');
+            setModalMessage(`Error al eliminar usuario: ${deleteError.message}`);
         }
+        
         setModalType('alert');
         setModalAction(undefined);
         setShowModal(true);

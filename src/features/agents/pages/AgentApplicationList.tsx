@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from 'src/contexts/AuthContext';
+import { useAuth } from 'src/contexts/useAuth';
 import { Policy, getPoliciesByAgentId, getInsuranceProductById } from '../../policies/policy_management';
 import { getClientProfileById } from '../../clients/hooks/cliente_backend';
 

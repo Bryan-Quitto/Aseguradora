@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Policy, getPolicyById, InsuranceProduct, getInsuranceProductById, updatePolicy } from '../../policies/policy_management';
 import { ClientProfile, getClientProfileById } from '../../clients/hooks/cliente_backend';
-import { useAuth } from 'src/contexts/AuthContext';
+import { useAuth } from 'src/contexts/useAuth';
 import { enviarLinkFirma } from 'src/utils/enviarLinkFirma';
 import { supabase } from 'src/supabase/client';
 

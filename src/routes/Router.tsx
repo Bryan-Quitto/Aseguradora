@@ -49,9 +49,20 @@ const ClientNewReimbursement = Loadable(lazy(() => import('../features/clients/p
 const ClientReimbursementDetail = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientReimbursementDetail')));
 const ClientEditReimbursement = Loadable(lazy(() => import('../features/clients/pages/reimbursements/ClientEditReimbursement')));
 
+const AdminPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/admin/AdminPoliciesReport')));
+const AdminExpiringPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/admin/AdminExpiringPoliciesReport')));
+const AdminExpiredPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/admin/AdminExpiredPoliciesReport')));
+const AdminReimbursementsReport = Loadable(lazy(() => import('../features/reports/pages/admin/AdminReimbursementsReport')));
+const AdminAgentProductionReport = Loadable(lazy(() => import('../features/reports/pages/admin/AdminAgentProductionReport')));
+
+const AgentPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/agent/AgentPoliciesReport')));
+const AgentExpiringPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/agent/AgentExpiringPoliciesReport')));
+const AgentExpiredPoliciesReport = Loadable(lazy(() => import('../features/reports/pages/agent/AgentExpiredPoliciesReport')));
+const AgentReimbursementsReport = Loadable(lazy(() => import('../features/reports/pages/agent/AgentReimbursementsReport')));
+
 import AuthRoutes from '../features/auth/auth.routes';
 import LandingRoutes from '../features/landing/landing.routes';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/useAuth';
 
 interface PrivateRouteProps {
     children: ReactNode;
@@ -112,6 +123,11 @@ const RouterConfig = [
                     { path: 'reimbursements', element: <AdminReimbursementList /> },
                     { path: 'reimbursements/:id', element: <AdminReimbursementDetail /> },
                     { path: 'reimbursements/:id/edit', element: <AdminEditReimbursement /> },
+                    { path: 'reports/policies', element: <AdminPoliciesReport /> },
+                    { path: 'reports/expiring-policies', element: <AdminExpiringPoliciesReport /> },
+                    { path: 'reports/expired-policies', element: <AdminExpiredPoliciesReport /> },
+                    { path: 'reports/reimbursements', element: <AdminReimbursementsReport /> },
+                    { path: 'reports/agent-production', element: <AdminAgentProductionReport /> },
                 ]
             },
             {
@@ -122,17 +138,21 @@ const RouterConfig = [
                     </PrivateRoute>
                 ),
                 children: [
+                    { path: '', element: <Navigate to="policies" /> },
+                    { path: 'policies', element: <AgentPolicyList /> },
                     { path: 'policies/new', element: <AgentPolicyForm /> },
                     { path: 'policies/:id', element: <AgentPolicyDetail /> },
-                    { path: 'policies', element: <AgentPolicyList /> },
                     { path: 'applications', element: <AgentApplicationList /> },
                     { path: 'applications/:id', element: <AgentApplicationDetail /> },
-                    { path: '', element: <Navigate to="policies" /> },
                     { path: 'create-client', element: <CrearClienteAgente /> },
                     { path: 'send-signature-link', element: <AgentCreateSignatureLink /> },
                     { path: 'reimbursements', element: <AgentReimbursementList /> },
                     { path: 'reimbursements/:id', element: <AgentReimbursementDetail /> },
                     { path: 'reimbursements/:id/edit', element: <AgentEditReimbursement /> },
+                    { path: 'reports/policies', element: <AgentPoliciesReport /> },
+                    { path: 'reports/expiring-policies', element: <AgentExpiringPoliciesReport /> },
+                    { path: 'reports/expired-policies', element: <AgentExpiredPoliciesReport /> },
+                    { path: 'reports/reimbursements', element: <AgentReimbursementsReport /> },
                 ]
             },
             {

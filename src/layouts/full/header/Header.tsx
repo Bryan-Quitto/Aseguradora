@@ -1,74 +1,45 @@
-
-import { useState, useEffect } from "react";
-import {  Navbar } from "flowbite-react";
+import { useState } from "react";
+import { Button, Drawer } from "flowbite-react";
 import { Icon } from "@iconify/react";
-import { Drawer } from "flowbite-react";
 import MobileSidebar from "../sidebar/MobileSidebar";
+import Topbar from "./Topbar";
 
+interface HeaderProps {
+    toggleSidebar: () => void;
+}
 
+const Header = ({ toggleSidebar }: HeaderProps) => {
+    const [isMobileOpen, setMobileOpen] = useState(false);
 
-const Header = () => {
-  const [isSticky, setIsSticky] = useState(false);
+    return (
+        <>
+            <header className="fixed top-0 left-0 right-0 z-40 bg-white dark:bg-darkgray shadow-md">
+                <div className="flex items-center">
+                    <Button 
+                        color="light" 
+                        className="!bg-transparent !border-none !ring-0 !shadow-none xl:block hidden"
+                        onClick={toggleSidebar}
+                    >
+                        <Icon icon="solar:hamburger-menu-line-duotone" className="h-6 w-6 text-gray-600" />
+                    </Button>
+                    <Button 
+                        color="light" 
+                        className="!bg-transparent !border-none !ring-0 !shadow-none xl:hidden block"
+                        onClick={() => setMobileOpen(true)}
+                    >
+                        <Icon icon="solar:hamburger-menu-line-duotone" className="h-6 w-6 text-gray-600" />
+                    </Button>
+                    <div className="w-full">
+                         <Topbar />
+                    </div>
+                </div>
+            </header>
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 50) {
-        setIsSticky(true);
-      } else {
-        setIsSticky(false);
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, []);
-
-  // mobile-sidebar
-  const [isOpen, setIsOpen] = useState(false);
-  const handleClose = () => setIsOpen(false);
-  return (
-    <>
-      <header
-        className={`sticky top-0 z-[5] ${isSticky
-            ? "bg-lightgray dark:bg-dark fixed w-full"
-            : "bg-lightgray dark:bg-dark"
-          }`}
-      >
-        <Navbar
-          fluid
-          className={`rounded-none bg-transparent dark:bg-transparent py-4 sm:px-30 px-4`}
-        >
-          {/* Mobile Toggle Icon */}
-
-          <div className="flex gap-3 items-center justify-between w-full ">
-            <div className="flex gap-2 items-center">
-              <span
-                onClick={() => setIsOpen(true)}
-                className="h-10 w-10 flex text-black dark:text-white text-opacity-65 xl:hidden hover:text-primary hover:bg-lightprimary rounded-full justify-center items-center cursor-pointer"
-              >
-                <Icon icon="solar:hamburger-menu-line-duotone" height={21} />
-              </span>
-              {/* <Notification /> */}
-            </div>
-
-            <div className="flex gap-4 items-center">
-              {/* <Profile /> */}
-            </div>
-          </div>
-        </Navbar>
-      </header>
-
-      {/* Mobile Sidebar */}
-      <Drawer open={isOpen} onClose={handleClose} className="w-130">
-        <Drawer.Items>
-          <MobileSidebar />
-        </Drawer.Items>
-      </Drawer>
-    </>
-  );
+            <Drawer open={isMobileOpen} onClose={() => setMobileOpen(false)} className="w-64">
+                <MobileSidebar />
+            </Drawer>
+        </>
+    );
 };
 
 export default Header;

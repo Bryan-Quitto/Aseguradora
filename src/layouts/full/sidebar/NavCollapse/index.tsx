@@ -1,62 +1,31 @@
-
-import  {useState } from "react";
+import { Sidebar } from "flowbite-react";
+import { Icon } from "@iconify/react";
 import { ChildItem } from "../Sidebaritems";
 import NavItems from "../NavItems";
-import { useLocation } from "react-router-dom";
 import React from "react";
-import { CustomCollapse } from "../CustomCollapse";
 
 interface NavCollapseProps {
   item: ChildItem;
+  isSidebarOpen: boolean;
 }
 
-
-
-const NavCollapse: React.FC<NavCollapseProps> = ({ item }: any) => {
-  const location = useLocation();
-  const pathname = location.pathname;
-
-  // Determine if any child matches the current path
-  const activeDD = item.children.find((t: { url: string }) => t.url === pathname);
-  
-
-  // Manage open/close state for the collapse
-  const [isOpen, setIsOpen] = useState<boolean>(!!activeDD);
-
-
-  // Toggle the collapse
-  const handleToggle = () => {
-    setIsOpen((prev) => !prev);
-  };
-
+const NavCollapse = ({ item, isSidebarOpen }: NavCollapseProps) => {
   return (
-    <CustomCollapse
-      label={ `${item.name}`}
-      open={isOpen}
-      onClick={handleToggle}
-      icon={item.icon} 
-      isPro={item.isPro}
-      className={
-        Boolean(activeDD)
-          ? "!text-white bg-primary rounded-xl hover:bg-primary hover:text-white shadow-btnshdw"
-          : "rounded-full dark:text-white/80 hover:text-primary hover:bg-lightprimary"
-      }
+    <Sidebar.Collapse
+      icon={() => <Icon icon={item.icon} className="h-5 w-5 flex-shrink-0" />}
+      label={isSidebarOpen ? item.name : ""}
+      className={`sidebar-item w-full ${!isSidebarOpen ? 'justify-center' : ''}`}
     >
-      {/* Render child items */}
-      {item.children && (
-        <div className="sidebar-dropdown">
-          {item.children.map((child: any) => (
-            <React.Fragment key={child.id}>
-              {child.children ? (
-                <NavCollapse item={child} /> // Recursive call for nested collapse
-              ) : (
-                <NavItems item={child} />
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
-    </CustomCollapse>
+      {item.children?.map((child) => (
+        <React.Fragment key={child.id}>
+          {child.children ? (
+            <NavCollapse item={child} isSidebarOpen={isSidebarOpen} />
+          ) : (
+            <NavItems item={child} isSidebarOpen={isSidebarOpen} />
+          )}
+        </React.Fragment>
+      ))}
+    </Sidebar.Collapse>
   );
 };
 

@@ -1,38 +1,44 @@
-import { FC } from 'react';
-import { Outlet, useLocation } from "react-router-dom";
-import ScrollToTop from 'src/components/shared/ScrollToTop';
-import Sidebar from './sidebar/Sidebar';
+import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import Header from './header/Header';
-import Topbar from './header/Topbar';
+import Sidebar from './sidebar/Sidebar';
+import 'src/css/layouts/gradient.css';
+import { useAuth } from 'src/contexts/useAuth';
+import { Spinner } from 'flowbite-react';
 
-const FullLayout: FC = () => {
-    const location = useLocation();
-    const isLandingPage = location.pathname === '/';
+const FullLayout = () => {
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const { loading: authLoading } = useAuth();
 
+  const toggleSidebar = () => {
+    setSidebarOpen(!isSidebarOpen);
+  };
+
+  if (authLoading) {
     return (
-        <>
-            <Topbar />
-            <div className={`flex w-full min-h-screen bg-blue-50 dark:bg-dark ${isLandingPage ? 'no-sidebar-layout' : ''}`}>
-                <div className="page-wrapper flex w-full">
-                    {!isLandingPage && <Sidebar />}
-
-                    <div className="page-wrapper-sub flex flex-col w-full dark:bg-darkgray">
-                        {!isLandingPage && <Header />}
-
-                        <div className="h-full min-h-screen overflow-x-auto">
-                            <div className="w-full">
-                                <ScrollToTop>
-                                    <div className="w-full px-4 py-8">
-                                        <Outlet />
-                                    </div>
-                                </ScrollToTop>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </>
+      <div className="flex items-center justify-center h-screen w-screen animated-gradient-background">
+        <Spinner size="xl" />
+      </div>
     );
+  }
+
+  return (
+    <div className="animated-gradient-background min-h-screen">
+      <Header toggleSidebar={toggleSidebar} />
+      
+      <div className="flex h-screen">
+        <Sidebar isSidebarOpen={isSidebarOpen} />
+        
+        <div className="relative flex-1 flex flex-col overflow-y-auto overflow-x-hidden">
+          <main className="flex-grow flex items-center p-4 md:p-6 2xl:p-10 pt-20 md:pt-24">
+             <div className="w-full">
+                <Outlet />
+             </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default FullLayout;

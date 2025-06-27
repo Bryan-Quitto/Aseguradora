@@ -18,7 +18,7 @@ import {
     ClientProfile,
     getClientProfileById
 } from '../clients/hooks/cliente_backend';
-import { useAuth } from 'src/contexts/AuthContext';
+import { useAuth } from 'src/contexts/useAuth';
 
 const rejectionReasonsConfig = [
     { id: 'invalid_document', label: 'Documento(s) Inválido(s) o Ilegible(s)', requiresComment: true, placeholder: "Especifica qué documento(s) son inválidos..." },
